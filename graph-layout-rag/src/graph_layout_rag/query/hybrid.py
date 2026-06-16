@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-RRF_K = 60
+# RRF rank constant. k=20 sharpens top-rank weighting vs the classic 60; the
+# de-biased bake-off (neutral LLM-judged qrels) measured it a consistent win
+# over k=60 on both tracks (catalog 0.768 vs 0.765, pdf 0.715 vs 0.696).
+RRF_K = 20
 
 
 def merge_rankings(

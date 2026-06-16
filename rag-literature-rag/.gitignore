@@ -1,0 +1,25 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+.pytest_cache/
+data/raw/
+data/indexes/
+data/retrieval-indexes/
+data/eval/
+data/lancedb/
+data/related/
+data/citations.sqlite
+data/citations.sqlite-*
+data/manifest.json
+data/manifest.*.json
+data/manifest.bak.json
+!data/manifest.example.json
+data/ingest_state.json
+data/*.log
+data/harvest.db
+data/harvest_checkpoint.json
+data/bibliography-scan-cache/
+data/extract_cache/
+data/embed_cache/
+# Keep data/manifest.example.json tracked; ignore live harvest output above.
