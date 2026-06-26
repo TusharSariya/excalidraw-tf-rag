@@ -15,6 +15,7 @@ from graph_layout_rag.harvest.run import harvest_group
 from graph_layout_rag.ingest.run import ingest_cmd
 from graph_layout_rag.query.search import search
 from graph_layout_rag.query.retrieve import DEFAULT_HYBRID
+from graph_layout_rag.query.hybrid import SPARSE_WEIGHT, DENSE_WEIGHT
 
 @click.group()
 def main() -> None:
@@ -38,8 +39,11 @@ from graph_layout_rag.eval.pool_commands import (  # noqa: E402
     corpus_health_cmd,
     diagnostics_cmd,
     gate_cmd,
+    gen_gold_cmd,
     judge_cmd,
+    judge_validate_cmd,
     pool_cmd,
+    pool_merge_cmd,
 )
 
 eval_group.add_command(retrieval_eval_cmd, name="retrieval")
@@ -47,7 +51,10 @@ eval_group.add_command(benchmark_cmd, name="benchmark")
 eval_group.add_command(validate_gold_cmd, name="validate-gold")
 eval_group.add_command(build_retrieval_index_cmd, name="build-retrieval-index")
 eval_group.add_command(pool_cmd, name="pool")
+eval_group.add_command(pool_merge_cmd, name="pool-merge")
+eval_group.add_command(gen_gold_cmd, name="gen-gold")
 eval_group.add_command(judge_cmd, name="judge")
+eval_group.add_command(judge_validate_cmd, name="judge-validate")
 eval_group.add_command(diagnostics_cmd, name="diagnostics")
 eval_group.add_command(corpus_health_cmd, name="corpus-health")
 eval_group.add_command(gate_cmd, name="gate")
@@ -343,6 +350,19 @@ def embed_indexes_cmd(as_json: bool) -> None:
         )
 
 
+@main.command("route")
+@click.argument("text")
+def route_cmd(text: str) -> None:
+    """Print the retrieval regime for a query: 'keyword' or 'nl'.
+
+    Used by scripts/query_auto.sh to dispatch keyword queries to the local
+    0.6B index and natural-language queries to the remote 4B index.
+    """
+    from graph_layout_rag.query.routing import classify_query_mode
+
+    click.echo(classify_query_mode(text))
+
+
 @main.command("query")
 @click.argument("text")
 @click.option("--top", default=8, show_default=True)
@@ -384,6 +404,20 @@ def embed_indexes_cmd(as_json: bool) -> None:
     help="LLM query expansion (multi-query + step-back) for vague queries. "
     "auto = only when the query looks vague/under-served; force = always.",
 )
+@click.option(
+    "--sparse-weight",
+    type=float,
+    default=SPARSE_WEIGHT,
+    show_default=True,
+    help="Sparse (BM25) weight in RRF fusion. Lower for natural-language queries (~0.4).",
+)
+@click.option(
+    "--dense-weight",
+    type=float,
+    default=DENSE_WEIGHT,
+    show_default=True,
+    help="Dense (vector) weight in RRF fusion.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON for LLM agents.")
 def query_cmd(
     text: str,
@@ -398,6 +432,8 @@ def query_cmd(
     rerank: bool | None,
     hybrid: bool,
     expand: str,
+    sparse_weight: float,
+    dense_weight: float,
     as_json: bool,
 ) -> None:
     """Semantic search over the graph layout corpus."""
@@ -421,6 +457,8 @@ def query_cmd(
             hybrid=hybrid,
             max_per_doc=max_per_doc,
             expand=expand,
+            sparse_weight=sparse_weight,
+            dense_weight=dense_weight,
         )
     except ValueError as exc:
         click.echo(str(exc), err=True)

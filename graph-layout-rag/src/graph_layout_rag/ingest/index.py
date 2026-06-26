@@ -27,7 +27,7 @@ from graph_layout_rag.ingest.embed import (
     embed_config_from_env,
     embed_texts,
 )
-from rag_common.config import embed_cost_per_million
+from rag_common.config import embed_cost_per_million, resolved_embed_backend
 
 from graph_layout_rag.paths import (
     CHUNKS_TABLE,
@@ -200,6 +200,10 @@ def update_ingest_metadata(
         state["embed_profile"] = config.profile
     if config.quant:
         state["embed_quant"] = config.quant
+    # HG1: record the concrete backend AS RESOLVED ON THE BUILDING HOST (mlx-q4 vs
+    # cuda-bnb-4bit), so a later query host can refuse to score a cross-quant mismatch
+    # that the model/dims/quant check cannot see (both sides read "local"/"4bit").
+    state["resolved_embed_backend"] = resolved_embed_backend(config)
     if pdf_backend:
         state["pdf_backend"] = pdf_backend
     state["total_tokens_embedded"] = prev_tokens + run_tokens

@@ -47,6 +47,43 @@ DEFAULT_POOL_SYSTEMS: tuple[str, ...] = (
 # Which experimental index kind each strategy name consumes.
 _EXPERIMENTAL_KIND = {"splade": "splade", "dense_splade": "splade", "colbert": "colbert"}
 
+# --------------------------------------------------------------------------- #
+# System provenance classification (for leave-dense-out / seed attribution)
+# --------------------------------------------------------------------------- #
+# A synthetic gold case "survives" only if the pooled judge graded its seed doc
+# relevant — but the seed only reaches the judge with corroboration when a
+# retrieval system surfaced it. If a *dense* (or HyDE/neural) system is what
+# surfaced the seed, the case enters the gold set partly *because* dense found it,
+# and the downstream bake-off then "discovers" dense beats BM25 on exactly those
+# cases — a circularity. To measure and remove that, every pool system is tagged
+# as lexical (BM25-family) vs dense/neural so a leave-dense-out gold subset can be
+# recomputed.
+#
+# Classification rationale (how each was identified, from the strategy classes in
+# ``eval/strategies/__init__.py``):
+#   bm25        — pure lexical BM25 term matching (``name="bm25"``)        → LEXICAL
+#   dense       — vector kNN over embeddings                              → DENSE
+#   colbert     — late-interaction dense (token-level embeddings)         → DENSE
+#   hybrid      — RRF fusion of dense + bm25; carries the dense signal     → DENSE
+#   hyde        — LLM hypothetical-doc expansion → dense retrieval         → DENSE/NEURAL
+#   multi_query — LLM query expansion → retrieval (neural rewrite)         → DENSE/NEURAL
+#   splade      — learned-sparse neural model (trained term weights);
+#                 although "sparse", it is neural-trained, not pure lexical → DENSE/NEURAL
+LEXICAL_SEED_SYSTEMS: frozenset[str] = frozenset({"bm25"})
+DENSE_NEURAL_SEED_SYSTEMS: frozenset[str] = frozenset(
+    {"dense", "colbert", "hybrid", "hyde", "multi_query", "splade", "dense_splade"}
+)
+
+
+def classify_system(name: str) -> str:
+    """Return ``"lexical"`` or ``"dense"`` (dense/neural) for a pool system name.
+
+    Unknown systems default to ``"dense"`` (conservative: an unclassified system
+    is assumed to carry neural signal, so it is excluded from the lexical-only
+    seed set rather than silently treated as pure-lexical).
+    """
+    return "lexical" if name in LEXICAL_SEED_SYSTEMS else "dense"
+
 POOL_DIR = DATA_DIR / "eval" / "pool"
 
 
@@ -192,6 +229,222 @@ def write_pool(payload: dict[str, Any], path: Path) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     tmp.replace(path)
+
+
+def merge_pools(paths: list[str]) -> dict[str, Any]:
+    """Merge multiple pool JSON files into a single pool payload.
+
+    For each case ID that appears in any pool:
+    - The candidate doc IDs are unioned across all pools.
+    - The 'systems' provenance maps are unioned (if a doc appears in multiple
+      pools, system names are merged and the best / lowest rank is kept).
+
+    Returns a merged payload dict with the same schema as a single pool file.
+    Raises ValueError if a path does not exist or the file is malformed.
+    """
+    if not paths:
+        return {
+            "version": 1,
+            "generated_at": _now_iso(),
+            "track": "merged",
+            "depth": 0,
+            "embed_profile": "merged",
+            "systems": [],
+            "case_count": 0,
+            "cases": {},
+        }
+
+    loaded: list[dict[str, Any]] = []
+    for p in paths:
+        path = Path(p)
+        if not path.exists():
+            raise ValueError(f"Pool file does not exist: {p!r}")
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise ValueError(f"Failed to parse pool file {p!r}: {exc}") from exc
+        if not isinstance(payload, dict) or "cases" not in payload:
+            raise ValueError(f"Pool file {p!r} is malformed: missing 'cases' key")
+        loaded.append(payload)
+
+    # Collect union of all systems across all pools.
+    all_systems: list[str] = []
+    seen_sys: set[str] = set()
+    for pl in loaded:
+        for s in pl.get("systems", []):
+            if s not in seen_sys:
+                all_systems.append(s)
+                seen_sys.add(s)
+
+    merged_cases: dict[str, Any] = {}
+    for pl in loaded:
+        for case_id, case_data in pl.get("cases", {}).items():
+            if case_id not in merged_cases:
+                merged_cases[case_id] = {
+                    "query": case_data.get("query"),
+                    "category": case_data.get("category"),
+                    "pdf_only": case_data.get("pdf_only", False),
+                    "curated_relevant": sorted(case_data.get("curated_relevant", [])),
+                    "pooled": {},
+                }
+            dest = merged_cases[case_id]["pooled"]
+            for doc_id, entry in case_data.get("pooled", {}).items():
+                if doc_id not in dest:
+                    dest[doc_id] = {
+                        k: v for k, v in entry.items() if k != "systems"
+                    }
+                    dest[doc_id]["systems"] = {}
+                # Union the systems provenance: keep best (lowest) rank per system.
+                for sys_name, rank in entry.get("systems", {}).items():
+                    prev = dest[doc_id]["systems"].get(sys_name)
+                    dest[doc_id]["systems"][sys_name] = (
+                        rank if prev is None else min(prev, rank)
+                    )
+                # Propagate curated flag if set in any pool.
+                if entry.get("curated"):
+                    dest[doc_id]["curated"] = True
+
+    return {
+        "version": 1,
+        "generated_at": _now_iso(),
+        "track": "merged",
+        "depth": max((pl.get("depth", 0) for pl in loaded), default=0),
+        "embed_profile": "merged",
+        "systems": all_systems,
+        "case_count": len(merged_cases),
+        "cases": merged_cases,
+    }
+
+
+def _seed_systems(entry: Any) -> set[str]:
+    """System names that surfaced a pooled doc (handles dict or list ``systems``)."""
+    if not isinstance(entry, dict):
+        return set()
+    systems = entry.get("systems", {})
+    if isinstance(systems, dict):
+        return set(systems.keys())
+    if isinstance(systems, (list, tuple, set)):
+        return set(systems)
+    return set()
+
+
+def seed_attribution(
+    pool: dict[str, Any],
+    case_seed: dict[str, str],
+    *,
+    qrels: dict[str, Any] | None = None,
+    relevance_threshold: int = 2,
+) -> dict[str, dict[str, Any]]:
+    """Per-case seed-system attribution.
+
+    For each gold case, report which pool system(s) *surfaced its seed doc* and a
+    ``provenance`` tag (``"lexical"`` if any lexical system surfaced the seed,
+    else ``"dense"`` if only dense/neural systems did, else ``"none"`` when no
+    retrieval system surfaced the seed — i.e. it only entered the pool as a
+    folded-in curated doc).
+
+    When ``qrels`` is supplied, ``seed_grade`` and ``seed_corroborated`` (judge
+    graded the seed >= ``relevance_threshold``) are filled in; the leave-dense-out
+    subset uses ``seed_corroborated`` AND a lexical surfacer.
+
+    Args:
+        pool: A loaded pool payload (``{"cases": {case_id: {"pooled": {...}}}}``).
+        case_seed: Mapping ``case_id -> seed_doc_id`` (from gold_synth cases.json).
+        qrels: Optional loaded qrels payload to fill in judge grades.
+        relevance_threshold: Grade at/above which the seed counts as corroborated.
+
+    Returns:
+        ``{case_id: {seed_doc_id, systems (sorted), provenance, lexical, dense,
+        seed_grade, seed_corroborated}}``.
+    """
+    qrels_cases: dict[str, Any] = (qrels or {}).get("cases", {})
+    out: dict[str, dict[str, Any]] = {}
+    pool_cases = pool.get("cases", {})
+    for case_id, seed_doc_id in case_seed.items():
+        pooled = pool_cases.get(case_id, {}).get("pooled", {})
+        systems = _seed_systems(pooled.get(seed_doc_id))
+        lexical = {s for s in systems if classify_system(s) == "lexical"}
+        dense = systems - lexical
+        if lexical:
+            provenance = "lexical"
+        elif dense:
+            provenance = "dense"
+        else:
+            provenance = "none"
+
+        seed_grade: int | None = None
+        if qrels_cases:
+            entry = qrels_cases.get(case_id, {}).get(seed_doc_id)
+            if isinstance(entry, dict) and entry.get("grade") is not None:
+                seed_grade = int(entry["grade"])
+        seed_corroborated = (
+            seed_grade is not None and seed_grade >= relevance_threshold
+        )
+
+        out[case_id] = {
+            "seed_doc_id": seed_doc_id,
+            "systems": sorted(systems),
+            "lexical": sorted(lexical),
+            "dense": sorted(dense),
+            "provenance": provenance,
+            "seed_grade": seed_grade,
+            "seed_corroborated": seed_corroborated,
+        }
+    return out
+
+
+def attribution_breakdown(attribution: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Summarise a :func:`seed_attribution` map: how many cases per provenance.
+
+    ``lexical_seeded`` counts cases a lexical (BM25-family) system surfaced;
+    ``dense_only_seeded`` counts cases ONLY a dense/neural system surfaced (the
+    circularity-prone cases); ``unseeded`` counts cases no retrieval system
+    surfaced (folded-in curated seed only). ``hyde_only``/``dense_family_only``
+    further break down the dense-only bucket for transparency.
+    """
+    lexical_seeded = dense_only = unseeded = 0
+    corroborated_lexical = 0
+    for info in attribution.values():
+        prov = info["provenance"]
+        if prov == "lexical":
+            lexical_seeded += 1
+            if info.get("seed_corroborated"):
+                corroborated_lexical += 1
+        elif prov == "dense":
+            dense_only += 1
+        else:
+            unseeded += 1
+    return {
+        "n_cases": len(attribution),
+        "lexical_seeded": lexical_seeded,
+        "dense_only_seeded": dense_only,
+        "unseeded": unseeded,
+        "lexical_seeded_and_corroborated": corroborated_lexical,
+    }
+
+
+def leave_dense_out_case_ids(
+    attribution: dict[str, dict[str, Any]],
+    *,
+    require_corroborated: bool = True,
+) -> list[str]:
+    """Gold case IDs that survive a LEAVE-DENSE-OUT pool.
+
+    A case survives iff a *lexical* (BM25-family) system surfaced its seed — i.e.
+    its inclusion does not depend on dense/HyDE/neural retrieval. When
+    ``require_corroborated`` is True (default) and grades are available, the seed
+    must also have been judged relevant. Cases seeded only by dense/neural systems
+    (or unseeded) are excluded, breaking the circularity in the BM25-falls headline.
+    """
+    out: list[str] = []
+    for case_id, info in attribution.items():
+        if info["provenance"] != "lexical":
+            continue
+        if require_corroborated and info.get("seed_grade") is not None:
+            if not info.get("seed_corroborated"):
+                continue
+        out.append(case_id)
+    return sorted(out)
 
 
 def pool_stats(payload: dict[str, Any]) -> dict[str, Any]:

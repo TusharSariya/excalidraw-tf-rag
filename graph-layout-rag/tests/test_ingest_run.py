@@ -307,6 +307,77 @@ def test_closing_queued_extraction_stops_blocked_producer(monkeypatch):
     assert not any(t.name == "graph-rag-extract" for t in threading.enumerate())
 
 
+def test_queued_extraction_external_stop_event_stops_consumer(monkeypatch):
+    items = [_item(str(n), status="metadata_only") for n in range(5)]
+    monkeypatch.setattr(
+        run,
+        "_iter_extraction_outcomes",
+        lambda *args, **kwargs: (
+            run._metadata_outcome(item, []) for item in items
+        ),
+    )
+    stop_event = threading.Event()
+    telemetry = run.ExtractionPipelineTelemetry(queue_capacity=2)
+    iterator = run._iter_queued_extraction_outcomes(
+        items,
+        force=True,
+        state={},
+        pdf_backend="pymupdf",
+        extract_workers=1,
+        queue_capacity=2,
+        telemetry=telemetry,
+        log=logging.getLogger("test"),
+        stop_event=stop_event,
+    )
+    first = next(iterator)
+    assert first.item.id == "0"
+    stop_event.set()
+    outcomes = [first, *list(iterator)]
+    assert len(outcomes) == 1
+    iterator.close()
+    assert not any(t.name == "graph-rag-extract" for t in threading.enumerate())
+
+
+def test_iter_extraction_outcomes_force_shutdown_on_interrupt(monkeypatch):
+    pdf = Path("doc.pdf")
+    items = [_item("pdf", path=pdf)]
+    shutdown_calls = []
+
+    class SlowExecutor:
+        def __init__(self, max_workers):
+            self._processes = {}
+
+        def submit(self, fn, task):
+            future = Future()
+            future.set_result(run._metadata_outcome(task.item, task.pipeline_categories))
+            return future
+
+        def shutdown(self, wait=True, cancel_futures=False):
+            shutdown_calls.append((wait, cancel_futures))
+
+    def fake_shutdown(executor, *, force=False, timeout_s=15.0, log=None):
+        shutdown_calls.append(("helper", force))
+        executor.shutdown(wait=not force, cancel_futures=True)
+
+    monkeypatch.setattr(run, "ProcessPoolExecutor", SlowExecutor)
+    monkeypatch.setattr(run, "shutdown_process_pool", fake_shutdown)
+    stop_event = threading.Event()
+    pool_holder: run.PoolHolder = {"executor": None}
+    iterator = run._iter_extraction_outcomes(
+        items,
+        force=True,
+        state={},
+        pdf_backend="docling",
+        extract_workers=2,
+        stop_event=stop_event,
+        pool_holder=pool_holder,
+    )
+    stop_event.set()
+    list(iterator)
+    assert ("helper", True) in shutdown_calls
+    assert pool_holder["executor"] is None
+
+
 def test_execute_ingest_flushes_batches_and_checkpoints(tmp_path, monkeypatch):
     items = [_item(str(n), status="metadata_only") for n in range(3)]
     outcomes = [run._metadata_outcome(item, []) for item in items]
@@ -333,7 +404,7 @@ def test_execute_ingest_flushes_batches_and_checkpoints(tmp_path, monkeypatch):
     monkeypatch.setattr(run, "load_ingest_state", lambda profile: {})
     monkeypatch.setattr(
         run,
-        "_iter_extraction_outcomes",
+        "_iter_queued_extraction_outcomes",
         lambda *args, **kwargs: iter(outcomes),
     )
     monkeypatch.setattr(
@@ -369,6 +440,130 @@ def test_execute_ingest_flushes_batches_and_checkpoints(tmp_path, monkeypatch):
     assert status["documents_completed"] == 3
     assert status["documents_indexed"] == 3
     assert status["progress_percent"] == 100.0
+
+
+def test_execute_ingest_pause_flushes_partial_batch(tmp_path, monkeypatch):
+    items = [_item(str(n), status="metadata_only") for n in range(3)]
+    outcomes = [run._metadata_outcome(item, []) for item in items]
+    root = tmp_path / "index"
+    paths = ProfileIndexPaths(
+        profile="test",
+        root=root,
+        lance_dir=root / "lancedb",
+        ingest_state=root / "ingest_state.json",
+        bm25_dir=root / "bm25",
+    )
+    upserts = []
+    checkpoints = []
+
+    def interrupting_outcomes(*args, **kwargs):
+        stop_event = kwargs.get("stop_event")
+        yield outcomes[0]
+        assert stop_event is not None
+        stop_event.set()
+
+    monkeypatch.setenv("GRAPH_RAG_INGEST_DOC_BATCH", "25")
+    monkeypatch.setattr(run, "setup_ingest_logging", lambda **kwargs: logging.getLogger("test"))
+    monkeypatch.setattr(run, "load_manifest", lambda: Manifest(items=items))
+    monkeypatch.setattr(
+        run,
+        "prepare_embed_config",
+        lambda profile: EmbedConfig("local", "all-MiniLM-L6-v2", 384, profile="test"),
+    )
+    monkeypatch.setattr(run, "profile_index_paths", lambda profile=None: paths)
+    monkeypatch.setattr(run, "load_ingest_state", lambda profile: {})
+    monkeypatch.setattr(run, "_iter_queued_extraction_outcomes", interrupting_outcomes)
+    monkeypatch.setattr(
+        run,
+        "upsert_chunks",
+        lambda chunks, **kwargs: upserts.append((len(chunks), kwargs["rebuild"]))
+        or len(chunks),
+    )
+    monkeypatch.setattr(
+        run,
+        "save_ingest_state",
+        lambda state, profile: checkpoints.append(dict(state)),
+    )
+    monkeypatch.setattr(run, "chunk_count", lambda profile: 2)
+    monkeypatch.setattr(run, "resolve_workers", lambda workers, prefix: 1)
+
+    run._execute_ingest(
+        force=False,
+        rebuild=True,
+        verbose=False,
+        log_file=None,
+        embed_profile="test",
+        pdf_backend="pymupdf",
+    )
+
+    assert upserts == [(1, True)]
+    assert set(checkpoints[0]) >= {"0", "pdf_backend"}
+    assert all("1" not in checkpoint for checkpoint in checkpoints)
+    status = load_status(paths)
+    assert status["status"] == "paused"
+    assert status["phase"] == "paused"
+    assert status["documents_indexed"] == 1
+
+
+def test_execute_ingest_pause_flushes_when_producer_interrupts(tmp_path, monkeypatch):
+    item = _item("0", status="metadata_only")
+    outcome = run._metadata_outcome(item, [])
+    root = tmp_path / "index"
+    paths = ProfileIndexPaths(
+        profile="test",
+        root=root,
+        lance_dir=root / "lancedb",
+        ingest_state=root / "ingest_state.json",
+        bm25_dir=root / "bm25",
+    )
+    upserts = []
+    checkpoints = []
+
+    def interrupting_outcomes(*args, **kwargs):
+        stop_event = kwargs["stop_event"]
+        yield outcome
+        stop_event.set()
+        raise KeyboardInterrupt
+
+    monkeypatch.setenv("GRAPH_RAG_INGEST_DOC_BATCH", "25")
+    monkeypatch.setattr(run, "setup_ingest_logging", lambda **kwargs: logging.getLogger("test"))
+    monkeypatch.setattr(run, "load_manifest", lambda: Manifest(items=[item]))
+    monkeypatch.setattr(
+        run,
+        "prepare_embed_config",
+        lambda profile: EmbedConfig("local", "all-MiniLM-L6-v2", 384, profile="test"),
+    )
+    monkeypatch.setattr(run, "profile_index_paths", lambda profile=None: paths)
+    monkeypatch.setattr(run, "load_ingest_state", lambda profile: {})
+    monkeypatch.setattr(run, "_iter_queued_extraction_outcomes", interrupting_outcomes)
+    monkeypatch.setattr(
+        run,
+        "upsert_chunks",
+        lambda chunks, **kwargs: upserts.append((len(chunks), kwargs["rebuild"]))
+        or len(chunks),
+    )
+    monkeypatch.setattr(
+        run,
+        "save_ingest_state",
+        lambda state, profile: checkpoints.append(dict(state)),
+    )
+    monkeypatch.setattr(run, "chunk_count", lambda profile: 1)
+    monkeypatch.setattr(run, "resolve_workers", lambda workers, prefix: 1)
+
+    run._execute_ingest(
+        force=False,
+        rebuild=True,
+        verbose=False,
+        log_file=None,
+        embed_profile="test",
+        pdf_backend="pymupdf",
+    )
+
+    assert upserts == [(1, True)]
+    assert set(checkpoints[0]) >= {"0", "pdf_backend"}
+    status = load_status(paths)
+    assert status["status"] == "paused"
+    assert status["documents_indexed"] == 1
 
 
 def test_checkpoint_does_not_advance_when_index_write_fails(tmp_path, monkeypatch):

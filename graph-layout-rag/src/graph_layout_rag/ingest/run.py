@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import atexit
 import logging
 import os
 import queue
+import signal
 import sys
 import threading
 import time
@@ -11,6 +13,8 @@ from dataclasses import dataclass
 from typing import Iterable, Iterator, Literal
 
 import click
+
+from rag_common.process_pool import shutdown_process_pool
 
 from graph_layout_rag.catalog.classify import classify_item
 from graph_layout_rag.ingest.canonical import IngestDocument, canonical_ingest_projection
@@ -94,6 +98,43 @@ def _extract_workers() -> int:
         return 4
 
 
+def _extract_shutdown_timeout_s() -> float:
+    raw = os.getenv("GRAPH_RAG_EXTRACT_SHUTDOWN_TIMEOUT_S", "15")
+    try:
+        return max(1.0, float(raw))
+    except ValueError:
+        logging.getLogger("graph_layout_rag.ingest").warning(
+            "invalid GRAPH_RAG_EXTRACT_SHUTDOWN_TIMEOUT_S=%r; using 15", raw
+        )
+        return 15.0
+
+
+def _extract_producer_join_timeout_s() -> float:
+    raw = os.getenv("GRAPH_RAG_EXTRACT_PRODUCER_JOIN_TIMEOUT_S", "30")
+    try:
+        return max(1.0, float(raw))
+    except ValueError:
+        logging.getLogger("graph_layout_rag.ingest").warning(
+            "invalid GRAPH_RAG_EXTRACT_PRODUCER_JOIN_TIMEOUT_S=%r; using 30", raw
+        )
+        return 30.0
+
+
+PoolHolder = dict[str, ProcessPoolExecutor | None]
+
+
+def _cleanup_pool_holder(pool_holder: PoolHolder, *, log: logging.Logger) -> None:
+    executor = pool_holder.get("executor")
+    if executor is not None:
+        shutdown_process_pool(
+            executor,
+            force=True,
+            timeout_s=_extract_shutdown_timeout_s(),
+            log=log,
+        )
+        pool_holder["executor"] = None
+
+
 def _ensure_pdf_backend_available(pdf_backend: str) -> None:
     if pdf_backend != "docling":
         return
@@ -155,6 +196,7 @@ def _classify_ingest_item(
     *,
     force: bool,
     state: dict,
+    seen_sha256: "set[str] | None" = None,
 ) -> ItemDecision:
     """Classify manifest work on the parent process with an explicit skip reason."""
     pipeline_cats, _ = classify_item(item)
@@ -163,6 +205,12 @@ def _classify_ingest_item(
             return ItemDecision("skip", item, pipeline_cats, "missing_pdf")
         if not force and item.sha256 and doc_sha256(state, item.id) == item.sha256:
             return ItemDecision("skip", item, pipeline_cats, "unchanged")
+        # Deduplicate by PDF content hash — manifest is the record of what was fetched;
+        # the index only needs one copy. First item with this sha256 wins.
+        if seen_sha256 is not None and item.sha256:
+            if item.sha256 in seen_sha256:
+                return ItemDecision("skip", item, pipeline_cats, "duplicate_sha256")
+            seen_sha256.add(item.sha256)
         return ItemDecision("pdf", item, pipeline_cats)
 
     if item.status == "metadata_only":
@@ -276,10 +324,13 @@ def _iter_extraction_outcomes(
     extract_workers: int,
     chunk_profile: str | None = None,
     stop_event: threading.Event | None = None,
+    pool_holder: PoolHolder | None = None,
+    log: logging.Logger | None = None,
 ) -> Iterator[ExtractionOutcome]:
     """Yield inline metadata and bounded, out-of-order PDF extraction outcomes."""
     use_pool = pdf_backend in {"docling", "pymupdf"} and extract_workers > 1
     max_pending = max(2 * extract_workers, 2)
+    seen_sha256: set[str] = set()
 
     if not use_pool:
         for raw_document in items:
@@ -287,7 +338,7 @@ def _iter_extraction_outcomes(
                 return
             document = raw_document if isinstance(raw_document, IngestDocument) else IngestDocument(raw_document)
             item = document.item
-            decision = _classify_ingest_item(item, force=force, state=state)
+            decision = _classify_ingest_item(item, force=force, state=state, seen_sha256=seen_sha256)
             if decision.kind == "skip":
                 yield ExtractionOutcome(item, [], reason=decision.reason)
             elif decision.kind == "metadata":
@@ -314,13 +365,16 @@ def _iter_extraction_outcomes(
 
     pending: dict[Future[ExtractionOutcome], ExtractionTask] = {}
     executor = ProcessPoolExecutor(max_workers=extract_workers)
+    if pool_holder is not None:
+        pool_holder["executor"] = executor
+    pool_log = log or logging.getLogger("graph_layout_rag.ingest")
     try:
         for raw_document in items:
             if stop_event is not None and stop_event.is_set():
                 break
             document = raw_document if isinstance(raw_document, IngestDocument) else IngestDocument(raw_document)
             item = document.item
-            decision = _classify_ingest_item(item, force=force, state=state)
+            decision = _classify_ingest_item(item, force=force, state=state, seen_sha256=seen_sha256)
             if decision.kind == "skip":
                 yield ExtractionOutcome(item, [], reason=decision.reason)
             elif decision.kind == "metadata":
@@ -343,7 +397,14 @@ def _iter_extraction_outcomes(
         interrupted = stop_event is not None and stop_event.is_set()
         for future in pending:
             future.cancel()
-        executor.shutdown(wait=not interrupted, cancel_futures=True)
+        shutdown_process_pool(
+            executor,
+            force=interrupted,
+            timeout_s=_extract_shutdown_timeout_s(),
+            log=pool_log,
+        )
+        if pool_holder is not None:
+            pool_holder["executor"] = None
 
 
 def _iter_queued_extraction_outcomes(
@@ -357,19 +418,25 @@ def _iter_queued_extraction_outcomes(
     telemetry: ExtractionPipelineTelemetry,
     log: logging.Logger,
     chunk_profile: str | None = None,
+    stop_event: threading.Event | None = None,
 ) -> Iterator[ExtractionOutcome]:
     """Run extraction in a producer thread and yield its bounded queued outcomes."""
     outcome_queue: queue.Queue[ExtractionOutcome | ProducerFailure | object] = queue.Queue(
         maxsize=queue_capacity
     )
-    stop_event = threading.Event()
+    internal_stop_event = threading.Event()
+    pool_holder: PoolHolder = {"executor": None}
     done = object()
     full_warning_at = 0.0
+    producer_join_timeout_s = _extract_producer_join_timeout_s()
+
+    def should_stop() -> bool:
+        return internal_stop_event.is_set() or (stop_event is not None and stop_event.is_set())
 
     def put(value: ExtractionOutcome | ProducerFailure | object) -> bool:
         nonlocal full_warning_at
         blocked_started: float | None = None
-        while not stop_event.is_set():
+        while not should_stop():
             try:
                 outcome_queue.put(value, timeout=0.1)
                 if blocked_started is not None:
@@ -403,8 +470,12 @@ def _iter_queued_extraction_outcomes(
                 pdf_backend=pdf_backend,
                 chunk_profile=chunk_profile,
                 extract_workers=extract_workers,
-                stop_event=stop_event,
+                stop_event=internal_stop_event,
+                pool_holder=pool_holder,
+                log=log,
             ):
+                if should_stop():
+                    return
                 telemetry.documents_extracted += 1
                 if not put(outcome):
                     return
@@ -416,21 +487,43 @@ def _iter_queued_extraction_outcomes(
             telemetry.producer_done = True
             put(done)
 
-    producer = threading.Thread(target=produce, name="graph-rag-extract", daemon=True)
+    atexit_cleanup_state = {"active": True}
+
+    def _atexit_cleanup() -> None:
+        if atexit_cleanup_state["active"]:
+            _cleanup_pool_holder(pool_holder, log=log)
+
+    atexit.register(_atexit_cleanup)
+    producer = threading.Thread(target=produce, name="graph-rag-extract", daemon=False)
     producer.start()
     try:
         while True:
-            value = outcome_queue.get()
+            if should_stop():
+                break
+            try:
+                value = outcome_queue.get(timeout=0.1)
+            except queue.Empty:
+                continue
             if value is done:
                 break
             if isinstance(value, ProducerFailure):
                 raise value.error
             yield value
     finally:
-        stop_event.set()
-        producer.join(timeout=5)
-        if producer.is_alive():
-            log.warning("extraction producer did not stop within 5s; shutdown continues")
+        atexit_cleanup_state["active"] = False
+        atexit.unregister(_atexit_cleanup)
+        internal_stop_event.set()
+        producer.join(timeout=producer_join_timeout_s)
+        if producer.is_alive() or pool_holder.get("executor") is not None:
+            if producer.is_alive():
+                log.warning(
+                    "extraction producer did not stop within %.0fs; force-shutting down pool",
+                    producer_join_timeout_s,
+                )
+            _cleanup_pool_holder(pool_holder, log=log)
+            producer.join(timeout=5)
+            if producer.is_alive():
+                log.warning("extraction producer still alive after forced pool shutdown")
 
 
 
@@ -579,6 +672,31 @@ def _execute_ingest(
     )
     log.info(msg)
     click.echo(msg, err=True)
+
+    shutdown_event = threading.Event()
+    signal_handlers: dict[int, signal.Handlers] = {}
+    hard_shutdown = False
+
+    def request_shutdown(signum: int, _frame) -> None:  # noqa: ANN001
+        nonlocal hard_shutdown
+        if shutdown_event.is_set():
+            hard_shutdown = True
+            raise KeyboardInterrupt
+        shutdown_event.set()
+        signame = signal.Signals(signum).name
+        log.warning(
+            "received %s; pausing ingest after the current extracted batch checkpoint",
+            signame,
+        )
+        click.echo(
+            f"Received {signame}; pausing after the current checkpoint...",
+            err=True,
+        )
+
+    if threading.current_thread() is threading.main_thread():
+        for signum in (signal.SIGINT, signal.SIGTERM):
+            signal_handlers[signum] = signal.getsignal(signum)
+            signal.signal(signum, request_shutdown)
 
     ingested = 0
     skipped = 0
@@ -759,83 +877,110 @@ def _execute_ingest(
         report_progress(phase="extracting", force_log=True)
 
     report_progress(phase="extracting", force_log=True)
-    for outcome in _iter_queued_extraction_outcomes(
-        projection,
-        force=force,
-        state=state,
-        pdf_backend=pdf_backend,
-        chunk_profile=cfg.profile,
-        extract_workers=extract_workers,
-        queue_capacity=extract_queue_docs,
-        telemetry=pipeline_telemetry,
-        log=log,
-    ):
-        item = outcome.item
-        scanned += 1
-        run_status["last_document_id"] = item.id
-        run_status["last_document_status"] = item.status
-        run_status["last_document_reason"] = outcome.reason or "ok"
-        run_status["last_document_chunks"] = len(outcome.chunks)
-        run_status["last_document_extraction_seconds"] = (
-            round(outcome.elapsed_seconds, 2) if outcome.elapsed_seconds is not None else None
-        )
-        progress(run_status, manifest_items_scanned=1 + len(outcome.aliases or []))
-        if scanned % scan_every == 0:
-            log.debug("scan checkpoint documents=%d/%d", scanned, len(projection))
-
-        if outcome.error:
-            log.error(
-                "PDF extraction failed for %s (%s); using metadata fallback: %s",
-                item.id,
-                item.localPath,
-                outcome.error,
+    try:
+        for outcome in _iter_queued_extraction_outcomes(
+            projection,
+            force=force,
+            state=state,
+            pdf_backend=pdf_backend,
+            chunk_profile=cfg.profile,
+            extract_workers=extract_workers,
+            queue_capacity=extract_queue_docs,
+            telemetry=pipeline_telemetry,
+            log=log,
+            stop_event=shutdown_event,
+        ):
+            item = outcome.item
+            scanned += 1
+            run_status["last_document_id"] = item.id
+            run_status["last_document_status"] = item.status
+            run_status["last_document_reason"] = outcome.reason or "ok"
+            run_status["last_document_chunks"] = len(outcome.chunks)
+            run_status["last_document_extraction_seconds"] = (
+                round(outcome.elapsed_seconds, 2) if outcome.elapsed_seconds is not None else None
             )
-        if outcome.reason == "missing_pdf":
-            missing += 1
-            progress(run_status, missing_pdfs=1)
-            write_status(run_status, index_paths)
-            log.warning("skip missing PDF: %s (%s)", item.id, item.localPath)
-            report_progress(phase="extracting")
-            continue
-        if not outcome.chunks:
-            skipped += 1
-            log.debug("skip %s: %s", item.id, outcome.reason)
-            report_progress(phase="extracting")
-            continue
+            progress(run_status, manifest_items_scanned=1 + len(outcome.aliases or []))
+            if scanned % scan_every == 0:
+                log.debug("scan checkpoint documents=%d/%d", scanned, len(projection))
 
-        chunks = outcome.chunks
-        if not chunks:
-            continue
+            if outcome.error:
+                log.error(
+                    "PDF extraction failed for %s (%s); using metadata fallback: %s",
+                    item.id,
+                    item.localPath,
+                    outcome.error,
+                )
+            if outcome.reason == "missing_pdf":
+                missing += 1
+                progress(run_status, missing_pdfs=1)
+                write_status(run_status, index_paths)
+                log.warning("skip missing PDF: %s (%s)", item.id, item.localPath)
+                report_progress(phase="extracting")
+                if shutdown_event.is_set():
+                    break
+                continue
+            if not outcome.chunks:
+                skipped += 1
+                log.debug("skip %s: %s", item.id, outcome.reason)
+                report_progress(phase="extracting")
+                if shutdown_event.is_set():
+                    break
+                continue
 
-        batch_chunks.extend(chunks)
-        batch_outcomes.append(outcome)
-        ingested += 1
-        docs_in_batch += 1
-        if item.status == "ok":
-            progress(run_status, canonical_pdfs_completed=1)
-        else:
-            progress(run_status, metadata_documents_completed=1)
-        if outcome.reason and "fallback" in outcome.reason:
-            progress(run_status, fallbacks=1)
-        if outcome.error:
-            progress(run_status, errors=1)
-        log.debug(
-            "extracted document=%s status=%s chunks=%d reason=%s extraction_s=%s "
-            "batch_documents=%d/%d",
-            item.id,
-            item.status,
-            len(chunks),
-            outcome.reason or "ok",
-            f"{outcome.elapsed_seconds:.2f}" if outcome.elapsed_seconds is not None else "n/a",
+            chunks = outcome.chunks
+            if not chunks:
+                if shutdown_event.is_set():
+                    break
+                continue
+
+            batch_chunks.extend(chunks)
+            batch_outcomes.append(outcome)
+            ingested += 1
+            docs_in_batch += 1
+            if item.status == "ok":
+                progress(run_status, canonical_pdfs_completed=1)
+            else:
+                progress(run_status, metadata_documents_completed=1)
+            if outcome.reason and "fallback" in outcome.reason:
+                progress(run_status, fallbacks=1)
+            if outcome.error:
+                progress(run_status, errors=1)
+            log.debug(
+                "extracted document=%s status=%s chunks=%d reason=%s extraction_s=%s "
+                "batch_documents=%d/%d",
+                item.id,
+                item.status,
+                len(chunks),
+                outcome.reason or "ok",
+                f"{outcome.elapsed_seconds:.2f}" if outcome.elapsed_seconds is not None else "n/a",
+                docs_in_batch,
+                doc_batch,
+            )
+            report_progress(phase="extracting")
+
+            if docs_in_batch >= doc_batch:
+                flush_batch()
+            if shutdown_event.is_set():
+                break
+
+        if shutdown_event.is_set():
+            log.warning(
+                "pause requested; checkpointing %d pending document(s) before exit",
+                docs_in_batch,
+            )
+        flush_batch()
+    except BaseException as exc:
+        if not shutdown_event.is_set() or hard_shutdown:
+            raise
+        log.warning(
+            "pause interrupted extraction producer (%s); checkpointing %d pending document(s)",
+            type(exc).__name__,
             docs_in_batch,
-            doc_batch,
         )
-        report_progress(phase="extracting")
-
-        if docs_in_batch >= doc_batch:
-            flush_batch()
-
-    flush_batch()
+        flush_batch()
+    finally:
+        for signum, previous in signal_handlers.items():
+            signal.signal(signum, previous)
 
     effective = stats.effective_config or cfg
     if written or stats.tokens:
@@ -844,6 +989,22 @@ def _execute_ingest(
         )
 
     save_ingest_state(state, index_paths)
+    if shutdown_event.is_set():
+        run_status["status"] = "paused"
+        run_status["phase"] = "paused"
+        run_status["paused_at"] = now_iso()
+        run_status["finished_at"] = run_status["paused_at"]
+        run_status["estimated_embedding_tokens"] = stats.tokens
+        run_status["estimated_cost_usd"] = state.get("estimated_cost_usd", 0.0)
+        report_progress(phase="paused", force_log=True)
+        write_status(run_status, index_paths)
+        click.echo(
+            f"Paused after indexing {run_status['documents_indexed']} document(s). "
+            f"Re-run ingest without --force or --rebuild to resume.",
+            err=True,
+        )
+        return
+
     run_status["status"] = "completed"
     run_status["phase"] = "completed"
     run_status["completed_at"] = now_iso()
@@ -938,7 +1099,11 @@ def ingest_group(
         except BaseException:
             status = load_status(embed_profile)
             if status.get("status") == "running":
-                status["status"] = "interrupted" if isinstance(sys.exc_info()[1], KeyboardInterrupt) else "failed"
+                exc = sys.exc_info()[1]
+                if isinstance(exc, KeyboardInterrupt) and status.get("phase") == "paused":
+                    status["status"] = "paused"
+                else:
+                    status["status"] = "interrupted" if isinstance(exc, KeyboardInterrupt) else "failed"
                 status["finished_at"] = now_iso()
                 write_status(status, embed_profile)
             raise

@@ -8,6 +8,9 @@ import numpy as np
 from graph_layout_rag.eval.encode_device import resolve_encode_device
 
 # Models not shipped in fastembed; encoded via sentence-transformers SparseEncoder.
+# Includes the OpenSearch inference-free neural-sparse models: SparseEncoder
+# handles their asymmetry (full doc-side MLM expansion via encode_document,
+# tokenizer-only query side via encode_query — no query forward pass).
 PYTORCH_SPARSE_MODELS: frozenset[str] = frozenset(
     {
         "naver/splade-v3",
@@ -19,7 +22,11 @@ PYTORCH_SPARSE_MODELS: frozenset[str] = frozenset(
 
 
 def is_pytorch_sparse_model(model_name: str) -> bool:
-    return model_name in PYTORCH_SPARSE_MODELS or model_name.startswith("naver/splade-v3")
+    return (
+        model_name in PYTORCH_SPARSE_MODELS
+        or model_name.startswith("naver/splade-v3")
+        or model_name.startswith("opensearch-project/opensearch-neural-sparse")
+    )
 
 
 @dataclass(frozen=True)

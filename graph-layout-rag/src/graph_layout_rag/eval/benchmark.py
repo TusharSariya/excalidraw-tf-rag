@@ -228,6 +228,9 @@ def run_benchmark(
         "retrieval_index": str(retrieval_index) if retrieval_index else None,
         "strategies_tested": [strategy.name for strategy in selected],
         "tracks_tested": selected_tracks,
+        # Records which gold fold this run scored, so downstream gate/report can
+        # prove selection vs reporting numbers came from disjoint case sets.
+        "fold": os.environ.get("GRAPH_RAG_FOLD", "all"),
         "case_count_by_track": {track: len(cases_for_track(track)) for track in selected_tracks},
         "gold_validation": validation,
         "memory_start": start_memory.to_dict(),
@@ -425,6 +428,14 @@ def _default_run_dir(embed_profile: str) -> Path:
     default=None,
     help="Judged qrels file to overlay onto the gold set (de-biased relevance labels).",
 )
+@click.option(
+    "--fold",
+    type=click.Choice(("all", "selection", "reporting")),
+    default="all",
+    show_default=True,
+    help="Restrict scoring to a gold fold: 'selection' to pick a winner, "
+    "'reporting' for held-out headline numbers, 'all' for the full gold set.",
+)
 @click.option("--report", is_flag=True, help="Also write markdown report next to JSON output.")
 @click.option("-v", "--verbose", is_flag=True, help="Log per-strategy progress to stderr.")
 @click.option("--json", "as_json", is_flag=True, help="Print JSON to stdout.")
@@ -446,6 +457,7 @@ def benchmark_cmd(
     abort_available_gb: float,
     max_swap_growth_gb: float,
     qrels_path: Path | None,
+    fold: str,
     output_path: Path | None,
     report: bool,
     verbose: bool,
@@ -463,6 +475,11 @@ def benchmark_cmd(
     # gold_cases() overlays the judged labels there too.
     if qrels_path:
         os.environ["GRAPH_RAG_QRELS_PATH"] = str(qrels_path)
+    # Fold restriction propagates to isolated strategy workers via env (they are
+    # subprocesses that inherit the environment), so cases_for_track() filters
+    # identically in-process and in-worker. Default "all" leaves it unset.
+    if fold and fold != "all":
+        os.environ["GRAPH_RAG_FOLD"] = fold
     run_dir = run_dir or _default_run_dir(embed_profile)
     if run_dir.exists() and any(run_dir.iterdir()) and not resume:
         raise click.ClickException(

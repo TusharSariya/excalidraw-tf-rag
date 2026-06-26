@@ -5,6 +5,7 @@ import json
 import os
 import platform
 import time
+from functools import lru_cache
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
@@ -87,10 +88,62 @@ def _sparse_encoder(model_name: str, *, encode_device: EncodeDevice | None):
     return SparseTextEmbedding(model_name=model_name, **fastembed_kwargs(encode_device))
 
 
-def _colbert_encoder(model_name: str, *, encode_device: EncodeDevice | None):
+def _fastembed_supports_colbert(model_name: str) -> bool:
     from fastembed import LateInteractionTextEmbedding
 
-    return LateInteractionTextEmbedding(model_name=model_name, **fastembed_kwargs(encode_device))
+    return any(
+        m.get("model") == model_name
+        for m in LateInteractionTextEmbedding.list_supported_models()
+    )
+
+
+class _PylateColbertEncoder:
+    """Late-interaction encoder for ColBERT checkpoints not shipped in fastembed
+    (e.g. mxbai-edge-colbert). Exposes the same ``embed``/``query_embed`` surface
+    the build/search paths use, yielding per-text 2D token-embedding arrays."""
+
+    def __init__(self, model_name: str, *, encode_device: EncodeDevice | None) -> None:
+        try:
+            from pylate import models as pylate_models
+        except ImportError as exc:
+            raise click.ClickException(
+                f"ColBERT model {model_name!r} is not shipped in fastembed and requires pylate. "
+                "Run: uv sync --extra retrieval-experiments-gpu"
+            ) from exc
+        import torch
+
+        device = resolve_encode_device(encode_device)
+        if device == "cuda" and not torch.cuda.is_available():
+            device = "cpu"
+        self.model_name = model_name
+        self._model = pylate_models.ColBERT(model_name_or_path=model_name, device=device)
+
+    def _encode(self, texts: list[str], *, batch_size: int, is_query: bool):
+        import numpy as np
+
+        embeddings = self._model.encode(
+            texts,
+            batch_size=batch_size,
+            is_query=is_query,
+            show_progress_bar=False,
+            convert_to_numpy=True,
+        )
+        for emb in embeddings:
+            yield np.asarray(emb, dtype=np.float32)
+
+    def embed(self, texts: list[str], *, batch_size: int):
+        yield from self._encode(list(texts), batch_size=batch_size, is_query=False)
+
+    def query_embed(self, query: str):
+        yield from self._encode([query], batch_size=1, is_query=True)
+
+
+def _colbert_encoder(model_name: str, *, encode_device: EncodeDevice | None):
+    if _fastembed_supports_colbert(model_name):
+        from fastembed import LateInteractionTextEmbedding
+
+        return LateInteractionTextEmbedding(model_name=model_name, **fastembed_kwargs(encode_device))
+    return _PylateColbertEncoder(model_name, encode_device=encode_device)
 
 
 def _connect(QdrantClient, index_dir: Path, index_id: str, *, meta: dict | None = None):
@@ -211,6 +264,25 @@ def build_experimental_index(
     return index_dir
 
 
+@lru_cache(maxsize=8)
+def _sparse_encoder_cached(model_name: str, encode_device: EncodeDevice | None):
+    return _sparse_encoder(model_name, encode_device=encode_device)
+
+
+@lru_cache(maxsize=8)
+def _colbert_encoder_cached(model_name: str, encode_device: EncodeDevice | None):
+    return _colbert_encoder(model_name, encode_device=encode_device)
+
+
+def _query_encode_device(meta_device: EncodeDevice | None) -> EncodeDevice | None:
+    """Device for encoding the *query* at search time. The doc index is already
+    built, so query encoding is a single short forward pass — set
+    ``GRAPH_RAG_EXPERIMENTAL_QUERY_DEVICE=cpu`` to keep it off a GPU that's full
+    with the 4B dense model (the experimental encoders won't fit alongside it)."""
+    override = os.getenv("GRAPH_RAG_EXPERIMENTAL_QUERY_DEVICE", "").strip()
+    return override or meta_device  # type: ignore[return-value]
+
+
 def search_experimental(
     index_dir: Path,
     query: str,
@@ -225,13 +297,13 @@ def search_experimental(
             f"Strategy requires {expected_kind!r} index, got {meta['kind']!r}: {index_dir}"
         )
     client, collection = _connect(QdrantClient, index_dir, meta["index_id"], meta=meta)
-    encode_device = meta.get("encode_device")
+    encode_device = _query_encode_device(meta.get("encode_device"))
     if meta["kind"] == "splade":
         backend = meta.get("encode_backend") or _sparse_backend(meta["model"])
         if backend == "pytorch_sparse":
-            vector = _sparse_encoder(meta["model"], encode_device=encode_device).query_embed(query)
+            vector = _sparse_encoder_cached(meta["model"], encode_device).query_embed(query)
         else:
-            vector = next(_sparse_encoder(meta["model"], encode_device=encode_device).query_embed(query))
+            vector = next(_sparse_encoder_cached(meta["model"], encode_device).query_embed(query))
         query_vector = (
             "splade",
             _models.SparseVector(
@@ -240,7 +312,7 @@ def search_experimental(
             ),
         )
     else:
-        vector = next(_colbert_encoder(meta["model"], encode_device=encode_device).query_embed(query))
+        vector = next(_colbert_encoder_cached(meta["model"], encode_device).query_embed(query))
         query_vector = ("colbert", vector)
     name, value = query_vector
     response = client.query_points(

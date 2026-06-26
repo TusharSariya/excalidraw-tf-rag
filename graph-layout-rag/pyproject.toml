@@ -10,6 +10,7 @@ dependencies = [
   "httpx>=0.27.0",
   "lancedb>=0.15.0",
   "openai>=1.40.0",
+  "patchright>=1.60.1",
   "pydantic>=2.7.0",
   "pymupdf>=1.24.0",
   "rag-common[gemini]",

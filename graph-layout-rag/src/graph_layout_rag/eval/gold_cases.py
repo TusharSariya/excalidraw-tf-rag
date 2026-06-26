@@ -587,6 +587,10 @@ GOLD_CASES: tuple[EvalCase, ...] = (
 def gold_cases() -> list[EvalCase]:
     """Return the gold cases, optionally overlaid with a judged qrels file.
 
+    When ``GRAPH_RAG_INCLUDE_SYNTH`` is set to ``"1"``, synthetic cases from
+    ``gold_synth.load_synth_cases()`` are appended before the qrels overlay so
+    they can be graded by the judge in pool_commands.
+
     When ``GRAPH_RAG_QRELS_PATH`` is set (e.g. by ``eval benchmark --qrels``),
     the de-biased multi-system judgments are unioned into each case's relevant
     set. The env var propagates to the isolated strategy workers automatically.
@@ -594,6 +598,21 @@ def gold_cases() -> list[EvalCase]:
     import os
 
     cases = list(GOLD_CASES)
+    if os.getenv("GRAPH_RAG_INCLUDE_SYNTH") == "1":
+        from graph_layout_rag.eval.gold_synth import load_synth_cases
+
+        synth_raw = load_synth_cases()
+        for raw in synth_raw:
+            cases.append(
+                EvalCase(
+                    id=raw["id"],
+                    query=raw["query"],
+                    relevant_doc_ids=frozenset(raw.get("relevant_ids", [])),
+                    category=raw.get("category"),
+                    pdf_only=(raw.get("track") == "pdf-deep-read"),
+                    notes=raw.get("notes", ""),
+                )
+            )
     qrels_path = os.getenv("GRAPH_RAG_QRELS_PATH")
     if qrels_path:
         from pathlib import Path

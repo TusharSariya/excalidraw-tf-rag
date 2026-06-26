@@ -109,6 +109,8 @@ def retrieve_hyde_candidates(
     embed_profile: str | None,
     hybrid: bool,
     filters: RetrieveFilters,
+    dense_weight: float = DENSE_WEIGHT,
+    sparse_weight: float = SPARSE_WEIGHT,
 ) -> list[dict[str, Any]] | None:
     """HyDE: embed a hypothetical passage, retrieve with hybrid BM25+dense fusion."""
     from graph_layout_rag.ingest.embed import ENV_PREFIX, embed_query
@@ -130,6 +132,8 @@ def retrieve_hyde_candidates(
         context=ctx,
         vector=vector,
         bm25_query=query,
+        dense_weight=dense_weight,
+        sparse_weight=sparse_weight,
     )
 
 
@@ -140,6 +144,8 @@ def _expand_candidates(
     embed_profile: str | None,
     hybrid: bool,
     filters: RetrieveFilters,
+    dense_weight: float = DENSE_WEIGHT,
+    sparse_weight: float = SPARSE_WEIGHT,
 ) -> list[dict[str, Any]] | None:
     """Run HyDE expansion and re-retrieve.
 
@@ -152,6 +158,8 @@ def _expand_candidates(
         embed_profile=embed_profile,
         hybrid=hybrid,
         filters=filters,
+        dense_weight=dense_weight,
+        sparse_weight=sparse_weight,
     )
 
 
@@ -193,6 +201,8 @@ def search(
     hybrid: bool = DEFAULT_HYBRID,
     max_per_doc: int = 2,
     expand: str = "off",
+    dense_weight: float = DENSE_WEIGHT,
+    sparse_weight: float = SPARSE_WEIGHT,
 ) -> list[dict[str, Any]]:
     if category and category not in PIPELINE_CATEGORIES:
         raise ValueError(
@@ -214,6 +224,8 @@ def search(
         embed_profile=embed_profile,
         hybrid=hybrid,
         filters=filters,
+        dense_weight=dense_weight,
+        sparse_weight=sparse_weight,
     )
     if expand == "force" or (
         expand == "auto" and _should_expand(query, candidates, pdf_only=pdf_only)
@@ -224,6 +236,8 @@ def search(
             embed_profile=embed_profile,
             hybrid=hybrid,
             filters=filters,
+            dense_weight=dense_weight,
+            sparse_weight=sparse_weight,
         )
         if expanded:
             candidates = expanded

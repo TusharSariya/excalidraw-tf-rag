@@ -47,6 +47,34 @@ def validate_gold(manifest: Manifest | None = None) -> dict:
     }
 
 
+def _apply_fold_filter(cases: list[EvalCase]) -> list[EvalCase]:
+    """Restrict cases to a fold when ``GRAPH_RAG_FOLD`` is set.
+
+    Driven by an env var (like ``GRAPH_RAG_INCLUDE_SYNTH``/``GRAPH_RAG_QRELS_PATH``)
+    so it propagates automatically to the isolated strategy subprocess workers.
+    Cases whose id is not in the fold map (e.g. the hand-curated, non-synthetic
+    ``GOLD_CASES``) are kept — only synthetic cases that ARE in the map and assigned
+    to a different fold are dropped.
+    """
+
+    import os
+
+    fold = os.getenv("GRAPH_RAG_FOLD")
+    if not fold or fold == "all":
+        return cases
+
+    from graph_layout_rag.eval.folds import all_assigned_ids, load_fold_ids
+
+    fold_ids = load_fold_ids(fold)
+    if fold_ids is None:
+        return cases
+    # A case is dropped only if it is assigned to *some* fold but not the
+    # requested one. Ids absent from the fold map (the hand-curated, non-synthetic
+    # GOLD_CASES) pass through unrestricted.
+    assigned = all_assigned_ids()
+    return [c for c in cases if c.id not in assigned or c.id in fold_ids]
+
+
 def cases_for_track(
     track: EvalTrack,
     *,
@@ -54,7 +82,7 @@ def cases_for_track(
 ) -> list[EvalCase]:
     if track not in EVAL_TRACKS:
         raise ValueError(f"Unknown eval track {track!r}; choose from {', '.join(EVAL_TRACKS)}")
-    cases = gold_cases()
+    cases = _apply_fold_filter(gold_cases())
     if track == "catalog":
         return [replace(case, pdf_only=False) for case in cases]
 

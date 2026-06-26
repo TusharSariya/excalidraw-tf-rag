@@ -35,6 +35,23 @@ def _experimental_indexes(splade_index: Path | None, colbert_index: Path | None)
 @click.option("--splade-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None)
 @click.option("--colbert-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None)
 @click.option("-o", "--output", "output", type=click.Path(path_type=Path), default=None)
+@click.option(
+    "--leave-dense-out",
+    is_flag=True,
+    help=(
+        "Also emit a seed-system attribution sidecar (pool.attribution.json) and a "
+        "leave-dense-out gold case-id list (pool.leave_dense_out.json): the cases "
+        "whose synthetic seed was surfaced by a lexical/BM25-family system, so the "
+        "BM25-falls comparison can be recomputed without dense/HyDE survivorship bias."
+    ),
+)
+@click.option(
+    "--qrels",
+    "qrels_path",
+    type=click.Path(path_type=Path, exists=True),
+    default=None,
+    help="Optional judged qrels for the leave-dense-out sidecar (fills seed grades).",
+)
 @click.option("-v", "--verbose", is_flag=True)
 def pool_cmd(
     track: str,
@@ -44,6 +61,8 @@ def pool_cmd(
     splade_index: Path | None,
     colbert_index: Path | None,
     output: Path | None,
+    leave_dense_out: bool,
+    qrels_path: Path | None,
     verbose: bool,
 ) -> None:
     """Build a diverse multi-system candidate pool per gold case (de-biases the judge)."""
@@ -63,6 +82,68 @@ def pool_cmd(
     stats = pool_stats(payload)
     click.echo(f"Wrote {out_path}")
     click.echo(json.dumps({"systems": payload["systems"], **stats}, indent=2))
+
+    if leave_dense_out:
+        _write_leave_dense_out_sidecars(payload, out_path, qrels_path)
+
+
+def _write_leave_dense_out_sidecars(
+    payload: dict,
+    pool_out_path: Path,
+    qrels_path: Path | None,
+) -> None:
+    """Write per-case seed attribution + the leave-dense-out gold subset alongside a pool."""
+    from graph_layout_rag.eval.gold_synth import load_synth_cases
+    from graph_layout_rag.eval.pooling import (
+        attribution_breakdown,
+        leave_dense_out_case_ids,
+        seed_attribution,
+    )
+
+    case_seed = {
+        c["id"]: c["seed_doc_id"]
+        for c in load_synth_cases()
+        if c.get("seed_doc_id")
+    }
+    if not case_seed:
+        click.echo("[leave-dense-out] no synthetic cases with seeds found; skipping sidecar.")
+        return
+
+    qrels = None
+    if qrels_path is not None:
+        from graph_layout_rag.eval.qrels import load_qrels
+
+        qrels = load_qrels(qrels_path)
+
+    attribution = seed_attribution(payload, case_seed, qrels=qrels)
+    breakdown = attribution_breakdown(attribution)
+    keep_ids = leave_dense_out_case_ids(attribution)
+
+    attr_path = pool_out_path.with_name("pool.attribution.json")
+    ldo_path = pool_out_path.with_name("pool.leave_dense_out.json")
+    attr_path.write_text(
+        json.dumps({"breakdown": breakdown, "cases": attribution}, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    ldo_path.write_text(
+        json.dumps(
+            {
+                "description": (
+                    "Gold case IDs whose synthetic seed was surfaced by a "
+                    "lexical/BM25-family system (and judged relevant when grades "
+                    "available); excludes dense/HyDE/neural-only survivors."
+                ),
+                "breakdown": breakdown,
+                "case_ids": keep_ids,
+            },
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    click.echo(f"Wrote {attr_path}")
+    click.echo(f"Wrote {ldo_path}")
+    click.echo(json.dumps(breakdown, indent=2))
 
 
 @click.command("judge")
@@ -109,6 +190,43 @@ def judge_cmd(
     )
     click.echo(f"Wrote {out_path}")
     click.echo(json.dumps(agreement, indent=2))
+
+
+@click.command("judge-validate")
+@click.option("--track", type=click.Choice(EVAL_TRACKS), default=None, help="Locate the default pool for this track.")
+@click.option("--pool", "pool_file", type=click.Path(path_type=Path, exists=True), default=None)
+@click.option("--model", default=None, help="Judge LLM model (default backend-resolved judge_model).")
+@click.option("--seeds", "seeds_path", type=click.Path(path_type=Path, exists=True), default=None)
+@click.option("-v", "--verbose", is_flag=True)
+def judge_validate_cmd(
+    track: str | None,
+    pool_file: Path | None,
+    model: str | None,
+    seeds_path: Path | None,
+    verbose: bool,
+) -> None:
+    """HG7 judge-validation gate: agreement vs curated labels BEFORE qrels.
+
+    PASS iff Spearman rho>=0.70 AND Cohen kappa>=0.70 AND dense-vs-BM25 bias<0.25.
+    Run this to validate a (possibly local Ollama) judge before its grades feed
+    the gold set. Exits non-zero on FAIL.
+    """
+    if verbose:
+        logging.basicConfig(level=logging.INFO)
+    from graph_layout_rag.eval.judge import validate_judge_hg7
+    from graph_layout_rag.eval.pooling import pool_path
+
+    if pool_file is None:
+        if track is None:
+            raise click.ClickException("Pass --pool or --track to locate the pool.")
+        pool_file = pool_path(track)  # type: ignore[arg-type]
+        if not pool_file.is_file():
+            raise click.ClickException(f"No pool at {pool_file}; run `eval pool --track {track}` first.")
+
+    result = validate_judge_hg7(pool_file, model=model, seed_cases_path=seeds_path)
+    click.echo(json.dumps(result, indent=2))
+    if not result["passed"]:
+        raise SystemExit(1)
 
 
 @click.command("diagnostics")
@@ -213,6 +331,92 @@ def gate_cmd(
         click.echo(format_gate_report(result))
     if not result.passed:
         raise SystemExit(1)
+
+
+@click.command("pool-merge")
+@click.argument("pool_files", nargs=-1, required=True, type=click.Path())
+@click.option("-o", "--output", "output", type=click.Path(path_type=Path), required=True)
+@click.option("-v", "--verbose", is_flag=True)
+def pool_merge_cmd(
+    pool_files: tuple[str, ...],
+    output: Path,
+    verbose: bool,
+) -> None:
+    """Merge multiple pool JSON files into a single pool for joint judging.
+
+    Example::
+
+        eval pool-merge data/eval/pool/catalog/pool.json data/eval/pool/pdf-deep-read/pool.json \\
+            -o data/eval/pool/merged/pool.json
+    """
+    if verbose:
+        logging.basicConfig(level=logging.INFO)
+    from graph_layout_rag.eval.pooling import merge_pools, write_pool
+
+    try:
+        payload = merge_pools(list(pool_files))
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    write_pool(payload, output)
+    n_cases = payload["case_count"]
+    n_candidates = sum(
+        len(c.get("pooled", {})) for c in payload["cases"].values()
+    )
+    click.echo(f"Wrote {output}")
+    click.echo(json.dumps({"n_cases": n_cases, "total_candidates": n_candidates}, indent=2))
+
+
+@click.command("gen-gold")
+@click.option("--embed-profile", required=True, help="Embed profile used to sample seed docs.")
+@click.option("--n-catalog", default=90, show_default=True, type=int, help="Catalog seed count.")
+@click.option("--n-pdf", default=40, show_default=True, type=int, help="PDF-deep-read seed count.")
+@click.option("--hard-frac", default=0.30, show_default=True, type=float, help="Fraction of hard (indirect) queries.")
+@click.option("--budget-usd", default=10.0, show_default=True, type=float, help="Approximate LLM cost budget.")
+@click.option("--gen-only", is_flag=True, help="Generate and cache queries without writing cases.")
+@click.option("-v", "--verbose", is_flag=True)
+def gen_gold_cmd(
+    embed_profile: str,
+    n_catalog: int,
+    n_pdf: int,
+    hard_frac: float,
+    budget_usd: float,
+    gen_only: bool,
+    verbose: bool,
+) -> None:
+    """Generate synthetic gold cases from manifest seeds (DataMorgana / ARES style).
+
+    Reads manifest docs, samples stratified seeds, calls Gemini-Flash to write
+    system-blind queries, applies quality filters (leakage, dup, short), and
+    writes cases to data/eval/gold_synth/cases.json.
+
+    After generation, run ``eval pool`` with GRAPH_RAG_INCLUDE_SYNTH=1 to pool
+    the synthetic cases alongside the curated-49 gold set, then ``eval judge``
+    to grade them.
+
+    Requires GOOGLE_CLOUD_PROJECT / Vertex AI credentials for Gemini access.
+    """
+    if verbose:
+        logging.basicConfig(level=logging.INFO)
+    from graph_layout_rag.eval.gold_synth import build_synth_cases, write_cases
+
+    click.echo(
+        f"Generating synthetic gold cases: embed_profile={embed_profile} "
+        f"n_catalog={n_catalog} n_pdf={n_pdf} hard_frac={hard_frac} "
+        f"budget_usd={budget_usd}"
+    )
+    cases, manifest = build_synth_cases(
+        embed_profile,
+        n_catalog=n_catalog,
+        n_pdf=n_pdf,
+        hard_frac=hard_frac,
+    )
+    if not gen_only:
+        write_cases(cases, manifest)
+        click.echo(f"Wrote {len(cases)} cases to data/eval/gold_synth/cases.json")
+    else:
+        click.echo(f"Generated {len(cases)} cases (--gen-only: not written to disk)")
+    click.echo(json.dumps(manifest, indent=2))
 
 
 @click.command("corpus-health")

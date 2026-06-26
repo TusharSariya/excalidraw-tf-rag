@@ -44,4 +44,70 @@ def book_metadata_stubs() -> list[ManifestItem]:
             doi="10.1007/978-3-642-55946-3",
             abstract="Graph drawing software systems including Graphviz-era tools.",
         ),
+        ManifestItem(
+            id="book-tamassia-handbook",
+            title="Handbook of Graph Drawing and Visualization",
+            authors=["Tamassia"],
+            year=2013,
+            source="book",
+            url="https://doi.org/10.1201/b15385",
+            contentType="text/metadata",
+            status="metadata_only",
+            tags=["book", "survey", "handbook"],
+            doi="10.1201/b15385",
+            abstract=(
+                "Comprehensive reference edited by Tamassia covering all major graph drawing "
+                "topics: layered, force-directed, orthogonal, planar, constrained. Many chapters "
+                "available as open PDFs from authors' sites. CRC Press 2013."
+            ),
+        ),
+        ManifestItem(
+            id="book-nishizeki-rahman",
+            title="Planar Graph Drawing",
+            authors=["Nishizeki", "Rahman"],
+            year=2004,
+            source="book",
+            url="https://doi.org/10.1142/5648",
+            contentType="text/metadata",
+            status="metadata_only",
+            tags=["book", "planar"],
+            doi="10.1142/5648",
+            abstract=(
+                "Textbook on planar graph drawing algorithms: visibility representations, "
+                "straight-line drawings, convex drawings, box-rectangular drawings. "
+                "World Scientific 2004."
+            ),
+        ),
+        ManifestItem(
+            id="book-healy-nikolov-hierarchical",
+            title="Hierarchical Drawing Algorithms",
+            authors=["Healy", "Nikolov"],
+            year=2013,
+            source="book",
+            url="https://cs.brown.edu/people/rtamassi/gdhandbook/chapters/hierarchical.pdf",
+            contentType="application/pdf",
+            status="metadata_only",
+            tags=["book", "hierarchical", "layered", "sugiyama", "survey"],
+            abstract=(
+                "Survey chapter on hierarchical/Sugiyama-framework drawing algorithms. "
+                "Covers layer assignment, crossing minimization, coordinate assignment. "
+                "From the Handbook of Graph Drawing and Visualization."
+            ),
+        ),
+        ManifestItem(
+            id="book-kobourov-force-directed",
+            title="Force-Directed Drawing Algorithms",
+            authors=["Kobourov"],
+            year=2013,
+            source="book",
+            url="https://cs.brown.edu/people/rtamassia/gdhandbook/chapters/force-directed.pdf",
+            contentType="application/pdf",
+            status="metadata_only",
+            tags=["book", "force-directed", "survey"],
+            abstract=(
+                "Survey chapter on force-directed graph drawing: spring-embedder, stress "
+                "majorization, multilevel methods, scalability. From the Handbook of Graph "
+                "Drawing and Visualization."
+            ),
+        ),
     ]

@@ -34,6 +34,7 @@ from graph_layout_rag.harvest.deferred_retry import run_deferred_retries
 from graph_layout_rag.harvest.dblp import harvest_dblp
 from graph_layout_rag.harvest.elk_references import harvest_elk_references
 from graph_layout_rag.harvest.graphviz_theory import harvest_graphviz_theory
+from graph_layout_rag.harvest.maintainer_seeds import harvest_maintainer_seeds
 from graph_layout_rag.harvest.handbook import harvest_handbook
 from graph_layout_rag.harvest.ledger import init_db, query_attempts, set_harvest_run, set_harvest_stage, summary
 from graph_layout_rag.harvest.log import setup_harvest_logging
@@ -159,6 +160,14 @@ def _run_early_stages(manifest, log, *, kw, skip_topic_seeds: bool, skip_elk_bib
     )
     if not dry_run:
         _save_progress(manifest, "curated", log)
+
+    _run_stage(
+        "maintainer seeds (Graphviz authors, TALA/yWorks, social mining)",
+        log,
+        lambda: _merge_items(manifest, harvest_maintainer_seeds(**kw)),
+    )
+    if not dry_run:
+        _save_progress(manifest, "maintainer-seeds", log)
 
     if not skip_elk_bibliography:
         _run_stage(
@@ -1211,6 +1220,92 @@ def harvest_enrich_cmd(dry_run: bool, workers: int) -> None:
         f"enrich: scanned={stats['scanned']} candidates={stats['candidates']} "
         f"{'would_fill' if dry_run else 'filled'}={stats['enriched']} "
         f"skipped={stats['skipped']}"
+    )
+
+
+@harvest_group.command("add-local")
+@click.option("--pdf", "pdf_path", required=True, type=click.Path(exists=True, dir_okay=False), help="Path to local PDF.")
+@click.option("--title", required=True, help="Paper title.")
+@click.option("--doi", default=None, help="DOI (optional).")
+@click.option("--authors", default="", help="Comma-separated author list.")
+@click.option("--year", default=None, type=int, help="Publication year.")
+@click.option("--tags", default="", help="Comma-separated tags.")
+def harvest_add_local_cmd(pdf_path: str, title: str, doi: str | None, authors: str, year: int | None, tags: str) -> None:
+    """Add a locally-acquired PDF (book chapter, paywalled paper) to the manifest.
+
+    Copies the PDF into data/raw/pdf/, computes its sha256, and appends a
+    status=ok manifest item so the next ingest --rebuild picks it up.
+    """
+    import hashlib
+    import shutil
+    from pathlib import Path
+
+    from graph_layout_rag.manifest import ManifestItem, load_manifest, save_manifest, slug_id, upsert_item
+    from graph_layout_rag.paths import PDF_DIR
+
+    src = Path(pdf_path)
+    item_id = slug_id(title)
+    dest = PDF_DIR / f"{item_id}.pdf"
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+
+    sha256 = hashlib.sha256(src.read_bytes()).hexdigest()
+    if dest != src:
+        shutil.copy2(src, dest)
+
+    author_list = [a.strip() for a in authors.split(",") if a.strip()]
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] + ["local", "manual"]
+
+    item = ManifestItem(
+        id=item_id,
+        title=title,
+        authors=author_list,
+        year=year,
+        source="local",
+        url=f"file://{dest}",
+        localPath=f"data/raw/pdf/{item_id}.pdf",
+        contentType="application/pdf",
+        status="ok",
+        tags=tag_list,
+        doi=doi,
+        sha256=sha256,
+    )
+
+    manifest = load_manifest()
+    upsert_item(manifest, item)
+    save_manifest(manifest)
+    click.echo(f"Added: {item_id} ({dest})")
+    click.echo(f"  sha256={sha256}")
+    click.echo("  Run: RAG_EMBED_PROFILE=cuda-qwen0.6b-1024 uv run graph-layout-rag ingest --rebuild")
+
+
+@harvest_group.command("shadow-fetch")
+@click.option("--dry-run", is_flag=True, help="Report candidate count without downloading.")
+@click.option("--limit", default=None, type=int, help="Max papers to attempt (default: all).")
+@click.option("--show-browser", is_flag=True, help="Run Chromium with a visible window (debug).")
+@click.option("--workers", default=1, type=int, show_default=True, help="Parallel browser contexts.")
+def harvest_shadow_fetch_cmd(dry_run: bool, limit: int | None, show_browser: bool, workers: int) -> None:
+    """Fetch paywalled PDFs via sci-hub / Anna's Archive using Patchright.
+
+    Targets manifest items that have a DOI but no local PDF (status != ok).
+    Tries sci-hub.ru first, then Anna's Archive → libgen.li fallback.
+    Saves PDFs to data/raw/pdf/ and updates manifest in place.
+    """
+    from graph_layout_rag.harvest.shadow_library import shadow_fetch_manifest
+
+    manifest = load_manifest()
+    stats = shadow_fetch_manifest(
+        manifest.items,
+        dry_run=dry_run,
+        limit=limit,
+        headless=not show_browser,
+        workers=workers,
+    )
+    if not dry_run and stats["fetched"]:
+        save_manifest(manifest)
+    click.echo(
+        f"shadow-fetch: candidates={stats['candidates']} "
+        f"{'would_fetch' if dry_run else 'fetched'}={stats['fetched']} "
+        f"failed={stats['failed']}"
     )
 
 

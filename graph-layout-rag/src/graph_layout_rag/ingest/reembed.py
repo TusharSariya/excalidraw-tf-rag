@@ -71,7 +71,13 @@ def _load_source_rows(source_profile: str) -> list[dict[str, Any]]:
     table_names = tables if isinstance(tables, list) else list(getattr(tables, "tables", tables))
     if CHUNKS_TABLE not in table_names:
         raise click.ClickException(f"source index missing {CHUNKS_TABLE} table: {paths.root}")
-    return db.open_table(CHUNKS_TABLE).to_arrow().to_pylist()
+    # Re-embedding regenerates vectors from text, so the source "vector" column is
+    # dead weight — and exploding it into Python floats via to_pylist() costs ~1.3GB
+    # (1024 floats/row * 41k rows). Project it out before to_pylist() to keep the
+    # reembed process lean on memory-constrained hosts (e.g. Apple Silicon / MLX).
+    arrow_tbl = db.open_table(CHUNKS_TABLE).to_arrow()
+    keep_cols = [name for name in arrow_tbl.column_names if name != "vector"]
+    return arrow_tbl.select(keep_cols).to_pylist()
 
 
 def _copy_bm25_index(source_profile: str, target_profile: str) -> None:
@@ -174,6 +180,21 @@ def run_reembed(
             eta,
         )
         click.echo(f"  {offset}/{total} chunks ({rate:.1f} chunks/s, eta {eta:.0f}s)")
+
+    # HG2: chunk-count parity. A resumed or half-failed reembed (e.g. the Mac 8B rung
+    # thrashing to a kill) can leave the target index short while `reembed_completed_at`
+    # would still be written, silently treating a partial rung as "done". Verify the
+    # target table holds every source chunk before declaring success. Read the lance
+    # table (authoritative) — never ingest_status.json, which was proven stale/6x-off.
+    from graph_layout_rag.ingest.index import chunk_count
+
+    target_n = chunk_count(target_paths)
+    if target_n != total:
+        raise click.ClickException(
+            f"HG2 parity FAIL: reembed {target_profile!r} wrote {target_n} chunks but "
+            f"source {source_profile!r} has {total}. Target index is short — refusing to "
+            f"mark complete. Re-run reembed (resumes from offset) until counts match."
+        )
 
     state = load_ingest_state(target_paths)
     state.pop(REEMBED_OFFSET_KEY, None)

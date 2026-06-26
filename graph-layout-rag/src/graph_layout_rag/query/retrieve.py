@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any, Sequence
 
 import lancedb
+
+from rag_common.config import resolved_embed_backend
 
 from graph_layout_rag.catalog.classify import build_catalog
 from graph_layout_rag.catalog.taxonomy import PIPELINE_CATEGORIES
@@ -72,6 +75,41 @@ def clear_retrieve_caches() -> None:
     clear_identity_cache()
 
 
+def _assert_backend_match(state: dict[str, Any], config: EmbedConfig, paths: Any) -> None:
+    """HG1: refuse to query an index whose vectors were built with a different
+    concrete embed backend than this host resolves to.
+
+    The model/dims/quant check (`ensure_embed_config_matches`) is blind to the
+    MLX-vs-bitsandbytes split — both record backend "local", quant "4bit" — so a
+    `cuda-*` index benchmarked on a Mac silently embeds MLX-quant queries against
+    bnb-quant docs and produces meaningless scores that pass validation. This was
+    the defect that corrupted Stage A. Fail closed.
+
+    Legacy indexes built before this guard carry no `resolved_embed_backend`; we warn
+    rather than hard-fail (cannot reconstruct MLX-vs-bnb from state alone) and rely on
+    backfilling the tag for indexes that matter.
+    """
+    recorded = state.get("resolved_embed_backend")
+    host = resolved_embed_backend(config)
+    if not recorded:
+        warnings.warn(
+            f"Index {getattr(paths, 'profile', '?')!r} has no recorded resolved embed "
+            f"backend (legacy build); HG1 cannot verify it was embedded with this "
+            f"host's '{host}' stack. Backfill resolved_embed_backend to enforce.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return
+    if host != recorded:
+        raise RuntimeError(
+            f"HG1 backend mismatch for index {getattr(paths, 'profile', '?')!r}: built "
+            f"with embed backend '{recorded}' but this host resolves '{host}'. "
+            f"Quantized local vectors are NOT portable across MLX/bitsandbytes — "
+            f"benchmark each rung on the machine that embedded it. Refusing to score "
+            f"a silent query/doc quant mismatch."
+        )
+
+
 def resolve_retrieve_context(*, embed_profile: str | None = None) -> RetrieveContext:
     slug = profile_index_paths(embed_profile).profile if embed_profile else profile_index_paths().profile
     cached = _CONTEXT_CACHE.get(slug)
@@ -103,8 +141,11 @@ def resolve_retrieve_context(*, embed_profile: str | None = None) -> RetrieveCon
             from graph_layout_rag.ingest.index import ensure_embed_config_matches
 
             ensure_embed_config_matches(state, config)
+            _assert_backend_match(state, config, paths)
     else:
         config = indexed if indexed is not None else embed_config_from_env()
+        if indexed is not None:
+            _assert_backend_match(state, config, paths)
 
     ctx = RetrieveContext(table=db.open_table(CHUNKS_TABLE), paths=paths, config=config)
     _CONTEXT_CACHE[slug] = ctx

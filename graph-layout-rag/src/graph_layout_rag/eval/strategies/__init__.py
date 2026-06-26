@@ -617,6 +617,12 @@ EXPERIMENTAL_STRATEGIES: tuple[str, ...] = (
     "splade",
     "dense_splade",
     "colbert",
+    "splade_os",
+    "dense_splade_os",
+    "splade_v3",
+    "dense_splade_v3",
+    "colbert_mxbai",
+    "colbert_answerai",
 )
 
 # Experimental paper-level aggregation arms (A/B only; not in the default run).
@@ -665,6 +671,14 @@ def strategy_registry() -> dict[str, RetrievalStrategy]:
         ExperimentalIndexStrategy("splade", "splade"),
         ExperimentalIndexStrategy("splade", "dense_splade", fuse_dense=True),
         ExperimentalIndexStrategy("colbert", "colbert"),
+        # Per-checkpoint labels (one --retrieval-index per benchmark sub-run; the
+        # label only separates result files — the model comes from the wired index).
+        ExperimentalIndexStrategy("splade", "splade_os"),
+        ExperimentalIndexStrategy("splade", "dense_splade_os", fuse_dense=True),
+        ExperimentalIndexStrategy("splade", "splade_v3"),
+        ExperimentalIndexStrategy("splade", "dense_splade_v3", fuse_dense=True),
+        ExperimentalIndexStrategy("colbert", "colbert_mxbai"),
+        ExperimentalIndexStrategy("colbert", "colbert_answerai"),
         HybridAggregateStrategy("hybrid_deep", pool=200, aggregate="max"),
         HybridAggregateStrategy("hybrid_agg_sum3", pool=200, aggregate="sum_topk", topk=3),
         HybridAggregateStrategy("hybrid_agg_count", pool=200, aggregate="count_boost"),
