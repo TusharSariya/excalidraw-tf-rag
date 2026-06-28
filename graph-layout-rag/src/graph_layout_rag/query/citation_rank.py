@@ -125,7 +125,45 @@ def load_graph(db: sqlite3.Connection) -> CitationGraph:
         if doc:
             g.oa_to_doc[oa] = doc
             g.doc_to_oa.setdefault(doc, oa)
+    _bridge_doc_to_oa_by_doi(db, g)
     return g
+
+
+def _bridge_doc_to_oa_by_doi(db: sqlite3.Connection, g: CitationGraph) -> None:
+    """Map more chunk doc_ids (== manifest ids) to oa via their DOI.
+
+    `papers.doc_id` is seeded by cite_enrich only for the first manifest item per
+    DOI (and never for DOI-less/duplicate ids), so direct mapping covers only
+    ~22% of corpus ids. The `papers` table already holds tens of thousands of
+    doi->oa_id pairs; bridge manifest ids to oa through their DOI to lift coverage
+    to ~34%. Query-time only (no re-enrich), strictly additive (`setdefault`
+    never clobbers a direct match), and a no-op when the manifest is unavailable
+    (e.g. a remote box without manifest.json).
+    """
+    doi_to_oa: dict[str, str] = {}
+    for doi, oa in db.execute("SELECT doi, oa_id FROM papers WHERE doi IS NOT NULL"):
+        nd = cs.normalize_doi(doi)
+        if nd:
+            doi_to_oa.setdefault(nd, oa)
+    if not doi_to_oa:
+        return
+    try:
+        from graph_layout_rag.manifest import load_manifest
+
+        manifest = load_manifest()
+        items = manifest.items if hasattr(manifest, "items") else manifest
+    except Exception:
+        return
+    for item in items:
+        if item.id in g.doc_to_oa:
+            continue
+        nd = cs.normalize_doi(getattr(item, "doi", None))
+        if not nd:
+            continue
+        oa = doi_to_oa.get(nd)
+        if oa:
+            g.doc_to_oa[item.id] = oa
+            g.oa_to_doc.setdefault(oa, item.id)
 
 
 def _idf(g: CitationGraph, node: str) -> float:

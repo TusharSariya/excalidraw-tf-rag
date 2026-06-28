@@ -151,3 +151,42 @@ def test_in_corpus_stats_zero_in_corpus_citers():
     assert stats["cited_by_count"] == 0
     assert stats["in_corpus_cited_by_count"] == 0
     assert stats["in_corpus_references_count"] == 0
+
+
+def test_load_graph_bridges_doc_id_by_doi(tmp_path, monkeypatch):
+    """DOI bridge maps a DOI-only manifest id (no papers.doc_id) to its oa."""
+    import graph_layout_rag.citation_store as cs
+    from graph_layout_rag.manifest import Manifest, ManifestItem
+    from graph_layout_rag.query.citation_rank import load_graph
+
+    path = tmp_path / "citations.sqlite"
+    monkeypatch.setattr(cs, "CITATIONS_DB_PATH", path)
+    db = cs.connect(path)
+    # Wa is seeded with a doc_id (direct); Wb has only a DOI (cite_enrich never
+    # wrote its doc_id), so it must be recovered via the DOI bridge.
+    db.execute(
+        "INSERT INTO papers(oa_id, doc_id, doi, cited_by_count, in_corpus) VALUES (?,?,?,?,?)",
+        ("Wa", "direct-1", "10.1/a", 100, 1),
+    )
+    db.execute(
+        "INSERT INTO papers(oa_id, doc_id, doi, cited_by_count, in_corpus) VALUES (?,?,?,?,?)",
+        ("Wb", None, "10.1/b", 7, 0),
+    )
+    db.commit()
+
+    items = [
+        ManifestItem(id="direct-1", title="A", source="s", url="u", status="ok", doi="10.1/a"),
+        ManifestItem(id="bridged-2", title="B", source="s", url="u", status="ok", doi="10.1/B"),
+        ManifestItem(id="nodoi-3", title="C", source="s", url="u", status="ok"),
+    ]
+    monkeypatch.setattr(
+        "graph_layout_rag.manifest.load_manifest",
+        lambda: Manifest(items=items),
+    )
+
+    g = load_graph(db)
+    db.close()
+    assert g.doc_to_oa.get("direct-1") == "Wa"          # direct mapping preserved
+    assert g.doc_to_oa.get("bridged-2") == "Wb"         # recovered via DOI (case-normalized)
+    assert "nodoi-3" not in g.doc_to_oa                  # no DOI -> not bridged
+    assert g.oa_to_doc.get("Wb") == "bridged-2"
