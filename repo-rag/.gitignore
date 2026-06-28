@@ -14,3 +14,6 @@ data/*.log
 data/graph.sqlite
 data/graph.sqlite-*
 data/graph.tmp
+
+# Submodule hardening: ignore all generated data/ artifacts.
+data/*

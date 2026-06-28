@@ -27,3 +27,8 @@ data/bibliography-scan-cache/
 data/extract_cache/
 data/embed_cache/
 # Keep data/manifest.example.json tracked; ignore live harvest output above.
+
+# Submodule hardening: ignore ALL of data/ except the tracked example manifest,
+# so the 41GB of indexes/sqlite/scratch can never be accidentally committed.
+data/*
+!data/manifest.example.json

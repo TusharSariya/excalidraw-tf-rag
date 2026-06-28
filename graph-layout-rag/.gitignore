@@ -37,3 +37,8 @@ data/training/triples_summary.json
 data/training/checkpoints/
 training/.venv/
 training/uv.lock
+
+# Submodule hardening: ignore ALL of data/ except the tracked example manifest,
+# so the 41GB of indexes/sqlite/scratch can never be accidentally committed.
+data/*
+!data/manifest.example.json
