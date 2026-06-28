@@ -6,6 +6,7 @@ from graph_layout_rag.query.citation_rank import (
     CitationGraph,
     bibliographic_coupling,
     co_citation,
+    in_corpus_citation_stats,
     personalized_pagerank,
     rank_related,
     related_to_docs,
@@ -98,3 +99,55 @@ def test_related_to_docs_resolves_seed_alias_and_deduplicates_results(monkeypatc
     ranked = related_to_docs(None, ["doc-a-alias"], graph=g, top=10)
     assert ranked
     assert [result.doc_id for result in ranked].count("doc-b") == 1
+
+
+def _stats_graph() -> CitationGraph:
+    # Corpus Wa,Wb,Wc; external Wx,Wy. Edges:
+    #   Wa -> Wb (corpus ref), Wa -> R1 (non-corpus ref)
+    #   Wb -> Wa (corpus citer of Wa), Wx -> Wa (non-corpus citer), Wa -> Wa (self, ignored)
+    g = CitationGraph()
+    g.oa_to_doc = {"Wa": "doc-a", "Wb": "doc-b", "Wc": "doc-c"}
+    g.doc_to_oa = {v: k for k, v in g.oa_to_doc.items()}
+    g.cbc = {"Wa": 42, "Wb": 3, "Wc": 0}
+    for s, d in [("Wa", "Wb"), ("Wa", "R1"), ("Wb", "Wa"), ("Wx", "Wa"), ("Wa", "Wa")]:
+        g.out_adj[s].add(d)
+        g.in_adj[d].add(s)
+        g.undirected[s].add(d)
+        g.undirected[d].add(s)
+    return g
+
+
+def test_in_corpus_stats_no_graph_returns_empty(monkeypatch):
+    # graph=None with no store -> load_graph_cached returns None -> {}
+    monkeypatch.setattr(
+        "graph_layout_rag.query.citation_rank.load_graph_cached", lambda: None
+    )
+    assert in_corpus_citation_stats("doc-a", None) == {}
+
+
+def test_in_corpus_stats_doc_without_oa_node():
+    g = _stats_graph()
+    stats = in_corpus_citation_stats("doc-missing", g)
+    assert stats == {
+        "cited_by_count": None,
+        "in_corpus_cited_by_count": 0,
+        "in_corpus_references_count": 0,
+    }
+
+
+def test_in_corpus_stats_counts_only_corpus_endpoints_and_excludes_self():
+    g = _stats_graph()
+    stats = in_corpus_citation_stats("doc-a", g)
+    assert stats["cited_by_count"] == 42  # global
+    # citers of Wa: Wb (corpus), Wx (non-corpus), Wa (self) -> only Wb counts
+    assert stats["in_corpus_cited_by_count"] == 1
+    # refs of Wa: Wb (corpus), R1 (non-corpus), Wa (self) -> only Wb counts
+    assert stats["in_corpus_references_count"] == 1
+
+
+def test_in_corpus_stats_zero_in_corpus_citers():
+    g = _stats_graph()
+    stats = in_corpus_citation_stats("doc-c", g)
+    assert stats["cited_by_count"] == 0
+    assert stats["in_corpus_cited_by_count"] == 0
+    assert stats["in_corpus_references_count"] == 0

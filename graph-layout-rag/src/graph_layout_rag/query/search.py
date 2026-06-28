@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from typing import Any
 
 from graph_layout_rag.catalog.taxonomy import PIPELINE_CATEGORIES
@@ -36,14 +37,35 @@ def _evidence(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+@lru_cache(maxsize=1)
+def _manifest_by_doc() -> dict[str, Any]:
+    """{manifest_id: ManifestItem} for the bibtex/venue join. ``{}`` on load failure."""
+    try:
+        from graph_layout_rag.manifest import load_manifest, manifest_by_id
+
+        return manifest_by_id(load_manifest())
+    except Exception:
+        return {}
+
+
 def format_results(
     reranked: list[dict[str, Any]],
     *,
     top: int,
     max_per_doc: int,
 ) -> list[dict[str, Any]]:
+    from graph_layout_rag.citation_store import load_paper_meta_cached
+    from graph_layout_rag.query.bibtex import bibtex_for_doc
+    from graph_layout_rag.query.citation_rank import (
+        in_corpus_citation_stats,
+        load_graph_cached,
+    )
+
     category_map, _ = catalog_maps()
     identities = canonical_identity_map()
+    meta_map = load_paper_meta_cached()
+    graph = load_graph_cached()
+    manifest_by_doc = _manifest_by_doc()
     grouped: dict[str, list[dict[str, Any]]] = {}
     ordered_ids: list[str] = []
     for row in reranked:
@@ -95,6 +117,31 @@ def format_results(
             entry["dense_rank"] = row["dense_rank"]
         if "sparse_rank" in row:
             entry["sparse_rank"] = row["sparse_rank"]
+
+        # Additive metadata surfacing — graceful when meta/graph/manifest are empty.
+        meta = meta_map.get(doc_id)
+        if meta is not None:
+            if meta.tldr:
+                entry["tldr"] = meta.tldr
+            if meta.fwci is not None:
+                entry["fwci"] = meta.fwci
+            if meta.oa_pdf_url:
+                entry["oa_pdf_url"] = meta.oa_pdf_url
+
+        stats = in_corpus_citation_stats(doc_id, graph)
+        if stats.get("cited_by_count") is not None:
+            entry["cited_by_count"] = stats["cited_by_count"]
+            entry["in_corpus_cited_by_count"] = stats.get("in_corpus_cited_by_count", 0)
+
+        manifest_item = manifest_by_doc.get(doc_id)
+        if manifest_item is not None:
+            if manifest_item.venue:
+                entry["venue"] = manifest_item.venue
+            if manifest_item.genre:
+                entry["genre"] = manifest_item.genre
+            entry["is_retracted"] = bool(getattr(manifest_item, "is_retracted", False))
+            entry["bibtex"] = bibtex_for_doc(manifest_item, meta)
+
         out.append(entry)
         if len(out) >= top:
             break

@@ -30,6 +30,30 @@ def test_projection_selects_trusted_rich_canonical_and_merges_aliases():
     assert "layered" in docs[0].item.tags
 
 
+def test_merge_canonical_projects_new_filter_fields():
+    discovery = _item("a-discovery", "openalex")
+    curated = _item("z-curated", "curated", tags=("layered",))
+    alias = _item("alias", "dblp", tags=("layered",)).model_copy(
+        update={
+            "venue": "GD 1995",
+            "arxiv_category": "cs.HC",
+            "genre": "article",
+            "venue_type": "conference",
+            "oa_version": "publishedVersion",
+            "is_retracted": True,
+        }
+    )
+    docs = canonical_ingest_projection([discovery, curated, alias])
+    assert len(docs) == 1
+    merged = docs[0].item
+    assert merged.venue == "GD 1995"
+    assert merged.arxiv_category == "cs.HC"
+    assert merged.genre == "article"
+    assert merged.venue_type == "conference"
+    assert merged.oa_version == "publishedVersion"
+    assert merged.is_retracted is True
+
+
 def test_all_aliases_checkpointed_after_outcome():
     canonical = _item("canonical", "curated")
     aliases = [_item("alias", "openalex")]

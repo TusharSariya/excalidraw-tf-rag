@@ -1223,6 +1223,38 @@ def harvest_enrich_cmd(dry_run: bool, workers: int) -> None:
     )
 
 
+@harvest_group.command("enrich-metadata")
+@click.option("--dry-run", is_flag=True, help="Fetch and report counts; write nothing.")
+@click.option(
+    "--workers",
+    default=16,
+    show_default=True,
+    type=int,
+    help="Parallel OpenAlex lookups.",
+)
+@click.option("--force", is_flag=True, help="Re-enrich items that already have a papers_meta row.")
+@click.option("--limit", default=None, type=int, help="Cap items processed (for testing).")
+def harvest_enrich_metadata_cmd(dry_run: bool, workers: int, force: bool, limit: int | None) -> None:
+    """Backfill rich provider metadata (OpenAlex + Semantic Scholar + arXiv).
+
+    Fills new manifest fields (venue, genre, arxiv_category, retraction, ...) and the
+    papers_meta enrichment table (tldr, fwci, cited-by, OA pdf/license, biblio, authors)
+    plus SPECTER2 embeddings. Resumable: skips items already enriched unless --force.
+    Downloads no PDFs.
+    """
+    from graph_layout_rag.harvest.enrich_metadata import enrich_metadata
+
+    stats = enrich_metadata(workers=workers, force=force, dry_run=dry_run, limit=limit)
+    click.echo(
+        f"enrich-metadata: scanned={stats['scanned']} "
+        f"{'would_enrich' if dry_run else 'enriched'}={stats['enriched']} "
+        f"terminal_miss={stats['terminal_miss']} "
+        f"transient_deferred={stats['transient_deferred']} "
+        f"specter2_stored={stats['specter2_stored']} "
+        f"abstracts_backfilled={stats['abstracts_backfilled']}"
+    )
+
+
 @harvest_group.command("add-local")
 @click.option("--pdf", "pdf_path", required=True, type=click.Path(exists=True, dir_okay=False), help="Path to local PDF.")
 @click.option("--title", required=True, help="Paper title.")

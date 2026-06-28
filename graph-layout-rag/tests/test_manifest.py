@@ -66,3 +66,46 @@ def test_upsert_merges_provider_provenance_by_doi_without_downgrading_pdf():
     assert item.abstract == "Useful abstract"
     assert item.discoverySources == ["crossref", "openalex"]
     assert item.tags == ["crossref", "openalex"]
+
+
+def test_merge_threads_new_filter_fields():
+    manifest = Manifest()
+    upsert_item(
+        manifest,
+        ManifestItem(
+            id="openalex-a",
+            title="Paper",
+            source="openalex",
+            url="https://example.test/paper.pdf",
+            localPath="data/raw/pdf/a.pdf",
+            status="ok",
+            doi="10.1/a",
+            is_retracted=True,
+        ),
+    )
+    upsert_item(
+        manifest,
+        ManifestItem(
+            id="crossref-a",
+            title="Paper",
+            source="crossref",
+            url="https://doi.org/10.1/a",
+            status="metadata_only",
+            doi="10.1/a",
+            venue="GD 1995",
+            arxiv_category="cs.HC",
+            genre="article",
+            venue_type="conference",
+            oa_version="publishedVersion",
+            is_retracted=False,
+        ),
+    )
+    item = manifest.items[0]
+    # Filter fields fill from the fallback when the preferred row lacks them.
+    assert item.venue == "GD 1995"
+    assert item.arxiv_category == "cs.HC"
+    assert item.genre == "article"
+    assert item.venue_type == "conference"
+    assert item.oa_version == "publishedVersion"
+    # Retraction is sticky: once true on either side, stays true.
+    assert item.is_retracted is True

@@ -1,3 +1,5 @@
+import math
+
 from graph_layout_rag import citation_store as cs
 
 
@@ -81,3 +83,97 @@ def test_aliases_and_citation_provenance(tmp_path, monkeypatch):
     }
     assert providers == {"openalex", "semantic-scholar"}
     assert cs.counts(db)["citation_provenance"] == 2
+
+
+def test_paper_meta_roundtrip_full_and_partial(tmp_path, monkeypatch):
+    db = _db(tmp_path, monkeypatch)
+    cs.upsert_paper_meta(
+        db,
+        "doc-a",
+        tldr="short summary",
+        abstract="long abstract",
+        fwci=1.5,
+        cited_by_count=42,
+        oa_pdf_url="https://example.test/a.pdf",
+        license="cc-by",
+        biblio={"volume": "3", "issue": "1"},
+        full_authors=[{"name": "Eades"}, {"name": "Sugiyama"}],
+        source_provider="openalex",
+        enriched_at="t0",
+    )
+    meta = cs.paper_meta_for_doc(db, "doc-a")
+    assert meta is not None
+    assert meta.doc_id == "doc-a"
+    assert meta.tldr == "short summary"
+    assert meta.abstract == "long abstract"
+    assert meta.fwci == 1.5
+    assert meta.cited_by_count == 42
+    assert meta.oa_pdf_url == "https://example.test/a.pdf"
+    assert meta.license == "cc-by"
+    assert meta.biblio == {"volume": "3", "issue": "1"}
+    assert meta.full_authors == [{"name": "Eades"}, {"name": "Sugiyama"}]
+    assert meta.source_provider == "openalex"
+    assert meta.enriched_at == "t0"
+
+    # Partial record: only a doc_id; JSON columns stay None.
+    cs.upsert_paper_meta(db, "doc-b", tldr="b")
+    mb = cs.paper_meta_for_doc(db, "doc-b")
+    assert mb is not None and mb.tldr == "b"
+    assert mb.biblio is None and mb.full_authors is None
+    assert mb.enriched_at  # auto-stamped when not supplied
+
+
+def test_paper_meta_missing_returns_none(tmp_path, monkeypatch):
+    db = _db(tmp_path, monkeypatch)
+    assert cs.paper_meta_for_doc(db, "nope") is None
+    assert cs.has_paper_meta(db, "nope") is False
+
+
+def test_paper_meta_map_bulk(tmp_path, monkeypatch):
+    db = _db(tmp_path, monkeypatch)
+    cs.upsert_paper_meta(db, "doc-a", tldr="a")
+    cs.upsert_paper_meta(db, "doc-b", tldr="b")
+    all_map = cs.paper_meta_map(db)
+    assert set(all_map) == {"doc-a", "doc-b"}
+    subset = cs.paper_meta_map(db, ["doc-a", "missing"])
+    assert set(subset) == {"doc-a"}
+    assert cs.has_paper_meta(db, "doc-a") is True
+
+
+def test_paper_meta_coalesce_partial_update_does_not_null(tmp_path, monkeypatch):
+    db = _db(tmp_path, monkeypatch)
+    cs.upsert_paper_meta(
+        db, "doc-a", tldr="keep", abstract="keep-abs", fwci=2.0,
+        biblio={"volume": "1"}, full_authors=[{"name": "X"}],
+    )
+    # Later partial write touches only cited_by_count; existing columns survive.
+    cs.upsert_paper_meta(db, "doc-a", cited_by_count=99)
+    meta = cs.paper_meta_for_doc(db, "doc-a")
+    assert meta.tldr == "keep"
+    assert meta.abstract == "keep-abs"
+    assert meta.fwci == 2.0
+    assert meta.biblio == {"volume": "1"}
+    assert meta.full_authors == [{"name": "X"}]
+    assert meta.cited_by_count == 99
+
+
+def test_load_paper_meta_cached_empty_when_db_absent(tmp_path, monkeypatch):
+    missing = tmp_path / "does-not-exist.sqlite"
+    monkeypatch.setattr("graph_layout_rag.citation_store.CITATIONS_DB_PATH", missing)
+    cs.load_paper_meta_cached.cache_clear()
+    try:
+        assert cs.load_paper_meta_cached() == {}
+    finally:
+        cs.load_paper_meta_cached.cache_clear()
+
+
+def test_specter2_roundtrip(tmp_path, monkeypatch):
+    db = _db(tmp_path, monkeypatch)
+    vec = [0.1, -0.25, 3.5, 0.0]
+    cs.upsert_specter2(db, "doc-a", vec)
+    out = cs.specter2_for_doc(db, "doc-a")
+    assert out is not None and len(out) == len(vec)
+    for a, b in zip(out, vec):
+        assert math.isclose(a, b, rel_tol=0, abs_tol=1e-6)
+    assert db.execute("SELECT dim FROM doc_specter2 WHERE doc_id='doc-a'").fetchone()[0] == 4
+    assert cs.specter2_for_doc(db, "missing") is None

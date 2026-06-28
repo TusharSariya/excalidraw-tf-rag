@@ -34,6 +34,12 @@ class ManifestItem(BaseModel):
     sourceUrls: list[str] = Field(default_factory=list)
     abstractSource: str | None = None
     documentKind: DocumentKind = "paper"
+    venue: str | None = None
+    arxiv_category: str | None = None
+    genre: str | None = None          # e.g. OpenAlex `type` or S2 publicationType
+    venue_type: str | None = None     # OpenAlex primary_location.source.type (journal/conference/repository)
+    oa_version: str | None = None     # OpenAlex primary_location.version (publishedVersion/acceptedVersion/submittedVersion)
+    is_retracted: bool = False
 
 
 class Manifest(BaseModel):
@@ -83,10 +89,16 @@ def merge_items(existing: ManifestItem, incoming: ManifestItem) -> ManifestItem:
         "doi",
         "abstract",
         "abstractSource",
+        "venue",
+        "arxiv_category",
+        "genre",
+        "venue_type",
+        "oa_version",
     ):
         if not getattr(merged, field):
             setattr(merged, field, getattr(fallback, field))
 
+    merged.is_retracted = existing.is_retracted or incoming.is_retracted
     merged.tags = sorted(set(existing.tags) | set(incoming.tags))
     merged.discoverySources = sorted(
         set(existing.discoverySources)

@@ -18,8 +18,13 @@ carry no ``doc_id``.
 
 from __future__ import annotations
 
+import array
+import json
 import re
 import sqlite3
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterable
 
@@ -100,6 +105,24 @@ def init_schema(db: sqlite3.Connection) -> None:
           author_key TEXT NOT NULL,
           doc_id TEXT NOT NULL,
           PRIMARY KEY(author_key, doc_id)
+        );
+        CREATE TABLE IF NOT EXISTS papers_meta(
+          doc_id TEXT PRIMARY KEY,
+          tldr TEXT,
+          abstract TEXT,
+          fwci REAL,
+          cited_by_count INTEGER,
+          oa_pdf_url TEXT,
+          license TEXT,
+          biblio_json TEXT,
+          full_authors_json TEXT,
+          enriched_at TEXT,
+          source_provider TEXT
+        );
+        CREATE TABLE IF NOT EXISTS doc_specter2(
+          doc_id TEXT PRIMARY KEY,
+          dim INTEGER NOT NULL,
+          vec BLOB NOT NULL
         );
         CREATE INDEX IF NOT EXISTS cites_src ON cites(src_oa);
         CREATE INDEX IF NOT EXISTS cites_dst ON cites(dst_oa);
@@ -289,6 +312,161 @@ def coauthored_doc_ids(db: sqlite3.Connection, doc_id: str) -> set[str]:
 
 def paper_row(db: sqlite3.Connection, oa_id: str) -> sqlite3.Row | None:
     return db.execute("SELECT * FROM papers WHERE oa_id=?", (oa_id,)).fetchone()
+
+
+# --- enrichment metadata (papers_meta) ------------------------------------------
+
+@dataclass
+class PaperMeta:
+    doc_id: str
+    tldr: str | None = None
+    abstract: str | None = None
+    fwci: float | None = None
+    cited_by_count: int | None = None
+    oa_pdf_url: str | None = None
+    license: str | None = None
+    biblio: dict | None = None          # parsed from biblio_json
+    full_authors: list | None = None    # parsed from full_authors_json
+    enriched_at: str | None = None
+    source_provider: str | None = None
+
+
+def _meta_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _row_to_paper_meta(row: sqlite3.Row) -> PaperMeta:
+    biblio_json = row["biblio_json"]
+    full_authors_json = row["full_authors_json"]
+    return PaperMeta(
+        doc_id=row["doc_id"],
+        tldr=row["tldr"],
+        abstract=row["abstract"],
+        fwci=row["fwci"],
+        cited_by_count=row["cited_by_count"],
+        oa_pdf_url=row["oa_pdf_url"],
+        license=row["license"],
+        biblio=json.loads(biblio_json) if biblio_json else None,
+        full_authors=json.loads(full_authors_json) if full_authors_json else None,
+        enriched_at=row["enriched_at"],
+        source_provider=row["source_provider"],
+    )
+
+
+def upsert_paper_meta(
+    db: sqlite3.Connection,
+    doc_id: str,
+    *,
+    tldr: str | None = None,
+    abstract: str | None = None,
+    fwci: float | None = None,
+    cited_by_count: int | None = None,
+    oa_pdf_url: str | None = None,
+    license: str | None = None,
+    biblio: dict | None = None,
+    full_authors: list | None = None,
+    source_provider: str | None = None,
+    enriched_at: str | None = None,
+) -> None:
+    """Upsert enrichment metadata for a doc. On UPDATE, COALESCE each column so a later
+    partial write never nulls out a value an earlier write already populated."""
+    db.execute(
+        """
+        INSERT INTO papers_meta(doc_id, tldr, abstract, fwci, cited_by_count,
+                                oa_pdf_url, license, biblio_json, full_authors_json,
+                                enriched_at, source_provider)
+        VALUES(:doc, :tldr, :abstract, :fwci, :cbc, :oa_pdf_url, :license,
+               :biblio, :full_authors, :ts, :provider)
+        ON CONFLICT(doc_id) DO UPDATE SET
+          tldr=COALESCE(excluded.tldr, papers_meta.tldr),
+          abstract=COALESCE(excluded.abstract, papers_meta.abstract),
+          fwci=COALESCE(excluded.fwci, papers_meta.fwci),
+          cited_by_count=COALESCE(excluded.cited_by_count, papers_meta.cited_by_count),
+          oa_pdf_url=COALESCE(excluded.oa_pdf_url, papers_meta.oa_pdf_url),
+          license=COALESCE(excluded.license, papers_meta.license),
+          biblio_json=COALESCE(excluded.biblio_json, papers_meta.biblio_json),
+          full_authors_json=COALESCE(excluded.full_authors_json, papers_meta.full_authors_json),
+          enriched_at=COALESCE(excluded.enriched_at, papers_meta.enriched_at),
+          source_provider=COALESCE(excluded.source_provider, papers_meta.source_provider)
+        """,
+        {
+            "doc": doc_id,
+            "tldr": tldr,
+            "abstract": abstract,
+            "fwci": fwci,
+            "cbc": int(cited_by_count) if cited_by_count is not None else None,
+            "oa_pdf_url": oa_pdf_url,
+            "license": license,
+            "biblio": json.dumps(biblio) if biblio is not None else None,
+            "full_authors": json.dumps(full_authors) if full_authors is not None else None,
+            "ts": enriched_at if enriched_at is not None else _meta_now_iso(),
+            "provider": source_provider,
+        },
+    )
+    db.commit()
+
+
+def paper_meta_for_doc(db: sqlite3.Connection, doc_id: str) -> PaperMeta | None:
+    row = db.execute("SELECT * FROM papers_meta WHERE doc_id=?", (doc_id,)).fetchone()
+    return _row_to_paper_meta(row) if row else None
+
+
+def paper_meta_map(
+    db: sqlite3.Connection, doc_ids: Iterable[str] | None = None
+) -> dict[str, PaperMeta]:
+    """Bulk-load enrichment metadata. None loads every row (hot query path)."""
+    if doc_ids is None:
+        rows = db.execute("SELECT * FROM papers_meta")
+        return {row["doc_id"]: _row_to_paper_meta(row) for row in rows}
+    out: dict[str, PaperMeta] = {}
+    for doc_id in doc_ids:
+        meta = paper_meta_for_doc(db, doc_id)
+        if meta is not None:
+            out[doc_id] = meta
+    return out
+
+
+def has_paper_meta(db: sqlite3.Connection, doc_id: str) -> bool:
+    return db.execute(
+        "SELECT 1 FROM papers_meta WHERE doc_id=?", (doc_id,)
+    ).fetchone() is not None
+
+
+def upsert_specter2(db: sqlite3.Connection, doc_id: str, vec: list[float]) -> None:
+    blob = array.array("f", vec).tobytes()
+    db.execute(
+        """
+        INSERT INTO doc_specter2(doc_id, dim, vec) VALUES(?,?,?)
+        ON CONFLICT(doc_id) DO UPDATE SET dim=excluded.dim, vec=excluded.vec
+        """,
+        (doc_id, len(vec), blob),
+    )
+    db.commit()
+
+
+def specter2_for_doc(db: sqlite3.Connection, doc_id: str) -> list[float] | None:
+    row = db.execute(
+        "SELECT vec FROM doc_specter2 WHERE doc_id=?", (doc_id,)
+    ).fetchone()
+    if not row:
+        return None
+    arr = array.array("f")
+    arr.frombytes(row["vec"])
+    return list(arr)
+
+
+@lru_cache(maxsize=1)
+def load_paper_meta_cached() -> dict[str, PaperMeta]:
+    """Cached load of all enrichment metadata for the default DB. Returns {} when the
+    DB file is absent (un-enriched / remote-absent case) so the query path degrades
+    gracefully instead of raising."""
+    if not CITATIONS_DB_PATH.exists():
+        return {}
+    try:
+        db = connect()
+        return paper_meta_map(db)
+    except sqlite3.OperationalError:
+        return {}
 
 
 def counts(db: sqlite3.Connection) -> dict[str, int]:

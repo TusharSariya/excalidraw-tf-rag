@@ -51,6 +51,12 @@ def _merge_canonical(canonical: ManifestItem, aliases: list[ManifestItem]) -> Ma
             "tags": sorted({tag for item in all_items for tag in item.tags}),
             "doi": canonical.doi or next((item.doi for item in all_items if item.doi), None),
             "abstract": canonical.abstract or next((item.abstract for item in all_items if item.abstract), None),
+            "venue": canonical.venue or next((item.venue for item in all_items if item.venue), None),
+            "arxiv_category": canonical.arxiv_category or next((item.arxiv_category for item in all_items if item.arxiv_category), None),
+            "genre": canonical.genre or next((item.genre for item in all_items if item.genre), None),
+            "venue_type": canonical.venue_type or next((item.venue_type for item in all_items if item.venue_type), None),
+            "oa_version": canonical.oa_version or next((item.oa_version for item in all_items if item.oa_version), None),
+            "is_retracted": any(item.is_retracted for item in all_items),
         }
     )
 

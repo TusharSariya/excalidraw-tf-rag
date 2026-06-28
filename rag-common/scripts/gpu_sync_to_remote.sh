@@ -70,4 +70,20 @@ rsync -avz --progress \
   "data/bm25/" \
   "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/bm25/" 2>/dev/null || true
 
+# citations.sqlite carries the `papers_meta` enrichment table that the query path
+# joins by doc_id; the blanket `data/*.sqlite` exclude above keeps it out of the
+# code rsync, so transfer it explicitly. WAL-checkpoint first so the single main
+# file is self-contained (WAL/-shm are intentionally not synced). Set
+# RAG_SYNC_CITATIONS=0 to skip.
+SYNC_CITATIONS="${RAG_SYNC_CITATIONS:-1}"
+if [[ "${SYNC_CITATIONS}" != "0" && -f data/citations.sqlite ]]; then
+  if command -v sqlite3 >/dev/null 2>&1; then
+    sqlite3 data/citations.sqlite 'PRAGMA wal_checkpoint(TRUNCATE);' >/dev/null 2>&1 || true
+  fi
+  echo "Syncing citations.sqlite (papers_meta enrichment) to ${SSH_HOST}"
+  rsync -avz --progress \
+    data/citations.sqlite \
+    "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/citations.sqlite"
+fi
+
 echo "Done."

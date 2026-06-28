@@ -199,6 +199,43 @@ def citation_prior(g: CitationGraph, oa: str) -> float:
     return math.log1p(g.cbc.get(oa, 0))
 
 
+def in_corpus_citation_stats(
+    doc_id: str, graph: CitationGraph | None = None
+) -> dict:
+    """Citation counts for a doc, split global vs. in-corpus.
+
+    Returns ``{}`` only when there is no citation store at all. When the store
+    exists but the doc is not a graph node, returns a graceful zeroed shape.
+    ``in_corpus_*`` count only edges whose other endpoint is itself a corpus doc
+    (``in_adj`` can hold non-corpus incoming citers). Self-citation is excluded.
+    """
+    g = graph if graph is not None else load_graph_cached()
+    if g is None:
+        return {}
+    oa = g.doc_to_oa.get(doc_id)
+    if oa is None:
+        return {
+            "cited_by_count": None,
+            "in_corpus_cited_by_count": 0,
+            "in_corpus_references_count": 0,
+        }
+    in_corpus_citers = sum(
+        1
+        for src in g.in_adj.get(oa, set())
+        if src != oa and src in g.oa_to_doc
+    )
+    in_corpus_refs = sum(
+        1
+        for dst in g.out_adj.get(oa, set())
+        if dst != oa and dst in g.oa_to_doc
+    )
+    return {
+        "cited_by_count": g.cbc.get(oa),
+        "in_corpus_cited_by_count": in_corpus_citers,
+        "in_corpus_references_count": in_corpus_refs,
+    }
+
+
 @dataclass
 class RelatedResult:
     doc_id: str

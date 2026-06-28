@@ -291,6 +291,28 @@ def cite_related_cmd(doc_id: str, top: int, signal: str, model: str, as_json: bo
         click.echo(f"{i:2d}. [{r['score']:.3f}] {r['doc_id']}  ({', '.join(why) or 'PPR'})")
 
 
+@cite_group.command("bibtex")
+@click.argument("doc_id")
+def cite_bibtex_cmd(doc_id: str) -> None:
+    """Print a BibTeX entry for DOC_ID (manifest item + enrichment metadata)."""
+    from graph_layout_rag import citation_store as cs
+    from graph_layout_rag.manifest import load_manifest, manifest_by_id
+    from graph_layout_rag.query.bibtex import bibtex_for_doc
+
+    item = manifest_by_id(load_manifest()).get(doc_id)
+    if item is None:
+        click.echo(f"{doc_id!r} not in manifest.", err=True)
+        sys.exit(1)
+    meta = None
+    if cs.CITATIONS_DB_PATH.exists():
+        db = cs.connect()
+        try:
+            meta = cs.paper_meta_for_doc(db, doc_id)
+        finally:
+            db.close()
+    click.echo(bibtex_for_doc(item, meta))
+
+
 @main.group("embed")
 def embed_group() -> None:
     """Embedding profile helpers."""
@@ -475,8 +497,16 @@ def query_cmd(
 
     for i, r in enumerate(results, 1):
         page = f" p.{r['page']}" if r.get("page") else ""
-        click.echo(f"{i}. [{r['score']}] {r['title']}{page}")
+        retracted = "  ⚠ RETRACTED" if r.get("is_retracted") else ""
+        click.echo(f"{i}. [{r['score']}] {r['title']}{page}{retracted}")
         click.echo(f"   {r['source_url']}")
+        if r.get("tldr"):
+            click.echo(f"   TLDR: {r['tldr']}")
+        if r.get("cited_by_count") is not None:
+            click.echo(
+                f"   cited-by {r['cited_by_count']} "
+                f"({r.get('in_corpus_cited_by_count', 0)} in corpus)"
+            )
         click.echo(f"   {r['excerpt'][:200]}...")
         click.echo()
 
