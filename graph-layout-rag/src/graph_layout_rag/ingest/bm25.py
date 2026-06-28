@@ -38,8 +38,17 @@ def _build_schema() -> tantivy.Schema:
     sb.add_text_field("alias_dois", stored=True)
     sb.add_text_field("canonical_sha256", stored=True)
     sb.add_text_field("source_url", stored=True)
+    # Filter-only metadata (T5/P2). Tantivy text fields are stored AND indexed
+    # (default index_option), so these are filterable; the sparse filter itself is
+    # applied post-retrieval in retrieve._apply_filters, mirroring tags/source.
+    sb.add_text_field("venue", stored=True)
+    sb.add_text_field("arxiv_category", stored=True)
+    sb.add_text_field("genre", stored=True)
+    sb.add_text_field("venue_type", stored=True)
+    sb.add_text_field("oa_version", stored=True)
     sb.add_integer_field("year", stored=True)
     sb.add_integer_field("page", stored=True)
+    sb.add_integer_field("is_retracted", stored=True)
     return sb.build()
 
 
@@ -96,8 +105,14 @@ def upsert_chunks(
                 alias_dois=",".join(chunk.alias_dois),
                 canonical_sha256=chunk.canonical_sha256 or "",
                 source_url=chunk.source_url or "",
+                venue=chunk.venue or "",
+                arxiv_category=chunk.arxiv_category or "",
+                genre=chunk.genre or "",
+                venue_type=chunk.venue_type or "",
+                oa_version=chunk.oa_version or "",
                 year=chunk.year if chunk.year is not None else _NO_YEAR,
                 page=chunk.page if chunk.page is not None else _NO_PAGE,
+                is_retracted=1 if chunk.is_retracted else 0,
             )
         )
     writer.commit()
@@ -132,6 +147,7 @@ def search_bm25(query: str, *, index_dir: Path, limit: int = 40) -> list[dict[st
         doc = searcher.doc(addr)
         year = doc.get_first("year")
         page = doc.get_first("page")
+        is_retracted = doc.get_first("is_retracted")
         results.append(
             {
                 "score": float(score),
@@ -147,8 +163,14 @@ def search_bm25(query: str, *, index_dir: Path, limit: int = 40) -> list[dict[st
                 "alias_dois": doc.get_first("alias_dois") or "",
                 "canonical_sha256": doc.get_first("canonical_sha256") or "",
                 "source_url": doc.get_first("source_url") or "",
+                "venue": doc.get_first("venue") or "",
+                "arxiv_category": doc.get_first("arxiv_category") or "",
+                "genre": doc.get_first("genre") or "",
+                "venue_type": doc.get_first("venue_type") or "",
+                "oa_version": doc.get_first("oa_version") or "",
                 "year": None if year in (None, _NO_YEAR) else int(year),
                 "page": None if page in (None, _NO_PAGE) else int(page),
+                "is_retracted": 1 if is_retracted in (1, True) else 0,
             }
         )
     return results

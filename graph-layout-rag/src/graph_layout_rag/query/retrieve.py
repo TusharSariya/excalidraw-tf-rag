@@ -56,6 +56,10 @@ class RetrieveFilters:
     year_min: int | None = None
     category: str | None = None
     pdf_only: bool = False
+    venue: str | None = None
+    arxiv_category: str | None = None
+    genre: str | None = None
+    exclude_retracted: bool = False
 
 
 @dataclass(frozen=True)
@@ -152,15 +156,43 @@ def resolve_retrieve_context(*, embed_profile: str | None = None) -> RetrieveCon
     return ctx
 
 
-def _dense_where(year_min: int | None) -> str | None:
-    if year_min is None:
+def _dense_where(filters: RetrieveFilters) -> str | None:
+    """AND-combined LanceDB prefilter predicate for the dense search.
+
+    Every clause is a real LanceDB ``WHERE`` (applied with ``prefilter=True``), so a
+    selective filter (e.g. ``venue``) prunes BEFORE the pool is truncated and matches
+    outside the naive top-N pool are still found. String values are single-quote
+    escaped to keep the predicate injection-safe.
+    """
+    clauses: list[str] = []
+    if filters.year_min is not None:
+        clauses.append(f"(year >= {int(filters.year_min)} OR year IS NULL)")
+    for column, value in (
+        ("venue", filters.venue),
+        ("arxiv_category", filters.arxiv_category),
+        ("genre", filters.genre),
+    ):
+        if value:
+            escaped = value.replace("'", "''")
+            clauses.append(f"{column} = '{escaped}'")
+    if filters.exclude_retracted:
+        clauses.append("(is_retracted = 0 OR is_retracted IS NULL)")
+    if not clauses:
         return None
-    return f"(year >= {int(year_min)}) OR (year IS NULL)"
+    return " AND ".join(clauses)
 
 
 def _pool_size(*, top: int, filters: RetrieveFilters) -> int:
     selective = bool(
-        filters.category or filters.pdf_only or filters.tag or filters.source or filters.year_min
+        filters.category
+        or filters.pdf_only
+        or filters.tag
+        or filters.source
+        or filters.year_min
+        or filters.venue
+        or filters.arxiv_category
+        or filters.genre
+        or filters.exclude_retracted
     )
     # Floor of 80 fused candidates: the de-biased bake-off found pool 80 matched
     # or beat the old 40-deep default on both tracks (the deeper fusion pool
@@ -190,10 +222,10 @@ def _dense_search(
     vector: Sequence[float],
     *,
     pool: int,
-    year_min: int | None,
+    filters: RetrieveFilters,
 ) -> list[dict[str, Any]]:
     dense_search = table.search(list(vector)).metric("cosine")
-    where = _dense_where(year_min)
+    where = _dense_where(filters)
     if where:
         dense_search = dense_search.where(where, prefilter=True)
     dense_results = dense_search.limit(pool).to_list()
@@ -245,6 +277,18 @@ def _apply_filters(
         if filters.year_min is not None and year is not None and year < filters.year_min:
             continue
 
+        # Filter-only metadata columns (T5/P2). The dense side already prefilters
+        # these in LanceDB; this also filters the sparse/BM25 rows (which are not
+        # prefiltered in the Tantivy query) and is a safety net for the dense side.
+        if filters.venue and (row.get("venue") or "") != filters.venue:
+            continue
+        if filters.arxiv_category and (row.get("arxiv_category") or "") != filters.arxiv_category:
+            continue
+        if filters.genre and (row.get("genre") or "") != filters.genre:
+            continue
+        if filters.exclude_retracted and bool(row.get("is_retracted")):
+            continue
+
         filtered.append(row)
 
     return filtered
@@ -285,7 +329,7 @@ def retrieve_candidates(
         ctx.table,
         query_vector,
         pool=pool,
-        year_min=filters.year_min,
+        filters=filters,
     )
 
     if hybrid:
@@ -329,7 +373,7 @@ def retrieve_multi_query(
     per_query: list[list[dict[str, Any]]] = []
     for query in queries:
         vector = _embed_vector(query, config=ctx.config)
-        dense = _dense_search(ctx.table, vector, pool=pool, year_min=filters.year_min)
+        dense = _dense_search(ctx.table, vector, pool=pool, filters=filters)
         if hybrid:
             sparse = bm25.search_bm25(query, index_dir=ctx.paths.bm25_dir, limit=pool)
             per_query.append(reciprocal_rank_fusion(dense, sparse, top=pool))

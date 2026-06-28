@@ -132,6 +132,15 @@ def _chunk_row(chunk: TextChunk, vector: list[float]) -> dict[str, Any]:
         "tags": ",".join(chunk.tags),
         "pipeline_categories": ",".join(chunk.pipeline_categories),
         "authors": ",".join(chunk.authors),
+        # Filter-only columns (T5/P2). Strings stored as "" when absent (mirrors
+        # tags/source_url handling); is_retracted stored as an int 0/1 because
+        # there is no existing boolean-typed column in this row schema.
+        "venue": chunk.venue or "",
+        "arxiv_category": chunk.arxiv_category or "",
+        "genre": chunk.genre or "",
+        "venue_type": chunk.venue_type or "",
+        "oa_version": chunk.oa_version or "",
+        "is_retracted": 1 if chunk.is_retracted else 0,
         "vector": vector,
     }
 

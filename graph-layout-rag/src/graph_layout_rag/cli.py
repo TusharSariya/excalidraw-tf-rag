@@ -400,6 +400,10 @@ def route_cmd(text: str) -> None:
 @click.option("--pdf-only", is_flag=True, help="Exclude metadata-only documents.")
 @click.option("--source", default=None, help="Filter by source (e.g. handbook, graphviz).")
 @click.option("--year-min", type=int, default=None)
+@click.option("--venue", default=None, help="Filter by exact venue (prefiltered in the index).")
+@click.option("--arxiv-category", default=None, help="Filter by exact arXiv category (e.g. cs.DS).")
+@click.option("--genre", default=None, help="Filter by exact genre/publication type.")
+@click.option("--exclude-retracted", is_flag=True, help="Exclude retracted documents.")
 @click.option(
     "--embed-profile",
     default=None,
@@ -450,6 +454,10 @@ def query_cmd(
     pdf_only: bool,
     source: str | None,
     year_min: int | None,
+    venue: str | None,
+    arxiv_category: str | None,
+    genre: str | None,
+    exclude_retracted: bool,
     embed_profile: str | None,
     rerank: bool | None,
     hybrid: bool,
@@ -474,6 +482,10 @@ def query_cmd(
             pdf_only=pdf_only,
             source=source,
             year_min=year_min,
+            venue=venue,
+            arxiv_category=arxiv_category,
+            genre=genre,
+            exclude_retracted=exclude_retracted,
             embed_profile=embed_profile,
             rerank=rerank,
             hybrid=hybrid,

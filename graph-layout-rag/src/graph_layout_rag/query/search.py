@@ -243,6 +243,10 @@ def search(
     year_min: int | None = None,
     category: str | None = None,
     pdf_only: bool = False,
+    venue: str | None = None,
+    arxiv_category: str | None = None,
+    genre: str | None = None,
+    exclude_retracted: bool = False,
     embed_profile: str | None = None,
     rerank: bool | None = None,
     hybrid: bool = DEFAULT_HYBRID,
@@ -264,6 +268,10 @@ def search(
         year_min=year_min,
         category=category,
         pdf_only=pdf_only,
+        venue=venue,
+        arxiv_category=arxiv_category,
+        genre=genre,
+        exclude_retracted=exclude_retracted,
     )
     candidates = retrieve_candidates(
         query,

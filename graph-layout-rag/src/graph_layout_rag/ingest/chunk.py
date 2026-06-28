@@ -102,6 +102,16 @@ class TextChunk:
     alias_source_urls: list[str] = field(default_factory=list)
     alias_dois: list[str] = field(default_factory=list)
     canonical_sha256: str | None = None
+    # Filter-only metadata (T5/P2): stored/indexed as filter columns, NEVER folded
+    # into the embedded/BM25 text (embedding metadata is A/B-proven NULL here and
+    # would cache-bust every chunk). Do NOT add these to embed_input_text/
+    # _topics_tags_header/enrich_texts_for_section.
+    venue: str | None = None
+    arxiv_category: str | None = None
+    genre: str | None = None
+    venue_type: str | None = None
+    oa_version: str | None = None
+    is_retracted: bool = False
 
 
 @dataclass
@@ -191,6 +201,12 @@ def _make_chunk(
         alias_source_urls=alias_source_urls or [],
         alias_dois=alias_dois or [],
         canonical_sha256=canonical_sha256 or item.sha256,
+        venue=item.venue,
+        arxiv_category=item.arxiv_category,
+        genre=item.genre,
+        venue_type=item.venue_type,
+        oa_version=item.oa_version,
+        is_retracted=bool(item.is_retracted),
     )
 
 
