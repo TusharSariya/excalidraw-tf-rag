@@ -27,3 +27,13 @@ data/bibliography-scan-cache/
 data/extract_cache/
 data/embed_cache/
 # Keep data/manifest.example.json tracked; ignore live harvest output above.
+
+# SPLADE domain-adaptation training artifacts (isolated training/ module).
+data/training/queries.jsonl
+data/training/queries_summary.json
+data/training/candidates.jsonl
+data/training/triples.jsonl
+data/training/triples_summary.json
+data/training/checkpoints/
+training/.venv/
+training/uv.lock

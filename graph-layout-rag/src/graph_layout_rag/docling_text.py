@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import os
+import signal
 from functools import lru_cache
 from pathlib import Path
 
@@ -18,9 +19,17 @@ log = logging.getLogger("graph_layout_rag.docling")
 
 DEFAULT_OCR = False
 DEFAULT_TABLES = True
-DEFAULT_TIMEOUT_S = 600
+DEFAULT_TIMEOUT_S = 90  # seconds before hard SIGALRM kill (was 600 — docling's internal timeout doesn't reliably interrupt C extensions)
 DEFAULT_DEVICE = "auto"
 DEFAULT_THREADS = 2
+
+
+class _DoclingTimeout(Exception):
+    pass
+
+
+def _sigalrm_handler(signum, frame):  # noqa: ARG001
+    raise _DoclingTimeout
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -108,11 +117,23 @@ def extract_pages_docling(path: Path, *, clean: bool = True) -> PdfExtractResult
         result.open_error = "docling not installed"
         return result
 
+    timeout = _env_positive_int("GRAPH_RAG_DOCLING_TIMEOUT_S", DEFAULT_TIMEOUT_S)
+    # SIGALRM fires in the worker-process main thread, interrupting stuck C-extension calls
+    # that docling's internal document_timeout cannot reach.
+    old_handler = signal.signal(signal.SIGALRM, _sigalrm_handler)
+    signal.alarm(timeout)
     try:
         doc = converter.convert(path).document
+    except _DoclingTimeout:
+        log.warning("docling hard-killed after %ds (SIGALRM): %s", timeout, path.name)
+        result.open_error = f"docling timeout {timeout}s"
+        return result
     except Exception as exc:
         result.open_error = str(exc)
         return result
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old_handler)
 
     try:
         num_pages = doc.num_pages()

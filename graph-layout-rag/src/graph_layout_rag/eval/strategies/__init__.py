@@ -472,6 +472,7 @@ class ExperimentalIndexStrategy:
     kind: str
     name: str
     fuse_dense: bool = False
+    fuse_hybrid: bool = False
     requires_llm: bool = False
     requires_cloud_cost: bool = False
 
@@ -494,7 +495,20 @@ class ExperimentalIndexStrategy:
             experimental,
             _filters(case, use_category=False, use_pdf_only=case.pdf_only),
         )
-        if self.fuse_dense:
+        # fuse_hybrid: 3-way arm = BM25+dense (full hybrid ranking) RRF-fused with
+        # the learned-sparse (SPLADE) ranking. Answers "does fine-tuned SPLADE
+        # AUGMENT the full hybrid baseline?". fuse_dense is the 2-way SPLADE+dense.
+        if self.fuse_hybrid:
+            hyb = retrieve_candidates(
+                case.query,
+                top=top,
+                embed_profile=embed_profile,
+                hybrid=True,
+                filters=_filters(case, use_category=False, use_pdf_only=False),
+                pool=max(80, top * 4),
+            )
+            experimental = reciprocal_rank_fusion(hyb, experimental, top=max(80, top * 4))
+        elif self.fuse_dense:
             dense = retrieve_candidates(
                 case.query,
                 top=top,
@@ -714,6 +728,9 @@ EXPERIMENTAL_STRATEGIES: tuple[str, ...] = (
     "colbert",
     "splade_os",
     "dense_splade_os",
+    "splade_gd",
+    "dense_splade_gd",
+    "hybrid_splade_gd",
     "splade_v3",
     "dense_splade_v3",
     "colbert_mxbai",
@@ -774,6 +791,14 @@ def strategy_registry() -> dict[str, RetrievalStrategy]:
         # label only separates result files — the model comes from the wired index).
         ExperimentalIndexStrategy("splade", "splade_os"),
         ExperimentalIndexStrategy("splade", "dense_splade_os", fuse_dense=True),
+        # Domain fine-tuned SPLADE (LoRA-merged, contrastive). The model itself comes
+        # from the wired --retrieval-index (built over splade-gd-v1); the label only
+        # separates result files. Mirrors the stock splade_os/dense_splade_os arms.
+        ExperimentalIndexStrategy("splade", "splade_gd"),
+        ExperimentalIndexStrategy("splade", "dense_splade_gd", fuse_dense=True),
+        # 3-way: full hybrid (BM25+dense) RRF-fused with fine-tuned SPLADE. Tests
+        # whether the domain SPLADE AUGMENTS the 0.719 hybrid baseline directly.
+        ExperimentalIndexStrategy("splade", "hybrid_splade_gd", fuse_hybrid=True),
         ExperimentalIndexStrategy("splade", "splade_v3"),
         ExperimentalIndexStrategy("splade", "dense_splade_v3", fuse_dense=True),
         ExperimentalIndexStrategy("colbert", "colbert_mxbai"),

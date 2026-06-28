@@ -26,7 +26,32 @@ def is_pytorch_sparse_model(model_name: str) -> bool:
         model_name in PYTORCH_SPARSE_MODELS
         or model_name.startswith("naver/splade-v3")
         or model_name.startswith("opensearch-project/opensearch-neural-sparse")
+        or _is_local_splade_checkpoint(model_name)
     )
+
+
+def _is_local_splade_checkpoint(model_name: str) -> bool:
+    """A locally-trained SPLADE checkpoint dir (e.g. the merged LoRA fine-tune from
+    ``training/train_splade.py``). SparseEncoder loads a local path like a hub name;
+    only the routing predicate needs to recognise it. We treat a filesystem dir that
+    contains a SentenceTransformer ``modules.json`` as a SPLADE checkpoint when its
+    path is marked (under a ``training``/``splade`` path component) — conservative so
+    arbitrary dirs are not misrouted.
+    """
+    import os
+
+    if os.path.sep not in model_name and "/" not in model_name:
+        return False
+    if not os.path.isdir(model_name):
+        return False
+    if not os.path.exists(os.path.join(model_name, "modules.json")):
+        return False
+    # Conservative: require a path *component* that marks this as a SPLADE training
+    # checkpoint (a substring check would misfire on e.g. a tmp/test dir that merely
+    # contains the word). The trained checkpoints live at
+    # ``data/training/checkpoints/splade-*`` so either marker matches.
+    parts = {p.lower() for p in model_name.replace("\\", "/").split("/")}
+    return "training" in parts or any(p.startswith("splade") for p in parts)
 
 
 @dataclass(frozen=True)

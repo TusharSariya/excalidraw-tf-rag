@@ -25,6 +25,29 @@ def test_pytorch_sparse_model_detection():
     assert _sparse_backend("prithivida/Splade_PP_en_v1") == "fastembed"
 
 
+def test_local_splade_checkpoint_routing(tmp_path):
+    # A hub name that is not a known sparse model and not a local dir -> False.
+    assert not is_pytorch_sparse_model("sentence-transformers/all-MiniLM-L6-v2")
+
+    # A local dir with modules.json under a 'splade' path -> routed as pytorch sparse.
+    ckpt = tmp_path / "checkpoints" / "splade-gd-v1"
+    ckpt.mkdir(parents=True)
+    (ckpt / "modules.json").write_text("[]")
+    assert is_pytorch_sparse_model(str(ckpt))
+    assert _sparse_backend(str(ckpt)) == "pytorch_sparse"
+
+    # A local dir WITHOUT modules.json -> not misrouted.
+    bare = tmp_path / "splade-empty"
+    bare.mkdir()
+    assert not is_pytorch_sparse_model(str(bare))
+
+    # A modules.json dir whose path has no splade/training marker -> conservative False.
+    other = tmp_path / "some" / "random-model"
+    other.mkdir(parents=True)
+    (other / "modules.json").write_text("[]")
+    assert not is_pytorch_sparse_model(str(other))
+
+
 def test_resolve_encode_device_defaults_cpu_without_cuda(monkeypatch):
     monkeypatch.delenv("GRAPH_RAG_FASTEMBED_CUDA", raising=False)
     monkeypatch.setenv("GRAPH_RAG_ENCODE_DEVICE", "cpu")
