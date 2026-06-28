@@ -134,13 +134,15 @@ def judge_model() -> str:
     via ``local_llm``); reusing that model makes Phase-4 transform evaluation
     circular (the same model both writes the expansion and grades its hits).
     """
-    from rag_common.local_llm import llm_backend, mlx_model, ollama_model
+    from rag_common.local_llm import llm_backend, mlx_model, ollama_model, opencode_model
 
     backend = llm_backend()
     if backend == "ollama":
         return ollama_model()
     if backend == "mlx":
         return mlx_model()
+    if backend == "opencode":
+        return opencode_model()
     return os.getenv(JUDGE_MODEL_ENV, DEFAULT_JUDGE_MODEL).strip() or DEFAULT_JUDGE_MODEL
 
 
@@ -215,7 +217,7 @@ def _judge_one(query: str, doc: dict[str, Any], model: str) -> tuple[int, str]:
 
     prompt = build_judge_prompt(query, doc)
 
-    if llm_backend() in ("ollama", "mlx"):
+    if llm_backend() in ("ollama", "mlx", "opencode"):
         from rag_common.local_llm import generate_text
 
         text = generate_text(prompt, model=model, temperature=0.0, max_tokens=128)

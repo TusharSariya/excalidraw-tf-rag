@@ -231,6 +231,17 @@ def sample_seed_docs(
 # Query generation (system-blind)
 # --------------------------------------------------------------------------- #
 def _gen_model() -> str:
+    # Honour the active local_llm backend so the generator and judge can share a
+    # non-Gemini transport (e.g. opencode/ollama/mlx) when GCP billing is dead.
+    from rag_common.local_llm import llm_backend, mlx_model, ollama_model, opencode_model
+
+    backend = llm_backend()
+    if backend == "opencode":
+        return opencode_model()
+    if backend == "ollama":
+        return ollama_model()
+    if backend == "mlx":
+        return mlx_model()
     return os.getenv(GEN_MODEL_ENV, DEFAULT_GEN_MODEL).strip() or DEFAULT_GEN_MODEL
 
 
@@ -287,6 +298,19 @@ def _build_prompt(seed: Seed, mode: str) -> str:
 def _generate_one(seed: Seed, mode: str, model: str) -> str:
     import time
 
+    from rag_common.local_llm import llm_backend
+
+    prompt = _build_prompt(seed, mode)
+
+    # Non-Gemini backends (opencode/ollama/mlx) route through the shared
+    # local_llm transport; only the Gemini path keeps its bespoke retry client.
+    if llm_backend() != "gemini":
+        from rag_common.local_llm import generate_text
+
+        text = (generate_text(prompt, model=model, temperature=0.7, max_tokens=128) or "").strip()
+        text = text.replace("\n", " ")
+        return re.sub(r'^["\']|["\']$', "", text).strip()
+
     from rag_common.gemini_embed import (
         _client,
         _is_fatal,
@@ -296,7 +320,6 @@ def _generate_one(seed: Seed, mode: str, model: str) -> str:
     )
 
     client = _client(location=llm_location())
-    prompt = _build_prompt(seed, mode)
     config: Any = None
     try:
         from google.genai import types
