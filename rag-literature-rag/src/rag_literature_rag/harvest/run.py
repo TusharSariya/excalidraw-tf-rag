@@ -28,8 +28,12 @@ from rag_literature_rag.harvest.checkpoint import (
     load_checkpoint,
     save_checkpoint,
 )
+from rag_literature_rag.harvest.core_source import harvest_core
 from rag_literature_rag.harvest.crossref import harvest_crossref
 from rag_literature_rag.harvest.curated import harvest_curated
+from rag_literature_rag.harvest.doab import harvest_doab
+from rag_literature_rag.harvest.pmc import harvest_pmc
+from rag_literature_rag.harvest.s2orc import harvest_s2orc
 from rag_literature_rag.harvest.deferred_retry import run_deferred_retries
 from rag_literature_rag.harvest.dblp import harvest_dblp
 from rag_literature_rag.harvest.ledger import init_db, query_attempts, set_harvest_run, set_harvest_stage, summary
@@ -205,6 +209,14 @@ def _run_discovery_pass(
     target: int | None,
     dry_run: bool,
     pipeline_only: bool = False,
+    max_core: int = 0,
+    max_s2orc: int = 0,
+    max_pmc: int = 0,
+    max_doab: int = 0,
+    skip_core: bool = False,
+    skip_s2orc: bool = False,
+    skip_pmc: bool = False,
+    skip_doab: bool = False,
 ) -> None:
     # Snapshot ids/count once so concurrent sources don't read interleaved state.
     existing_ids = _existing_ids(manifest)
@@ -300,6 +312,40 @@ def _run_discovery_pass(
                 lambda: harvest_forward_citations(
                     max_works=max_forward_citations, existing_ids=existing_ids, **kw
                 ),
+            )
+        )
+
+    # Legal open-access full-text sources (default OFF; enable with --max-* caps).
+    if max_core and not skip_core:
+        sources.append(
+            (
+                "core",
+                f"CORE open-access full-text (max {max_core})",
+                lambda: harvest_core(max_works=max_core, existing_ids=existing_ids, **kw),
+            )
+        )
+    if max_s2orc and not skip_s2orc:
+        sources.append(
+            (
+                "s2orc",
+                f"Semantic Scholar OA PDFs (max {max_s2orc})",
+                lambda: harvest_s2orc(max_works=max_s2orc, existing_ids=existing_ids, **kw),
+            )
+        )
+    if max_pmc and not skip_pmc:
+        sources.append(
+            (
+                "europepmc",
+                f"Europe PMC OA full-text (max {max_pmc})",
+                lambda: harvest_pmc(max_works=max_pmc, existing_ids=existing_ids, **kw),
+            )
+        )
+    if max_doab and not skip_doab:
+        sources.append(
+            (
+                "doab",
+                f"DOAB/OAPEN open-access books (max {max_doab})",
+                lambda: harvest_doab(max_works=max_doab, existing_ids=existing_ids, **kw),
             )
         )
 
@@ -569,6 +615,14 @@ def _execute_harvest(
     skip_topic_seeds: bool,
     skip_semantic_scholar: bool,
     skip_retry: bool,
+    max_core: int,
+    max_s2orc: int,
+    max_pmc: int,
+    max_doab: int,
+    skip_core: bool,
+    skip_s2orc: bool,
+    skip_pmc: bool,
+    skip_doab: bool,
     resume: bool,
     pipeline_harvest: bool,
     verbose: bool,
@@ -709,6 +763,14 @@ def _execute_harvest(
                 target=target,
                 dry_run=dry_run,
                 pipeline_only=pipeline_harvest,
+                max_core=max_core,
+                max_s2orc=max_s2orc,
+                max_pmc=max_pmc,
+                max_doab=max_doab,
+                skip_core=skip_core,
+                skip_s2orc=skip_s2orc,
+                skip_pmc=skip_pmc,
+                skip_doab=skip_doab,
             )
             save_manifest(manifest)
             if not dry_run:
@@ -840,6 +902,15 @@ def harvest_options(f):
     f = click.option("--skip-topic-seeds", is_flag=True)(f)
     f = click.option("--skip-semantic-scholar", is_flag=True)(f)
     f = click.option("--skip-retry", is_flag=True, help="Skip DOI retry pass.")(f)
+    # Legal open-access full-text sources (default 0 = off; set a cap to enable).
+    f = click.option("--max-core", default=0, show_default=True, type=int, help="Max CORE OA full-text works per pass.")(f)
+    f = click.option("--max-s2orc", default=0, show_default=True, type=int, help="Max Semantic Scholar OA-PDF works per pass.")(f)
+    f = click.option("--max-pmc", default=0, show_default=True, type=int, help="Max Europe PMC OA full-text works per pass.")(f)
+    f = click.option("--max-doab", default=0, show_default=True, type=int, help="Max DOAB/OAPEN open-access books per pass.")(f)
+    f = click.option("--skip-core", is_flag=True, help="Skip CORE OA source.")(f)
+    f = click.option("--skip-s2orc", is_flag=True, help="Skip Semantic Scholar OA-PDF source.")(f)
+    f = click.option("--skip-pmc", is_flag=True, help="Skip Europe PMC OA source.")(f)
+    f = click.option("--skip-doab", is_flag=True, help="Skip DOAB/OAPEN books source.")(f)
     f = click.option("--resume", is_flag=True, help="Skip one-time early stages if already harvested.")(f)
     f = click.option("--deep-harvest", is_flag=True, help="Higher caps for 2k PDF harvest.")(f)
     f = click.option(

@@ -17,7 +17,11 @@ from __future__ import annotations
 import json
 import logging
 import os
+import random
 import re
+import time
+import urllib.error
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -59,6 +63,92 @@ _RUBRIC = (
 
 def judge_model() -> str:
     return os.getenv(JUDGE_MODEL_ENV, DEFAULT_JUDGE_MODEL).strip() or DEFAULT_JUDGE_MODEL
+
+
+# --- OpenCode Go (Zen) OpenAI-compatible judge backend --------------------
+# DeepSeek V4 Flash (and other Zen Go models) via the OpenAI-compatible HTTP
+# endpoint. Used when the judge model is "opencode-go/<model>" or
+# RAG_LIT_JUDGE_BACKEND=opencode. Avoids `opencode run` (TTY/agent overhead,
+# no parallelism); we manage concurrency ourselves in judge_pool.
+_OPENCODE_URL = "https://opencode.ai/zen/go/v1/chat/completions"
+# A non-empty User-Agent is REQUIRED — the gateway's Cloudflare returns 403 to
+# urllib's default UA. (Discovered 2026-06-27.)
+_OPENCODE_UA = "opencode/1.17.11"
+_OPENCODE_RETRYABLE_HTTP = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
+
+
+def _judge_backend(model: str) -> str:
+    override = os.getenv("RAG_LIT_JUDGE_BACKEND", "").strip().lower()
+    if override:
+        return override
+    if model.startswith(("opencode-go/", "opencode/")):
+        return "opencode"
+    return "gemini"
+
+
+def _opencode_key() -> str:
+    key = os.getenv("OPENCODE_API_KEY", "").strip()
+    if key:
+        return key
+    try:
+        auth = json.loads((Path.home() / ".local/share/opencode/auth.json").read_text(encoding="utf-8"))
+        return str((auth.get("opencode-go") or {}).get("key", "")).strip()
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return ""
+
+
+def _judge_one_opencode(query: str, doc: dict[str, Any], model: str) -> tuple[int, str]:
+    """Grade one (query, doc) via the OpenCode Go OpenAI-compatible endpoint.
+
+    Resilient by contract: retries 429/5xx/timeout/empty with jittered backoff,
+    and RAISES on persistent failure so judge_pool records a non-cached
+    judge_error (retried next run) rather than poisoning qrels with a fake 0.
+    """
+    key = _opencode_key()
+    if not key:
+        raise RuntimeError("opencode judge: no OPENCODE_API_KEY and no auth.json opencode-go key")
+    api_model = model.split("/", 1)[1] if "/" in model else model
+    prompt = build_judge_prompt(query, doc)
+    payload = json.dumps(
+        {
+            "model": api_model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.0,
+            "max_tokens": 256,
+        }
+    ).encode()
+    headers = {
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+        "User-Agent": _OPENCODE_UA,
+    }
+
+    last_exc: Exception | None = None
+    for attempt in range(5):
+        try:
+            req = urllib.request.Request(_OPENCODE_URL, data=payload, headers=headers)
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                data = json.load(resp)
+            text = ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+            if not text.strip():
+                raise ValueError("empty judge response")
+            return _parse_grade(text)
+        except urllib.error.HTTPError as exc:  # noqa: PERF203
+            last_exc = exc
+            if exc.code in _OPENCODE_RETRYABLE_HTTP and attempt < 4:
+                retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                base = float(retry_after) if (retry_after and str(retry_after).isdigit()) else min(30.0, 2 ** attempt)
+                time.sleep(base + random.uniform(0, max(0.5, base * 0.25)))
+                continue
+            raise
+        except Exception as exc:  # noqa: BLE001 — timeout / empty / decode → retry then raise
+            last_exc = exc
+            if attempt < 4:
+                delay = min(30.0, 1.5 * (2 ** attempt))
+                time.sleep(delay + random.uniform(0, 1.0))
+                continue
+            raise
+    raise last_exc or RuntimeError("opencode judge failed")
 
 
 def _load_cache() -> dict[str, Any]:
@@ -121,7 +211,8 @@ def _parse_grade(text: str) -> tuple[int, str]:
 
 
 def _judge_one(query: str, doc: dict[str, Any], model: str) -> tuple[int, str]:
-    import time
+    if _judge_backend(model) == "opencode":
+        return _judge_one_opencode(query, doc, model)
 
     from rag_common.gemini_embed import (
         _client,

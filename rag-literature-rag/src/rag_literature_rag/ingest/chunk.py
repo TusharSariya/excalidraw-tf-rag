@@ -139,6 +139,12 @@ class TextChunk:
     parent_page: int | None = None
     parent_page_end: int | None = None
     parent_section_path: str = ""
+    # Late-chunking provenance (set only by assign_late_chunk_windows for
+    # latechunk-named profiles; defaults keep all existing construction intact).
+    window_id: str | None = None
+    window_text: str | None = None
+    window_char_start: int = 0
+    window_char_end: int = 0
 
 
 @dataclass
@@ -149,6 +155,53 @@ class StructuralBlock:
     page_end: int
     section_path: str = ""
     block_index: int = -1
+
+
+LATE_CHUNK_WINDOW_CHARS = 20000  # ~ up to a few thousand tokens per embed window
+
+
+def assign_late_chunk_windows(
+    chunks: list[TextChunk], *, window_chars: int = LATE_CHUNK_WINDOW_CHARS
+) -> list[TextChunk]:
+    """Assign each chunk a late-chunking window + its char span within it.
+
+    Construction-time span tracking (the chunk-provenance audit found post-hoc
+    offset *recovery* only ~14% viable): we build each window by joining
+    consecutive same-doc chunks with "\\n\\n", so each chunk's [start, end) span
+    in ``window_text`` is known exactly. The window is embedded once at token
+    level; pool_span then pools each chunk's span. Mutates chunks in place and
+    returns them. Only called for latechunk-named profiles — never on the
+    default path.
+    """
+    sep = "\n\n"
+    i = 0
+    n = len(chunks)
+    win_seq = 0
+    while i < n:
+        doc_id = chunks[i].doc_id
+        group: list[TextChunk] = []
+        size = 0
+        while i < n and chunks[i].doc_id == doc_id:
+            c = chunks[i]
+            add = len(c.text) + (len(sep) if group else 0)
+            if group and size + add > window_chars:
+                break
+            group.append(c)
+            size += add
+            i += 1
+        window_text = sep.join(c.text for c in group)
+        window_id = f"{doc_id}#w{win_seq}"
+        win_seq += 1
+        cursor = 0
+        for idx, c in enumerate(group):
+            if idx > 0:
+                cursor += len(sep)
+            c.window_id = window_id
+            c.window_text = window_text
+            c.window_char_start = cursor
+            c.window_char_end = cursor + len(c.text)
+            cursor += len(c.text)
+    return chunks
 
 
 def _topics_tags_header(chunk: TextChunk) -> str:

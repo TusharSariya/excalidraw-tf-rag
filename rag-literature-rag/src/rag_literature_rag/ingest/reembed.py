@@ -13,6 +13,7 @@ import lancedb
 
 from rag_literature_rag.ingest.chunk import TextChunk, chunking_fingerprint
 from rag_literature_rag.ingest.embed import EmbedStats, prepare_embed_config
+from rag_literature_rag.ingest.latechunk import is_latechunk_profile
 from rag_literature_rag.ingest.index import (
     IndexPhaseStats,
     load_ingest_state,
@@ -60,6 +61,42 @@ def _row_to_chunk(row: dict[str, Any]) -> TextChunk:
         alias_dois=_split_csv(row.get("alias_dois")),
         canonical_sha256=row.get("canonical_sha256") or None,
     )
+
+
+def _latechunk_doc_batches(
+    rows: list[dict[str, Any]], batch_size: int
+) -> list[list[dict[str, Any]]]:
+    """Group rows into batches that never split a document across a batch boundary.
+
+    Late chunking builds one window per document (assign_late_chunk_windows groups
+    consecutive same-doc chunks), so every chunk of a doc must be embedded in the
+    same upsert call. Rows are sorted by (doc_id, chunk_index); a batch accumulates
+    whole docs up to ~batch_size chunks. A single doc larger than batch_size still
+    goes out whole (memory is bounded by one doc's window, not the batch).
+    """
+    ordered = sorted(
+        rows, key=lambda r: (str(r.get("doc_id", "")), int(r.get("chunk_index", 0)))
+    )
+    by_doc: dict[str, list[dict[str, Any]]] = {}
+    doc_order: list[str] = []
+    for r in ordered:
+        did = str(r.get("doc_id", ""))
+        if did not in by_doc:
+            by_doc[did] = []
+            doc_order.append(did)
+        by_doc[did].append(r)
+
+    batches: list[list[dict[str, Any]]] = []
+    current: list[dict[str, Any]] = []
+    for did in doc_order:
+        doc_rows = by_doc[did]
+        if current and len(current) + len(doc_rows) > batch_size:
+            batches.append(current)
+            current = []
+        current.extend(doc_rows)
+    if current:
+        batches.append(current)
+    return batches
 
 
 def _load_source_rows(source_profile: str) -> list[dict[str, Any]]:
@@ -138,13 +175,31 @@ def run_reembed(
     rebuild = offset == 0
     total = len(rows)
 
+    latechunk = is_latechunk_profile(target_profile)
+    # Late chunking must keep each document's chunks in a single embed call, so we
+    # pre-group into doc-aligned batches and walk them with the same chunk offset
+    # cursor (resume-safe).
+    doc_batches = _latechunk_doc_batches(rows, batch_size) if latechunk else None
+
     click.echo(
         f"re-embed {total} chunks: {source_profile} -> {target_profile} "
-        f"(offset={offset}, batch={batch_size})"
+        f"(offset={offset}, batch={batch_size}{', latechunk doc-aligned' if latechunk else ''})"
     )
 
     while offset < total:
-        batch_rows = rows[offset : offset + batch_size]
+        if doc_batches is not None:
+            # Find the doc-aligned batch starting at `offset` (skip already-done docs).
+            seen = 0
+            batch_rows = []
+            for b in doc_batches:
+                if seen >= offset:
+                    batch_rows = b
+                    break
+                seen += len(b)
+            if not batch_rows:
+                break
+        else:
+            batch_rows = rows[offset : offset + batch_size]
         chunks = [_row_to_chunk(row) for row in batch_rows]
         upsert_chunks(
             chunks,

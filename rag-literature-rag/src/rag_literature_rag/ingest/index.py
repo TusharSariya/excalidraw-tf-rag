@@ -251,6 +251,17 @@ def _embed_index_texts(
     workers: int | None,
     phase_stats: IndexPhaseStats | None,
 ) -> list[list[float]]:
+    # Late chunking embeds each window once at token level then mean-pools each
+    # chunk's span — the vector depends on cross-chunk window context, so the
+    # per-text embed cache (keyed on chunk text alone) is invalid here and is
+    # intentionally bypassed. Returns one vector per chunk, input order preserved.
+    from rag_literature_rag.ingest.latechunk import embed_late_chunks, is_latechunk_profile
+
+    if is_latechunk_profile(cfg.profile):
+        if stats is not None:
+            stats.set_effective_config(cfg)
+        return embed_late_chunks(chunks, cfg)
+
     cached: list[list[float] | None] = []
     missing_indexes: list[int] = []
     for idx, text in enumerate(texts):
