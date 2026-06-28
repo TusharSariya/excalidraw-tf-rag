@@ -129,9 +129,17 @@ def format_results(
                 entry["oa_pdf_url"] = meta.oa_pdf_url
 
         stats = in_corpus_citation_stats(doc_id, graph)
-        if stats.get("cited_by_count") is not None:
-            entry["cited_by_count"] = stats["cited_by_count"]
-            entry["in_corpus_cited_by_count"] = stats.get("in_corpus_cited_by_count", 0)
+        # cited_by_count: prefer the citation graph, but fall back to the
+        # papers_meta (OpenAlex) value when the graph is unavailable or lacks the
+        # doc (e.g. remote box without a built CitationGraph) — we have the count.
+        cited_by = stats.get("cited_by_count")
+        if cited_by is None and meta is not None:
+            cited_by = meta.cited_by_count
+        if cited_by is not None:
+            entry["cited_by_count"] = cited_by
+        # in-corpus count is genuinely graph-derived; only surface when known.
+        if stats.get("in_corpus_cited_by_count") is not None:
+            entry["in_corpus_cited_by_count"] = stats["in_corpus_cited_by_count"]
 
         manifest_item = manifest_by_doc.get(doc_id)
         if manifest_item is not None:

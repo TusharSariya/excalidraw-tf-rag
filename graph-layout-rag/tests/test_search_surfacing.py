@@ -97,6 +97,26 @@ def test_join_surfaces_meta_citation_and_bibtex(monkeypatch):
     assert entry["bibtex"].startswith("@inproceedings{gansner1993layered,")
 
 
+def test_cited_by_falls_back_to_papers_meta_when_graph_lacks_doc(monkeypatch):
+    # Graph has no node for doc-c (e.g. remote box without a built CitationGraph),
+    # but papers_meta carries the OpenAlex cited_by_count — surface it, and do NOT
+    # invent an in-corpus count the graph can't provide.
+    meta = PaperMeta(doc_id="doc-c", cited_by_count=675, fwci=15.8)
+    monkeypatch.setattr(
+        "graph_layout_rag.citation_store.load_paper_meta_cached",
+        lambda: {"doc-c": meta},
+    )
+    monkeypatch.setattr(
+        "graph_layout_rag.query.citation_rank.load_graph_cached", lambda: None
+    )
+    monkeypatch.setattr(search_mod, "_manifest_by_doc", lambda: {})
+
+    entry = format_results([_row("doc-c")], top=5, max_per_doc=2)[0]
+    assert entry["cited_by_count"] == 675
+    assert entry["fwci"] == 15.8
+    assert "in_corpus_cited_by_count" not in entry
+
+
 def test_graceful_degrade_when_all_sources_empty(monkeypatch):
     monkeypatch.setattr(
         "graph_layout_rag.citation_store.load_paper_meta_cached", lambda: {}
