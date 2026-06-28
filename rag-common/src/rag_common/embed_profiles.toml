@@ -93,6 +93,14 @@ model = "Qwen/Qwen3-Embedding-0.6B"
 dimensions = 1024
 quant = "4bit"
 
+# Same Qwen3-0.6B CUDA embedding stack, with each paper's stored one-line TLDR
+# prepended to the indexed (embed+BM25) text. A/B re-test of prefix embedding (T9).
+[profiles."cuda-qwen0.6b-tldr-v1"]
+backend = "local"
+model = "Qwen/Qwen3-Embedding-0.6B"
+dimensions = 1024
+quant = "4bit"
+
 # Same Qwen3-0.6B CUDA embedding stack, using smaller child chunks for a
 # small-to-big retrieval probe while preserving document/section metadata.
 [profiles."cuda-qwen0.6b-small2big-v1"]

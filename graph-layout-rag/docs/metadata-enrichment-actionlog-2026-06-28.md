@@ -137,6 +137,29 @@ query *relevance*, so it floats related-but-less-relevant papers above the exact
 (not in `OFFLINE_STRATEGIES`, never in the production query path), like the other documented
 negatives. **Nothing ships.**
 
+## T9 — TLDR-prefix profile re-test (CONFIRMED NULL, ships nothing)
+New eval-only embed profile `cuda-qwen0.6b-tldr-v1`: prepends each paper's stored
+one-line TLDR (S2 `tldr.text`, 3,441/6,050 docs = 57%) to the chunk's embed+BM25 text
+(`augment_texts_for_tldr`, gated on the `tldr` profile-name substring like
+section-v1/contextual-v1; `_indexed_text_changes` updated so BM25 rebuilds with the
+prefixed text). Built on the desktop GPU via `reembed cuda-qwen0.6b-1024 →
+cuda-qwen0.6b-tldr-v1` (44,358 chunks, 11.6 chunks/s, 63.7 min; full re-embed — a new
+profile is all embed-cache misses; 174/174 batches prefixed = full-corpus coverage).
+
+A/B on catalog (n=49, desktop 44k index, bootstrap-CI):
+| arm | base nDCG@10 | tldr nDCG@10 | Δ (95% CI) |
+|---|---|---|---|
+| dense          | 0.5852 | 0.5962 | +0.0110 [−0.036,+0.061] NULL |
+| hybrid_sparse2 (prod) | 0.8591 | 0.8563 | −0.0028 [−0.022,+0.015] NULL |
+
+Both CIs straddle zero. The tiny dense bump is noise; the production hybrid is dead flat.
+**Third** falsification of prefix-embedding on this BM25-dominant corpus (after section-v1
+and contextual-v1). Runs: `p3-tldr-ab-base`, `p3-tldr-ab-tldr`, gate `p3-tldr-gate`.
+Disposition: profile kept as experimental-only (never promoted; production stays
+`cuda-qwen0.6b-1024`). The desktop `cuda-qwen0.6b-tldr-v1` index is a throwaway A/B
+artifact. **Nothing ships.** Closes P3 (T7 NULL, T8 NEGATIVE, T9 NULL → P3 ships nothing,
+the clean documented result the plan anticipated).
+
 ## Known limitations / pending (externally gated)
 - No-DOI tail (~1114, mostly JGAA) — blocked on OpenAlex search budget reset (**midnight UTC**); converges via a resume pass.
 - Citation-prior coverage ceiling ~34% (rest are DOI-less, never in citation crawl) → P3 eval likely NULL; prior ships OFF.

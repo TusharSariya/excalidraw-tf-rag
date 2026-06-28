@@ -29,7 +29,7 @@ REEMBED_OFFSET_KEY = "reembed_offset"
 
 
 def _indexed_text_changes(profile: str) -> bool:
-    return "section-v1" in profile or "contextual" in profile
+    return "section-v1" in profile or "contextual" in profile or "tldr" in profile
 
 
 def _split_csv(value: Any) -> list[str]:

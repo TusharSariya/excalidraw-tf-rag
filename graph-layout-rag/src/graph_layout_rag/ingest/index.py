@@ -254,6 +254,12 @@ def upsert_chunks(
 
     if is_contextual_profile(cfg.profile):
         texts = augment_texts_for_context(chunks, texts)
+    # TLDR prefix (opt-in via a *tldr* embed profile): prepend each paper's stored
+    # one-line TLDR to the embed/BM25 text. Production profiles are untouched.
+    from graph_layout_rag.ingest.tldr_prefix import augment_texts_for_tldr, is_tldr_profile
+
+    if is_tldr_profile(cfg.profile):
+        texts = augment_texts_for_tldr(chunks, texts)
     doc_ids = len({c.doc_id for c in chunks})
     profile_note = f" profile={cfg.profile}" if cfg.profile else ""
     log.info(
