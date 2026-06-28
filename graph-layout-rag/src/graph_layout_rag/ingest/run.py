@@ -240,6 +240,25 @@ def _metadata_outcome(
     return ExtractionOutcome(item, chunks, aliases=aliases, reason=reason, error=error)
 
 
+def _apply_filter_fields(chunks: list, item) -> list:
+    """Overlay the mutable filter metadata from the *current* manifest item onto
+    chunks. venue/arxiv_category/genre/venue_type/oa_version/is_retracted come
+    from provider enrichment and can change without the PDF content changing —
+    but the extract_cache is keyed only by (pdf_sha256, backend, chunk_profile),
+    so a cache hit would otherwise serve stale (often null) filter values baked
+    in at an earlier build. Re-applying here keeps the content cache valid while
+    letting re-enrichment + rebuild refresh the filter columns.
+    """
+    for c in chunks:
+        c.venue = item.venue
+        c.arxiv_category = item.arxiv_category
+        c.genre = item.genre
+        c.venue_type = item.venue_type
+        c.oa_version = item.oa_version
+        c.is_retracted = bool(item.is_retracted)
+    return chunks
+
+
 def _extract_pdf_task(task: ExtractionTask) -> ExtractionOutcome:
     """Extract and chunk one PDF. This top-level worker is process-pool picklable."""
     from graph_layout_rag.ingest.extract_cache import get as cache_get, put as cache_put
@@ -248,12 +267,13 @@ def _extract_pdf_task(task: ExtractionTask) -> ExtractionOutcome:
     aliases = task.aliases or []
     sha256 = task.item.sha256 or ""
 
-    # Cache hit: skip Docling/MuPDF entirely
+    # Cache hit: skip Docling/MuPDF entirely. Filter fields are re-applied from
+    # the live manifest item because they aren't part of the cache key.
     cached = cache_get(sha256, task.pdf_backend, task.chunk_profile) if sha256 else None
     if cached is not None:
         return ExtractionOutcome(
             task.item,
-            cached,
+            _apply_filter_fields(cached, task.item),
             aliases=aliases,
             elapsed_seconds=time.monotonic() - started,
             reason="cache_hit",

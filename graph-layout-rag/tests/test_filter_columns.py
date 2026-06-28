@@ -273,3 +273,34 @@ def test_selective_venue_prefilters_in_dense_where(monkeypatch):
     assert table._search.prefilter is True
     assert "venue = 'ACM'" in table._search.where_clause
     assert [r["doc_id"] for r in out] == ["acm1"]
+
+
+def test_cache_hit_reapplies_filter_fields_from_live_item():
+    """Regression: the extract_cache stores TextChunks with filter fields baked
+    in, but its key excludes those fields. After re-enrichment a cache hit must
+    NOT serve the stale (null) venue — _apply_filter_fields overlays the current
+    manifest item's values. (This is why a post-enrichment rebuild was leaving
+    ~1,875 freshly-enriched venues NULL in the index.)"""
+    from graph_layout_rag.ingest.chunk import TextChunk
+    from graph_layout_rag.ingest.run import _apply_filter_fields
+
+    # cached chunks from an earlier build: venue was null then
+    stale = [
+        TextChunk(
+            doc_id="d1", title="T", text="body", page=1, chunk_index=i,
+            source_url="", year=2010, tags=[], authors=[], pipeline_categories=[],
+            venue=None, arxiv_category=None, genre=None,
+        )
+        for i in range(3)
+    ]
+    item = ManifestItem(
+        id="d1", title="T", source="openalex", url="", status="ok",
+        venue="Journal of Graph Algorithms and Applications",
+        arxiv_category="cs.DS", genre="article", venue_type="journal",
+        oa_version="publishedVersion", is_retracted=False,
+    )
+    out = _apply_filter_fields(stale, item)
+    assert all(c.venue == "Journal of Graph Algorithms and Applications" for c in out)
+    assert all(c.arxiv_category == "cs.DS" for c in out)
+    assert all(c.genre == "article" and c.venue_type == "journal" for c in out)
+    assert all(c.oa_version == "publishedVersion" and c.is_retracted is False for c in out)
