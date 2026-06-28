@@ -151,7 +151,12 @@ def _oa_lookups(item: ManifestItem) -> list[tuple[str, str]]:
 
 def _oa_request(kind: str, value: str):
     if kind == "doi":
-        url = f"{OPENALEX_API}/https://doi.org/{value}"
+        # Canonical OpenAlex DOI lookup form. The full-URL form
+        # (/works/https://doi.org/<doi>) is rejected with 429 (the embedded
+        # scheme trips OpenAlex's path handling), which under concurrency
+        # starves the shared rate budget and breaks the title-search fallback
+        # too — so DOI-bearing items resolved at ~4% vs ~92% for no-DOI items.
+        url = f"{OPENALEX_API}/doi:{value}"
         params = {"mailto": _MAILTO}
     elif kind == "oaid":
         url = f"{OPENALEX_API}/{value}"
