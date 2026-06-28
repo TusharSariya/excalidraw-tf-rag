@@ -570,6 +570,101 @@ class CitationGraphStrategy:
         return format_results(candidates, top=top, max_per_doc=2)
 
 
+@dataclass
+class SpecterPRFStrategy:
+    """Hybrid text retrieval re-ranked by SPECTER2 paper-embedding relatedness.
+
+    SPECTER2 vectors are a 768-d *paper-level*, citation-trained space — dimensionally
+    and semantically incompatible with the 1024-d chunk dense index, so they cannot be
+    used to *re-retrieve*. This is therefore a re-ranker, not a retriever: a
+    pseudo-relevance-feedback (PRF) centroid is built from the SPECTER2 vectors of the
+    top text-ranked seed docs, every candidate doc is scored by cosine similarity to that
+    centroid, and the relatedness is multiplicatively blended into the text fusion score
+    (the same text-primary blend the citation arm uses, so query relevance stays the
+    backbone and SPECTER2 only re-orders comparably-relevant docs). ``alpha=0`` is a
+    byte-identical no-op vs plain hybrid. Degrades to plain hybrid when the SPECTER2 store
+    is absent or no candidate has a vector. Tunable via GRAPH_RAG_SPECTER_ALPHA.
+    """
+
+    name: str = "hybrid_specter_prf"
+    seed_docs: int = 5
+    pool: int = 120
+    alpha: float = float(os.getenv("GRAPH_RAG_SPECTER_ALPHA", "0.5"))
+    requires_llm: bool = False
+    requires_cloud_cost: bool = False
+
+    def run(self, case: EvalCase, *, embed_profile: str, top: int = 20) -> list[dict[str, Any]]:
+        from graph_layout_rag.citation_store import connect, specter2_for_doc
+        from graph_layout_rag.paths import CITATIONS_DB_PATH
+        from graph_layout_rag.query.retrieve import retrieve_candidates
+        from graph_layout_rag.query.search import format_results
+
+        candidates = retrieve_candidates(
+            case.query,
+            top=top,
+            embed_profile=embed_profile,
+            hybrid=True,
+            filters=_filters(case, use_category=False, use_pdf_only=False),
+            pool=self.pool,
+        )
+        if not candidates or self.alpha <= 0.0 or not CITATIONS_DB_PATH.exists():
+            return format_results(candidates, top=top, max_per_doc=2)
+
+        db = connect()
+        try:
+            # Seeds = the top distinct docs from the text ranking (PRF).
+            seen: set[str] = set()
+            seeds: list[str] = []
+            for row in candidates:
+                doc = row.get("doc_id")
+                if doc and doc not in seen:
+                    seen.add(doc)
+                    seeds.append(doc)
+                if len(seeds) >= self.seed_docs:
+                    break
+            seed_vecs = [v for v in (specter2_for_doc(db, d) for d in seeds) if v]
+            if not seed_vecs:
+                return format_results(candidates, top=top, max_per_doc=2)
+            centroid = _mean_unit(seed_vecs)
+
+            # SPECTER2 vectors are L2-normalized, so cosine == dot. ReLU keeps the
+            # multiplicative blend a non-negative boost (never a penalty).
+            cand_docs = {row.get("doc_id") for row in candidates if row.get("doc_id")}
+            sims: dict[str, float] = {}
+            for doc in cand_docs:
+                vec = specter2_for_doc(db, doc)
+                if vec:
+                    sims[doc] = max(0.0, _dot(centroid, vec))
+            if not sims:
+                return format_results(candidates, top=top, max_per_doc=2)
+
+            smax = max(sims.values()) or 1.0
+            for row in candidates:
+                base = row.get("fusion_score") or row.get("score") or 0.0
+                snorm = sims.get(row.get("doc_id"), 0.0) / smax
+                row["specter_norm"] = round(snorm, 4)
+                row["fusion_score"] = round(base * (1.0 + self.alpha * snorm), 6)
+            candidates.sort(key=lambda r: r["fusion_score"], reverse=True)
+            return format_results(candidates, top=top, max_per_doc=2)
+        finally:
+            db.close()
+
+
+def _dot(a: list[float], b: list[float]) -> float:
+    return math.fsum(x * y for x, y in zip(a, b))
+
+
+def _mean_unit(vecs: list[list[float]]) -> list[float]:
+    """Component-wise mean of unit vectors, re-normalized to unit length."""
+    dim = len(vecs[0])
+    acc = [0.0] * dim
+    for v in vecs:
+        for i in range(dim):
+            acc[i] += v[i]
+    norm = math.sqrt(math.fsum(x * x for x in acc)) or 1.0
+    return [x / norm for x in acc]
+
+
 def _filters(case: EvalCase, *, use_category: bool, use_pdf_only: bool) -> RetrieveFilters:
     return RetrieveFilters(
         category=case.category if use_category else None,
@@ -632,12 +727,16 @@ AGGREGATION_STRATEGIES: tuple[str, ...] = (
     "hybrid_agg_count",
 )
 
+# Experimental SPECTER2 paper-embedding re-rank arm (A/B only; not in the default run).
+SPECTER_STRATEGIES: tuple[str, ...] = ("hybrid_specter_prf",)
+
 ALL_STRATEGIES: tuple[str, ...] = (
     OFFLINE_STRATEGIES
     + LLM_STRATEGIES
     + CLOUD_STRATEGIES
     + EXPERIMENTAL_STRATEGIES
     + AGGREGATION_STRATEGIES
+    + SPECTER_STRATEGIES
 )
 
 
@@ -682,6 +781,7 @@ def strategy_registry() -> dict[str, RetrievalStrategy]:
         HybridAggregateStrategy("hybrid_deep", pool=200, aggregate="max"),
         HybridAggregateStrategy("hybrid_agg_sum3", pool=200, aggregate="sum_topk", topk=3),
         HybridAggregateStrategy("hybrid_agg_count", pool=200, aggregate="count_boost"),
+        SpecterPRFStrategy(),
     ]
     return {strategy.name: strategy for strategy in strategies}
 
