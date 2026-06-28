@@ -274,6 +274,47 @@ def in_corpus_citation_stats(
     }
 
 
+def in_corpus_neighbors(
+    doc_id: str,
+    graph: CitationGraph | None = None,
+    *,
+    limit: int = 25,
+) -> dict:
+    """In-corpus citation neighborhood for a doc, split by direction.
+
+    Returns ``{"builds_on": [...], "cited_by": [...]}`` where each list holds
+    ``{"doc_id", "oa_id", "cited_by_count"}`` for corpus papers linked to this
+    one. ``builds_on`` = papers it references that are also in the corpus
+    (out-edges, the lineage it stands on); ``cited_by`` = corpus papers that
+    cite it (in-edges, where it led). Both exclude self-loops and non-corpus
+    endpoints, are sorted by global cited-by descending, and capped at ``limit``.
+
+    Returns ``{}`` when there is no citation store, or zeroed lists when the doc
+    isn't a graph node — mirroring ``in_corpus_citation_stats``' graceful shape.
+    """
+    g = graph if graph is not None else load_graph_cached()
+    if g is None:
+        return {}
+    empty = {"builds_on": [], "cited_by": []}
+    oa = g.doc_to_oa.get(doc_id)
+    if oa is None:
+        return empty
+
+    def _resolve(oa_ids: set[str]) -> list[dict]:
+        items = [
+            {"doc_id": g.oa_to_doc[x], "oa_id": x, "cited_by_count": g.cbc.get(x, 0)}
+            for x in oa_ids
+            if x != oa and x in g.oa_to_doc
+        ]
+        items.sort(key=lambda e: e["cited_by_count"], reverse=True)
+        return items[:limit]
+
+    return {
+        "builds_on": _resolve(g.out_adj.get(oa, set())),
+        "cited_by": _resolve(g.in_adj.get(oa, set())),
+    }
+
+
 @dataclass
 class RelatedResult:
     doc_id: str

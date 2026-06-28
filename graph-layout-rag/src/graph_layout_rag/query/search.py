@@ -154,7 +154,48 @@ def format_results(
         if len(out) >= top:
             break
 
+    _flag_seminal(out)
     return out
+
+
+def _flag_seminal(entries: list[dict[str, Any]]) -> None:
+    """Mark the single most in-corpus-cited result as a ``seminal`` entry point.
+
+    Research-tool navigation hint (NOT a ranking change): among the returned
+    results, the one cited most often *by other corpus papers* is the natural
+    place to start reading. Independent of the result ordering; no-op when no
+    result has any in-corpus citers.
+    """
+    best: dict[str, Any] | None = None
+    best_n = 0
+    for entry in entries:
+        n = entry.get("in_corpus_cited_by_count") or 0
+        if n > best_n:
+            best, best_n = entry, n
+    if best is not None:
+        best["seminal"] = True
+
+
+# Research-tool explicit sort: user-driven re-ordering of the result set. This is
+# distinct from the (eval-NULL) citation ranking prior — it never blends into the
+# relevance score; it just lets a researcher say "show these by citation count".
+_SORT_KEYS = {
+    "cited-by": "cited_by_count",
+    "in-corpus-cited-by": "in_corpus_cited_by_count",
+}
+
+
+def sort_results(entries: list[dict[str, Any]], by: str | None) -> list[dict[str, Any]]:
+    """Return ``entries`` re-ordered by an explicit sort key.
+
+    ``relevance`` (or ``None``) preserves retrieval order. ``cited-by`` /
+    ``in-corpus-cited-by`` sort by the respective count descending; the sort is
+    stable, so ties keep their relevance order. Missing counts sort as 0.
+    """
+    key = _SORT_KEYS.get(by or "relevance")
+    if key is None:
+        return entries
+    return sorted(entries, key=lambda e: e.get(key) or 0, reverse=True)
 
 
 def retrieve_hyde_candidates(

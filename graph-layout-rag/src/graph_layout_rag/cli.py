@@ -149,6 +149,73 @@ def cite_stats_cmd() -> None:
     db.close()
 
 
+@cite_group.command("neighbors")
+@click.argument("doc_id")
+@click.option(
+    "--direction",
+    type=click.Choice(["both", "builds-on", "cited-by"]),
+    default="both",
+    show_default=True,
+    help="builds-on = in-corpus papers this one references (its lineage); "
+    "cited-by = in-corpus papers that cite it (where it led).",
+)
+@click.option("--limit", default=15, show_default=True, type=click.IntRange(min=1))
+@click.option("--json", "as_json", is_flag=True, help="Emit JSON for LLM agents.")
+def cite_neighbors_cmd(doc_id: str, direction: str, limit: int, as_json: bool) -> None:
+    """Walk the in-corpus citation neighborhood of a document.
+
+    A research-tool navigation aid: trace what a paper builds on and what built
+    on it, within the harvested corpus.
+    """
+    from graph_layout_rag.query.citation_rank import in_corpus_neighbors, load_graph_cached
+    from graph_layout_rag.query.search import _manifest_by_doc
+
+    graph = load_graph_cached()
+    if graph is None:
+        click.echo("No citation store yet. Run: graph-layout-rag cite enrich", err=True)
+        sys.exit(1)
+    nb = in_corpus_neighbors(doc_id, graph, limit=limit)
+    if not nb:
+        click.echo("No citation store yet. Run: graph-layout-rag cite enrich", err=True)
+        sys.exit(1)
+
+    manifest_by_doc = _manifest_by_doc()
+
+    def _title(d: str) -> str:
+        item = manifest_by_doc.get(d)
+        return (getattr(item, "title", None) or d) if item else d
+
+    sections = []
+    if direction in ("both", "builds-on"):
+        sections.append(("builds_on", "Builds on (references in corpus)"))
+    if direction in ("both", "cited-by"):
+        sections.append(("cited_by", "Cited by (in corpus)"))
+
+    if as_json:
+        payload = {
+            "doc_id": doc_id,
+            **{
+                key: [{**n, "title": _title(n["doc_id"])} for n in nb.get(key, [])]
+                for key, _ in sections
+            },
+        }
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    in_oa = doc_id in graph.doc_to_oa
+    if not in_oa:
+        click.echo(f"{doc_id} is not a node in the citation graph (no in-corpus links).")
+        return
+    for key, label in sections:
+        rows = nb.get(key, [])
+        click.echo(f"{label}: {len(rows)}")
+        for n in rows:
+            click.echo(f"   [{n['cited_by_count']:>5} cites] {_title(n['doc_id'])}  ({n['doc_id']})")
+        if not rows:
+            click.echo("   (none)")
+        click.echo()
+
+
 @cite_group.command("embed-related")
 @click.option(
     "--model",
@@ -453,6 +520,16 @@ def route_cmd(text: str) -> None:
     "0.0 = OFF (ranking byte-identical to no prior); small values (~0.01-0.05) "
     "nudge well-cited/recent papers up without dominating the fusion scores.",
 )
+@click.option(
+    "--sort",
+    "sort_by",
+    type=click.Choice(["relevance", "cited-by", "in-corpus-cited-by"]),
+    default="relevance",
+    show_default=True,
+    help="Explicit re-order of the result set (research-tool sort, not a ranking "
+    "prior): cited-by = global citation count; in-corpus-cited-by = citers within "
+    "this corpus. Relevance keeps retrieval order.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON for LLM agents.")
 def query_cmd(
     text: str,
@@ -474,6 +551,7 @@ def query_cmd(
     sparse_weight: float,
     dense_weight: float,
     citation_prior_weight: float,
+    sort_by: str,
     as_json: bool,
 ) -> None:
     """Semantic search over the graph layout corpus."""
@@ -508,6 +586,11 @@ def query_cmd(
     except ValueError as exc:
         click.echo(str(exc), err=True)
         sys.exit(1)
+
+    if sort_by != "relevance":
+        from graph_layout_rag.query.search import sort_results
+
+        results = sort_results(results, sort_by)
     payload = {"query": text, "results": results}
 
     if as_json:
@@ -521,7 +604,8 @@ def query_cmd(
     for i, r in enumerate(results, 1):
         page = f" p.{r['page']}" if r.get("page") else ""
         retracted = "  ⚠ RETRACTED" if r.get("is_retracted") else ""
-        click.echo(f"{i}. [{r['score']}] {r['title']}{page}{retracted}")
+        seminal = "  ★ seminal (most-cited here)" if r.get("seminal") else ""
+        click.echo(f"{i}. [{r['score']}] {r['title']}{page}{retracted}{seminal}")
         click.echo(f"   {r['source_url']}")
         if r.get("tldr"):
             click.echo(f"   TLDR: {r['tldr']}")
