@@ -25,6 +25,7 @@ never exercised in tests — the provider entry points are monkeypatched.
 
 from __future__ import annotations
 
+import os
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
@@ -158,13 +159,54 @@ def _oa_request(kind: str, value: str):
         # too — so DOI-bearing items resolved at ~4% vs ~92% for no-DOI items.
         url = f"{OPENALEX_API}/doi:{value}"
         params = {"mailto": _MAILTO}
+        operation = "singleton"
     elif kind == "oaid":
         url = f"{OPENALEX_API}/{value}"
         params = {"mailto": _MAILTO}
+        operation = "singleton"
     else:  # search
         url = OPENALEX_API
-        params = {"search": value, "per_page": "1", "mailto": _MAILTO}
-    return OPENALEX.request("GET", url, params=params, timeout=30.0)
+        # Pull a few candidates so the title-match guard can pick the right
+        # paper even when it isn't OpenAlex's top lexical hit.
+        params = {"search": value, "per_page": "5", "mailto": _MAILTO}
+        operation = "search"
+    # Route through request_openalex so the API-key pool (+ auto-rotation on
+    # budget exhaustion) and the per-key spend reservation apply. Calling the
+    # bare .request() here sent every enrich lookup to the *unauthenticated*
+    # polite pool — which OpenAlex now meters to "$0, resets midnight UTC" —
+    # so title-searches failed transient and keys were never actually used.
+    return OPENALEX.request_openalex(
+        "GET", url, operation=operation, params=params, timeout=30.0
+    )
+
+
+def _norm_title(s: str | None) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", (s or "").lower()).strip()
+
+
+def _title_jaccard(a: str | None, b: str | None) -> float:
+    A, B = set(_norm_title(a).split()), set(_norm_title(b).split())
+    if not A or not B:
+        return 0.0
+    return len(A & B) / len(A | B)
+
+
+# Minimum normalized-title token overlap to TRUST an OpenAlex *title-search*
+# hit. Search returns the closest lexical match, which for a no-DOI item is
+# frequently a different paper entirely (e.g. "Crossing Minimization in k-layer
+# graphs" → the LeNet paper). Accepting it would inject a wrong venue / fwci /
+# cited-by into the filter columns — worse than leaving them NULL — so weak
+# matches are rejected (the item becomes a terminal miss, not enriched).
+_OA_TITLE_MATCH_MIN = float(os.getenv("GRAPH_RAG_OA_TITLE_MATCH_MIN", "0.8"))
+
+
+def _best_search_match(query: str, results: list[dict]) -> dict | None:
+    best, best_score = None, 0.0
+    for cand in results:
+        score = _title_jaccard(query, cand.get("display_name"))
+        if score > best_score:
+            best, best_score = cand, score
+    return best if best_score >= _OA_TITLE_MATCH_MIN else None
 
 
 def _fetch_openalex(item: ManifestItem) -> _ProviderHit:
@@ -175,9 +217,9 @@ def _fetch_openalex(item: ManifestItem) -> _ProviderHit:
             work = outcome.data
             if kind == "search":
                 results = (work or {}).get("results") or []
-                if not results:
-                    continue
-                work = results[0]
+                work = _best_search_match(value, results)
+                if work is None:
+                    continue  # no trustworthy title match — keep looking / give up
             return _ProviderHit(data=_extract_openalex(work))
         if outcome.kind not in (OutcomeKind.SUCCESS, OutcomeKind.TERMINAL_MISS):
             transient = True

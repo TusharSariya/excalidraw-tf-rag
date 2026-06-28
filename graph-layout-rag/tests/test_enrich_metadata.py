@@ -180,9 +180,10 @@ def test_doi_absent_uses_arxiv_and_title_fallback(env, monkeypatch):
 
     def oa_request(method, url, *, params=None, **kw):
         seen_lookups.append((url, params))
-        # arxiv-DOI form misses; the title-search fallback resolves
+        # arxiv-DOI form misses; the title-search fallback resolves to a work
+        # whose display_name matches the item title (so the guard accepts it).
         if (params or {}).get("search"):
-            return _ok({"results": [dict(_FULL_WORK)]})
+            return _ok({"results": [{**_FULL_WORK, "display_name": "Title a"}]})
         return _miss()
 
     monkeypatch.setattr(em.OPENALEX, "request", oa_request)
@@ -195,6 +196,42 @@ def test_doi_absent_uses_arxiv_and_title_fallback(env, monkeypatch):
     joined = " ".join(u for u, _ in seen_lookups).lower()
     assert "arxiv" in joined
     assert any((p or {}).get("search") for _, p in seen_lookups)
+
+
+def test_title_search_rejects_wrong_paper(env, monkeypatch):
+    # No DOI; title-search returns a *different* paper (low title overlap).
+    # The guard must reject it — no row written, item left for retry — rather
+    # than inject a wrong venue/fwci/cited-by into the filter columns.
+    env.write([_item("a")])  # title "Title a"
+
+    def oa_request(method, url, *, params=None, **kw):
+        if (params or {}).get("search"):
+            return _ok({"results": [{**_FULL_WORK, "display_name": "Totally Unrelated Paper About Astrophysics"}]})
+        return _miss()
+
+    monkeypatch.setattr(em.OPENALEX, "request", oa_request)
+    monkeypatch.setattr(em.SEMANTIC_SCHOLAR, "request", lambda *a, **k: _ok([None]))
+    monkeypatch.setattr(em, "_arxiv_query", lambda ids: None)
+
+    stats = em.enrich_metadata(workers=1)
+    assert stats["enriched"] == 0
+    assert stats["terminal_miss"] == 1  # all lookups exhausted, no trustworthy match
+
+
+def test_title_jaccard_and_best_match_threshold():
+    assert em._title_jaccard("Crossing Minimization in k-layer graphs",
+                             "Crossing Minimization in k-layer graphs") == 1.0
+    # LeNet-style garbage hit is well below threshold
+    assert em._title_jaccard("Crossing Minimization in k-layer graphs",
+                             "Gradient-based learning applied to document recognition") < 0.2
+    results = [
+        {"display_name": "Gradient-based learning applied to document recognition"},
+        {"display_name": "Crossing Minimization in K-Layer Graphs"},  # right one, not first
+    ]
+    best = em._best_search_match("Crossing Minimization in k-layer graphs", results)
+    assert best is not None and "Crossing" in best["display_name"]
+    assert em._best_search_match("Crossing Minimization in k-layer graphs",
+                                 results[:1]) is None  # only garbage → reject
 
 
 def test_arxiv_extractor_categories(env, monkeypatch):
