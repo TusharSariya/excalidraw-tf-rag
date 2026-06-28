@@ -115,6 +115,35 @@ Set `OPENALEX_API_KEY` in `.env`. Optional overrides include `GRAPH_RAG_OPENALEX
 
 **Query tags:** `layer-assignment`, `compound`, `constraints`, `compaction`, `packing`, `overlap`, `elk`, `sugiyama`, `crossing`, `grouped`, `ports`, `research-thread`
 
+### Metadata enrichment
+
+Backfill research metadata (for triage/trust/cite, filters, and a citation prior) from OpenAlex (`/works/doi:` + title/arXiv fallback), Semantic Scholar `/paper/batch`, and the arXiv API:
+
+```bash
+yarn graph-rag:harvest -- enrich-metadata --workers 8 -v
+uv run graph-layout-rag harvest enrich-metadata --dry-run        # preview, no writes
+uv run graph-layout-rag harvest enrich-metadata --force --limit 100
+```
+
+It writes a `papers_meta` table + a `doc_specter2` table (precomputed SPECTER2 vectors) into `data/citations.sqlite`, plus filter fields onto `data/manifest.json`. **Resumable:** re-run without `--force` to skip rows already present and retry rate-limit-deferred items.
+
+**Surfaced on query results** (additively, in both JSON and human render, when available; degrades gracefully when a doc isn't enriched): `tldr`, `fwci`, `venue`, `genre`, `is_retracted` (⚠ marker), `cited_by_count`, `in_corpus_cited_by_count`, `oa_pdf_url`, `bibtex`. Print a BibTeX entry directly with:
+
+```bash
+uv run graph-layout-rag cite bibtex gansner-tse93
+```
+
+**New query filter flags** — `--venue`, `--arxiv-category`, `--genre`, `--exclude-retracted`, and a rank-time `--citation-prior-weight FLOAT` (default `0.0` = OFF, eval-gated):
+
+```bash
+uv run graph-layout-rag query "orthogonal drawing" --venue JGAA --exclude-retracted --json
+uv run graph-layout-rag query "crossing minimization" --arxiv-category cs.DS --json
+```
+
+New manifest **filter-only** index columns (`venue`, `arxiv_category`, `genre`, `venue_type`, `oa_version`, `is_retracted`) are real pre-filters (LanceDB `WHERE prefilter=True` on the dense side; indexed Tantivy fields on the sparse side) — **not** embedded (embedding metadata is A/B-NULL on this corpus). **The filter columns require an index `ingest --force --rebuild`** to take effect on the live index (the schema gains columns); that rebuild is pending. Surfacing (tldr/cited-by/bibtex) needs no rebuild — it joins `papers_meta`/manifest at query time.
+
+`citations.sqlite` (with `papers_meta`) syncs to the desktop via `scripts/gpu_sync_to_remote.sh` (WAL-checkpointed; `RAG_SYNC_CITATIONS=0` to skip). Query-time surfacing on the desktop NL/4B path needs this synced.
+
 ### Ingest
 
 Extracts Markdown-aware structural blocks, targets ~800-token chunks (1200 hard max) with complete-paragraph overlap, deduplicates identical PDFs by SHA-256, then embeds and indexes LanceDB + BM25 under `data/indexes/{profile}/`.
