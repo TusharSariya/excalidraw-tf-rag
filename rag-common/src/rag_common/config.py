@@ -54,6 +54,33 @@ def use_cuda_bnb_4bit(config: EmbedConfig | None = None) -> bool:
     except ImportError:
         return False
 
+
+def resolved_embed_backend(
+    config: "EmbedConfig | None" = None, *, model_name: str | None = None
+) -> str:
+    """Concrete embed backend AS RESOLVED ON THIS HOST.
+
+    The profile ``backend`` field is "local" for every Qwen rung regardless of whether
+    MLX (Apple Silicon) or bitsandbytes (CUDA) actually runs, so two different quant
+    stacks share a profile name. This returns a host-specific tag (``mlx-q4`` vs
+    ``cuda-bnb-4bit``) so a query host can be matched against the host that BUILT an
+    index (HG1): scoring MLX-quant queries against bnb-quant docs is silent garbage
+    that the existing model/dims/quant check does NOT catch (it sees "local"/"4bit" on
+    both sides). Host-dependent by design — the same config yields ``mlx-q4`` on a Mac
+    and ``cuda-bnb-4bit`` on a CUDA box.
+    """
+    model = model_name if model_name is not None else (config.model if config else "")
+    if use_mlx_q4_embed(model, config):
+        return "mlx-q4"
+    if use_cuda_bnb_4bit(config):
+        return "cuda-bnb-4bit"
+    backend = config.backend if config else "unknown"
+    quant = local_embed_quant(config)
+    if backend == "local":
+        return f"local-{quant}" if quant else "local-fp"
+    return backend
+
+
 EmbedBackend = Literal["openai", "local", "gemini"]
 LocalEmbedMode = Literal["query", "document"]
 
@@ -76,6 +103,7 @@ LOCAL_MODEL_DIMS: dict[str, int] = {
     "BAAI/bge-large-en-v1.5": 1024,
     "nomic-ai/nomic-embed-text-v1.5": 768,
     "nomic-ai/nomic-embed-text-v2-moe": 768,
+    "jinaai/jina-embeddings-v3": 1024,
 }
 
 

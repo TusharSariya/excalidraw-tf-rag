@@ -62,6 +62,8 @@ def _model_family(model_name: str) -> str:
     lower = model_name.lower()
     if "qwen" in lower and "embedding" in lower:
         return "qwen3"
+    if "jina-embeddings" in lower:
+        return "jina"
     if "nomic-embed" in lower:
         return "nomic"
     if "bge-m3" in lower or "bge-m" in lower:
@@ -71,11 +73,22 @@ def _model_family(model_name: str) -> str:
     return "generic"
 
 
+def _jina_task(mode: LocalEmbedMode) -> str:
+    """jina-embeddings-v3 selects its retrieval LoRA adapter via the `task` kwarg
+    (text prefixes are NOT used — the adapter handles query/passage asymmetry)."""
+    return "retrieval.query" if mode == "query" else "retrieval.passage"
+
+
 def _prepare_texts(texts: list[str], *, model_name: str, mode: LocalEmbedMode) -> list[str]:
     if _model_family(model_name) == "nomic":
         prefix = "search_query: " if mode == "query" else "search_document: "
         return [prefix + t for t in texts]
+    # jina-v3 uses task adapters (applied at encode time), not text prefixes.
     return texts
+
+
+def _needs_trust_remote_code(model_name: str) -> bool:
+    return _model_family(model_name) == "jina"
 
 
 def _base_model_kwargs(model_name: str) -> dict:
@@ -149,6 +162,7 @@ def _load_sentence_transformer(
     bnb_4bit: bool,
 ) -> SentenceTransformer:
     mk = _base_model_kwargs(model_name)
+    trc = _needs_trust_remote_code(model_name)
     if bnb_4bit:
         bnb_kwargs = _bnb_4bit_model_kwargs()
         if bnb_kwargs is not None:
@@ -159,13 +173,17 @@ def _load_sentence_transformer(
                 log.warning("4-bit load failed for %s (%s); falling back to FP16", model_name, exc)
 
     log.info(
-        "loading local embed model %s device=%s",
+        "loading local embed model %s device=%s trust_remote_code=%s",
         model_name,
         device or "default",
+        trc,
     )
+    st_kwargs: dict = {}
     if mk:
-        return SentenceTransformer(model_name, model_kwargs=mk, device=device)
-    return SentenceTransformer(model_name, device=device)
+        st_kwargs["model_kwargs"] = mk
+    if trc:
+        st_kwargs["trust_remote_code"] = True
+    return SentenceTransformer(model_name, device=device, **st_kwargs)
 
 
 def _get_model_for_config(config: EmbedConfig) -> SentenceTransformer:
@@ -237,6 +255,11 @@ def embed_local_texts(
         native = LOCAL_MODEL_DIMS.get(config.model, config.dimensions)
         if 0 < config.dimensions < native:
             encode_kwargs["truncate_dim"] = config.dimensions
+    if family == "jina":
+        encode_kwargs["task"] = _jina_task(mode)
+        native = LOCAL_MODEL_DIMS.get(config.model, config.dimensions)
+        if 0 < config.dimensions < native:
+            encode_kwargs["truncate_dim"] = config.dimensions
 
     all_vectors: list[list[float]] = []
     total = len(prepared)
@@ -273,3 +296,123 @@ def embed_local_texts(
         stats.add(tokens=len(texts), requests=max(1, (total + encode_chunk - 1) // encode_chunk))
 
     return all_vectors
+
+
+# --------------------------------------------------------------------------
+# Late chunking (additive; used only by latechunk-named profiles).
+#
+# Real (Jina-style) late chunking: embed a long window once to get token-level
+# embeddings that carry cross-chunk context, then mean-pool each chunk's token
+# span. `pool_span` is the pure-math core (no model load); the math is unit-
+# tested with synthetic vectors. `embed_local_texts_with_tokens` is the model
+# path. NEITHER touches the existing embed_local_texts behavior.
+# --------------------------------------------------------------------------
+
+
+def pool_span(
+    token_vectors,
+    offsets: list[tuple[int, int]],
+    char_start: int,
+    char_end: int,
+    *,
+    method: str = "mean",
+    target_dim: int | None = None,
+) -> list[float]:
+    """Pool the token vectors whose char span intersects [char_start, char_end).
+
+    - Skips special/padding tokens (zero-length offset spans, e.g. (0, 0)).
+    - Falls back to all real tokens if the span selects none (defensive).
+    - Matryoshka-truncates to ``target_dim`` when it is smaller than native.
+    - L2-normalizes (guarding against a zero vector).
+
+    Pure NumPy; importable and testable without loading any model.
+    """
+    import numpy as np
+
+    arr = np.asarray(token_vectors, dtype=np.float32)
+    if arr.ndim != 2 or arr.shape[0] == 0:
+        return []
+    n = min(arr.shape[0], len(offsets))
+    arr = arr[:n]
+    offs = offsets[:n]
+
+    real = [i for i, (s, e) in enumerate(offs) if e > s]
+    selected = [i for i in real if offs[i][0] < char_end and offs[i][1] > char_start]
+    if not selected:
+        selected = real or list(range(n))
+
+    sub = arr[selected]
+    if method == "max":
+        pooled = sub.max(axis=0)
+    else:  # mean (default)
+        pooled = sub.mean(axis=0)
+
+    if target_dim is not None and 0 < target_dim < pooled.shape[0]:
+        pooled = pooled[:target_dim]
+
+    norm = float(np.linalg.norm(pooled))
+    if norm > 0:
+        pooled = pooled / norm
+    return pooled.astype(np.float32).tolist()
+
+
+def embed_local_texts_with_tokens(
+    texts: list[str],
+    *,
+    config: EmbedConfig,
+    mode: LocalEmbedMode = "document",
+) -> list[tuple[list[list[float]], list[tuple[int, int]]]]:
+    """Return per-text (token_embeddings, char_offset_spans) for late chunking.
+
+    Token embeddings come from SentenceTransformer.encode(output_value=
+    "token_embeddings"); char offsets come from the fast tokenizer with
+    return_offsets_mapping=True (special tokens get (0, 0) and are skipped by
+    pool_span). Lengths are aligned defensively to the shorter of the two.
+    """
+    if not texts:
+        return []
+
+    model = _get_model_for_config(config)
+    # CRITICAL for real late chunking: do NOT clamp to MAX_EMBED_CHARS (3000) here —
+    # that would shrink a 20k-char window down to ~one chunk and defeat the whole
+    # point (cross-chunk context). Cap generously at the model's token budget
+    # (chars ≈ max_seq_length * ~5) and let the tokenizer truncate precisely.
+    max_len = getattr(model, "max_seq_length", None) or 512
+    window_char_cap = max(MAX_EMBED_CHARS, max_len * 5)
+    prepared = [
+        t[:window_char_cap] if len(t) > window_char_cap else t
+        for t in _prepare_texts(texts, model_name=config.model, mode=mode)
+    ]
+    device = resolve_local_embed_device(config.model)
+    batch_size = _local_batch_size(device)
+
+    encode_kwargs: dict = {
+        "output_value": "token_embeddings",
+        "batch_size": batch_size,
+        "show_progress_bar": False,
+    }
+    if _model_family(config.model) == "jina":
+        encode_kwargs["task"] = _jina_task(mode)
+    tok_emb = model.encode(prepared, **encode_kwargs)
+    out: list[tuple[list[list[float]], list[tuple[int, int]]]] = []
+    for text, emb in zip(prepared, tok_emb):
+        try:
+            enc = model.tokenizer(
+                text,
+                return_offsets_mapping=True,
+                truncation=True,
+                max_length=max_len,
+            )
+            offsets = [tuple(o) for o in enc.get("offset_mapping", [])]
+        except Exception as exc:  # noqa: BLE001 — degrade to no offsets
+            log.warning("offset mapping failed (%s); chunk spans will use full window", exc)
+            offsets = []
+        try:
+            vecs = emb.tolist()
+        except AttributeError:
+            vecs = [list(v) for v in emb]
+        if offsets and len(offsets) != len(vecs):
+            n = min(len(offsets), len(vecs))
+            vecs, offsets = vecs[:n], offsets[:n]
+        out.append((vecs, offsets))
+    return out

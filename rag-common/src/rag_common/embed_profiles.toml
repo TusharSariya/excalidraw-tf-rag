@@ -43,6 +43,14 @@ model = "Qwen/Qwen3-Embedding-0.6B"
 dimensions = 1024
 quant = "4bit"
 
+# Apple-Silicon MLX 4-bit ladder, 8B rung (maps to mlx-community/Qwen3-Embedding-8B-4bit-DWQ).
+# Held at 1024 dims to match mlx-qwen0.6b / mlx-qwen4b for an apples-to-apples MLX ladder.
+[profiles."mlx-qwen8b"]
+backend = "local"
+model = "Qwen/Qwen3-Embedding-8B"
+dimensions = 1024
+quant = "4bit"
+
 [profiles.local-fp16-qwen4b]
 backend = "local"
 model = "Qwen/Qwen3-Embedding-4B"
@@ -129,3 +137,49 @@ backend = "local"
 model = "Qwen/Qwen3-Embedding-4B"
 dimensions = 2560
 quant = "4bit"
+
+# Qwen3-4B CUDA 4-bit + local-LLM contextual retrieval (the 2026-06-27 campaign
+# challenger to the 0.6B-contextual champion). Name contains "contextual" so
+# ingest/contextual.py augments embed/BM25 text; reuses the embedder-agnostic
+# contextual_cache.json from the 0.6B build (cache key is LLM backend:model, not
+# the embedder) so Ollama barely runs during the 4B embed pass (8 GB OOM lever).
+# Requires bitsandbytes on the CUDA box or the 4-bit load falls back to FP16/OOM.
+[profiles."cuda-qwen4b-contextual-v1"]
+backend = "local"
+model = "Qwen/Qwen3-Embedding-4B"
+dimensions = 1024
+quant = "4bit"
+
+# Qwen3-4B CUDA 4-bit, REAL late chunking (name contains "latechunk" → gated via
+# ingest/latechunk.is_latechunk_profile). The window is embedded once at token
+# level and each chunk vector is a mean-pool of its token span (see
+# ingest/latechunk.py, rag_common.local_embed.pool_span). Embedding the window
+# at native dim then Matryoshka-truncating to 1024.
+[profiles."cuda-qwen4b-latechunk-v1"]
+backend = "local"
+model = "Qwen/Qwen3-Embedding-4B"
+dimensions = 1024
+quant = "4bit"
+
+[profiles."cuda-qwen8b-1024"]
+backend = "local"
+model = "Qwen/Qwen3-Embedding-8B"
+dimensions = 1024
+quant = "4bit"
+
+# jina-embeddings-v3: mean-pooled, bidirectional, 8192-ctx encoder — the model
+# class late chunking was DESIGNED for (contrast Qwen3's causal/last-token pooling,
+# where late chunking was a NULL). FP16 on CUDA (~570M params, no quant needed).
+# Native 1024 dims. Task adapters (retrieval.passage/query) applied at encode time.
+[profiles."jina-v3-1024"]
+backend = "local"
+model = "jinaai/jina-embeddings-v3"
+dimensions = 1024
+
+# Same jina-v3 encoder, REAL late chunking (name contains "latechunk" → gated via
+# ingest/latechunk.is_latechunk_profile). The A/B partner to jina-v3-1024: isolates
+# the late-chunking TECHNIQUE on the model it was built for.
+[profiles."jina-v3-latechunk-v1"]
+backend = "local"
+model = "jinaai/jina-embeddings-v3"
+dimensions = 1024
