@@ -218,6 +218,64 @@ class OpenAlexPolicy(ProviderPolicy):
         super().__init__("openalex", **kwargs)
         self._daily_budget = _env_float("GRAPH_RAG_OPENALEX_FREE_BUDGET_USD", 1.0)
         self.metrics.budget_remaining_usd = self._daily_budget
+        # Multi-key rotation: keys are tried in order; a key is retired for the
+        # life of the process once OpenAlex reports its budget exhausted (a 429
+        # with a multi-hour Retry-After) or it trips our client-side spend cap.
+        self._depleted_keys: set[str] = set()
+        self._key_lock = threading.Lock()
+
+    @staticmethod
+    def _all_keys() -> list[str]:
+        """Ordered, de-duplicated API keys from env.
+
+        Reads ``OPENALEX_API_KEYS`` (comma-separated) first, then appends a
+        legacy single ``OPENALEX_API_KEY`` if not already present. Read at call
+        time so .env / monkeypatching is honoured, mirroring the prior behaviour.
+        """
+        keys: list[str] = []
+        for raw in (os.getenv("OPENALEX_API_KEYS") or "").split(","):
+            k = raw.strip()
+            if k and k not in keys:
+                keys.append(k)
+        single = (os.getenv("OPENALEX_API_KEY") or "").strip()
+        if single and single not in keys:
+            keys.append(single)
+        return keys
+
+    def _current_key(self) -> str | None:
+        with self._key_lock:
+            for k in self._all_keys():
+                if k not in self._depleted_keys:
+                    return k
+            return None
+
+    def _mark_depleted(self, key: str) -> tuple[bool, bool]:
+        """Retire ``key``. Returns ``(newly_retired, more_keys_remain)``."""
+        with self._key_lock:
+            newly = key not in self._depleted_keys
+            self._depleted_keys.add(key)
+            more = any(k not in self._depleted_keys for k in self._all_keys())
+            return newly, more
+
+    def _reset_budget(self) -> None:
+        """Restore the per-key client-side spend allowance after a rotation.
+
+        ``budget_used_usd`` keeps accumulating as a lifetime total for reporting;
+        only the remaining allowance is refreshed for the next key.
+        """
+        with self._lock:
+            self.metrics.budget_remaining_usd = self._daily_budget
+
+    @staticmethod
+    def _is_key_depletion(outcome: RequestOutcome) -> bool:
+        # Client-side spend cap, or OpenAlex's "Insufficient budget. Resets at
+        # midnight UTC" — surfaced as a 429 with a multi-hour Retry-After
+        # (request() returns RATE_LIMITED with retry_after > 60 for that case).
+        if outcome.kind is OutcomeKind.BUDGET_EXHAUSTED:
+            return True
+        if outcome.kind is OutcomeKind.RATE_LIMITED and (outcome.retry_after or 0) > 60:
+            return True
+        return False
 
     def reserve(self, operation: str) -> bool:
         cost = self.COSTS[operation]
@@ -237,17 +295,30 @@ class OpenAlexPolicy(ProviderPolicy):
         params: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> RequestOutcome:
-        params = dict(params or {})
-        api_key = os.getenv("OPENALEX_API_KEY")
-        if api_key:
-            params["api_key"] = api_key
-        return self.request(
-            method,
-            url,
-            params=params,
-            before_attempt=lambda: self.reserve(operation),
-            **kwargs,
-        )
+        base_params = dict(params or {})
+        while True:
+            key = self._current_key()
+            attempt_params = dict(base_params)
+            if key:
+                attempt_params["api_key"] = key
+            outcome = self.request(
+                method,
+                url,
+                params=attempt_params,
+                before_attempt=lambda: self.reserve(operation),
+                **kwargs,
+            )
+            if key is not None and self._is_key_depletion(outcome):
+                newly, more = self._mark_depleted(key)
+                if more:
+                    if newly:
+                        self._reset_budget()
+                        get_logger().warning(
+                            "openalex key exhausted (…%s); rotating to next key",
+                            key[-4:],
+                        )
+                    continue
+            return outcome
 
 
 _clients = threading.local()
