@@ -17,7 +17,17 @@ class _FakeContext:
 
 
 def _patch_common(monkeypatch, calls):
-    def fake_rrf(dense, sparse, *, top=30, rrf_k=20, dense_weight=DENSE_WEIGHT, sparse_weight=SPARSE_WEIGHT):
+    def fake_rrf(
+        dense,
+        sparse,
+        *,
+        top=30,
+        rrf_k=20,
+        dense_weight=DENSE_WEIGHT,
+        sparse_weight=SPARSE_WEIGHT,
+        citation_prior_weight=0.0,
+        citation_graph=None,
+    ):
         calls.append({"dense_weight": dense_weight, "sparse_weight": sparse_weight})
         return [{"id": "x:0", "score": 1.0}]
 

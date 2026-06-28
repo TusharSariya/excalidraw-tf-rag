@@ -444,6 +444,15 @@ def route_cmd(text: str) -> None:
     show_default=True,
     help="Dense (vector) weight in RRF fusion.",
 )
+@click.option(
+    "--citation-prior-weight",
+    type=float,
+    default=0.0,
+    show_default=True,
+    help="Blend a normalized citation/recency prior into RRF fusion (T7). "
+    "0.0 = OFF (ranking byte-identical to no prior); small values (~0.01-0.05) "
+    "nudge well-cited/recent papers up without dominating the fusion scores.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON for LLM agents.")
 def query_cmd(
     text: str,
@@ -464,6 +473,7 @@ def query_cmd(
     expand: str,
     sparse_weight: float,
     dense_weight: float,
+    citation_prior_weight: float,
     as_json: bool,
 ) -> None:
     """Semantic search over the graph layout corpus."""
@@ -493,6 +503,7 @@ def query_cmd(
             expand=expand,
             sparse_weight=sparse_weight,
             dense_weight=dense_weight,
+            citation_prior_weight=citation_prior_weight,
         )
     except ValueError as exc:
         click.echo(str(exc), err=True)

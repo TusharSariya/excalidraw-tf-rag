@@ -262,6 +262,7 @@ def search(
     expand: str = "off",
     dense_weight: float = DENSE_WEIGHT,
     sparse_weight: float = SPARSE_WEIGHT,
+    citation_prior_weight: float = 0.0,
 ) -> list[dict[str, Any]]:
     if category and category not in PIPELINE_CATEGORIES:
         raise ValueError(
@@ -289,6 +290,7 @@ def search(
         filters=filters,
         dense_weight=dense_weight,
         sparse_weight=sparse_weight,
+        citation_prior_weight=citation_prior_weight,
     )
     if expand == "force" or (
         expand == "auto" and _should_expand(query, candidates, pdf_only=pdf_only)
@@ -333,6 +335,7 @@ def search_raw(
     rrf_k: int = 20,
     dense_weight: float = DENSE_WEIGHT,
     sparse_weight: float = SPARSE_WEIGHT,
+    citation_prior_weight: float = 0.0,
     rerank_model: str | None = None,
 ) -> list[dict[str, Any]]:
     """Return formatted results for eval strategies (doc_id + score fields)."""
@@ -347,6 +350,7 @@ def search_raw(
         rrf_k=rrf_k,
         dense_weight=dense_weight,
         sparse_weight=sparse_weight,
+        citation_prior_weight=citation_prior_weight,
     )
     diverse = diversify_candidates(
         candidates,

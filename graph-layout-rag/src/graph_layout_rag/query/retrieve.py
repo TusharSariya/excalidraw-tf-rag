@@ -309,6 +309,8 @@ def retrieve_candidates(
     rrf_k: int = 20,
     dense_weight: float = DENSE_WEIGHT,
     sparse_weight: float = SPARSE_WEIGHT,
+    citation_prior_weight: float = 0.0,
+    citation_graph: Any | None = None,
 ) -> list[dict[str, Any]]:
     """Retrieve ranked chunk rows before reranking or JSON formatting."""
     filters = filters or RetrieveFilters()
@@ -338,6 +340,13 @@ def retrieve_candidates(
             index_dir=ctx.paths.bm25_dir,
             limit=pool,
         )
+        # T7: lazily load the citation graph only when the prior is actually on,
+        # so the default path pays nothing and stays byte-identical.
+        graph = citation_graph
+        if citation_prior_weight > 0.0 and graph is None:
+            from graph_layout_rag.query.citation_rank import load_graph_cached
+
+            graph = load_graph_cached()
         candidates = reciprocal_rank_fusion(
             dense_results,
             sparse_results,
@@ -345,6 +354,8 @@ def retrieve_candidates(
             rrf_k=rrf_k,
             dense_weight=dense_weight,
             sparse_weight=sparse_weight,
+            citation_prior_weight=citation_prior_weight,
+            citation_graph=graph,
         )
     else:
         candidates = dense_results
