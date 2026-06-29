@@ -5,7 +5,7 @@ Autonomous execution of the metadata-enrichment plan (`~/.claude/plans/humming-d
 ## Timeline
 
 | Time | Action | Type | Outcome / evidence |
-|------|--------|------|--------------------|
+| --- | --- | --- | --- |
 | ~09:30 | Plan approved (ExitPlanMode); created branch `graph-rag-metadata-enrichment`; set up tasks T1–T9; probed desktop GPU box (RTX 3060 Ti **reachable**); confirmed local pytest (405 tests) | setup | — |
 | ~09:31 | Recon subagent ground-truthed all plan anchor points (signatures, line numbers, reused utils) | investigate | all confirmed; found `ManifestItem.status` collision → renamed new field `oa_version` |
 | ~09:32 | **T4** — `gpu_sync_to_remote.sh`: dedicated WAL-checkpointed `citations.sqlite` transfer (was excluded by `data/*.sqlite`) | code | `bash -n` clean |
@@ -79,6 +79,7 @@ Autonomous execution of the metadata-enrichment plan (`~/.claude/plans/humming-d
 | ~17:53 | **Final E2E:** prefilter on enriched venues — JGAA **588 docs**, IEEE TVCG 233, OPUS Passau 4; is_retracted all 0 (no-op OK); arxiv_category 693 docs | verify-PASS | **tail enrichment + filter cols DONE** |
 
 ## Commits (10)
+
 ```
 c60e3f69f 09:35  P1 metadata enrichment — papers_meta store + query-time surfacing
 d8f151ebd 09:47  fix OpenAlex DOI lookup form (4% → working)
@@ -91,17 +92,15 @@ c89fac67a 17:0x  OpenAlex multi-key pool + auto-rotation on budget exhaustion
 a68fe50fa 17:18  enrich via keyed pool + Jaccard title-search match guard
 4b51dec62 17:37  re-apply filter fields on extract_cache hit (stale venue bug)
 ```
+
 Both desktop profiles rebuilt to parity: 44,358 chunks, 4,637 venue docs each.
 
 ## Session 2 summary (OpenAlex key + tail)
-Key request → 3 latent bugs found via shit-testing: (1) enrich path called bare
-`OPENALEX.request()` so it never used any api_key (hit the metered unauth pool);
-(2) title-search took results[0] blind → wrong-paper metadata (LeNet/LOFAR); (3)
-extract_cache served stale filter fields from pre-enrichment builds. All fixed +
-tested. Tail: 4,936→6,050 papers_meta (748 enriched, key rotation fired in prod
-hotmail→gmail); index venue coverage 2,696→4,637 docs. P2 fully reconciled.
+
+Key request → 3 latent bugs found via shit-testing: (1) enrich path called bare `OPENALEX.request()` so it never used any api_key (hit the metered unauth pool); (2) title-search took results[0] blind → wrong-paper metadata (LeNet/LOFAR); (3) extract_cache served stale filter fields from pre-enrichment builds. All fixed + tested. Tail: 4,936→6,050 papers_meta (748 enriched, key rotation fired in prod hotmail→gmail); index venue coverage 2,696→4,637 docs. P2 fully reconciled.
 
 ## Data runs
+
 - `enrich-metadata.run.log` 09:34:27–09:43:40 — buggy backfill (killed)
 - `enrich-metadata.force.log` 09:47:58–10:12:48 — corrective backfill, 82% enriched
 - `enrich-resume1.log` 10:13:23–10:16:12 — resume (0 progress; budget exhausted)
@@ -109,58 +108,30 @@ hotmail→gmail); index venue coverage 2,696→4,637 docs. P2 fully reconciled.
 - `rebuild-4b-cpu.log` ~14:30– — recovery (docling on CPU), in progress
 
 ## Bugs found & fixed (not in original plan)
+
 1. **OpenAlex DOI-URL 429** — `/works/https://doi.org/` → `/works/doi:` (4% → 98% DOI coverage).
 2. **cited_by_count None on remote** — added papers_meta fallback (graph not built on desktop).
 3. **CitationGraph keying** — DOI-bridge `doc_to_oa` (22% → 34%).
 4. **Rebuild CUDA OOM** — docling vision workers on GPU; moved docling to CPU.
 
 ## T8 — SPECTER2 query-side A/B (CONFIRMED NEGATIVE, ships nothing)
-SPECTER2 is a 768-d paper-level citation-trained space — dimensionally/semantically
-incompatible with the 1024-d chunk dense index, so it can't re-retrieve. Implemented
-instead as a **re-ranker** (`hybrid_specter_prf`, eval-only arm): a pseudo-relevance-feedback
-centroid from the top-5 text-ranked docs' SPECTER2 vectors, every candidate doc scored by
-cosine-to-centroid, multiplicatively blended into the text fusion score (same text-primary
-blend as the citation arm; α tunable via `GRAPH_RAG_SPECTER_ALPHA`, α=0 = exact no-op).
 
-A/B on catalog (n=49, `cuda-qwen0.6b-1024`, bootstrap-CI gate):
-| arm | nDCG@10 | hit@5 | Δ vs hybrid_sparse2 (95% CI) |
-|---|---|---|---|
-| hybrid_sparse2 (prod baseline) | 0.6104 | 0.898 | — |
-| hybrid_specter_prf α=0.2 | 0.5692 | 0.918 | **−0.0412 [−0.068,−0.017] SIG** |
-| hybrid_specter_prf α=0.5 | 0.5482 | 0.918 | **−0.0623 [−0.099,−0.027] SIG** |
+SPECTER2 is a 768-d paper-level citation-trained space — dimensionally/semantically incompatible with the 1024-d chunk dense index, so it can't re-retrieve. Implemented instead as a **re-ranker** (`hybrid_specter_prf`, eval-only arm): a pseudo-relevance-feedback centroid from the top-5 text-ranked docs' SPECTER2 vectors, every candidate doc scored by cosine-to-centroid, multiplicatively blended into the text fusion score (same text-primary blend as the citation arm; α tunable via `GRAPH_RAG_SPECTER_ALPHA`, α=0 = exact no-op).
 
-**Monotonically NEGATIVE** in α (0→0.0, 0.2→−0.041, 0.5→−0.062), significant at both. hit@5
-*rises* (SPECTER pulls relevant docs into the pool) but the top-rank ordering degrades —
-same failure mode as the citation arm: SPECTER optimizes topical/citation *relatedness*, not
-query *relevance*, so it floats related-but-less-relevant papers above the exact answer. Runs:
-`p3-specter-ab` (α=0.5), `p3-specter-ab-a02` (α=0.2). Disposition: kept as an eval-only arm
-(not in `OFFLINE_STRATEGIES`, never in the production query path), like the other documented
-negatives. **Nothing ships.**
+A/B on catalog (n=49, `cuda-qwen0.6b-1024`, bootstrap-CI gate): | arm | nDCG@10 | hit@5 | Δ vs hybrid_sparse2 (95% CI) | |---|---|---|---| | hybrid_sparse2 (prod baseline) | 0.6104 | 0.898 | — | | hybrid_specter_prf α=0.2 | 0.5692 | 0.918 | **−0.0412 [−0.068,−0.017] SIG** | | hybrid_specter_prf α=0.5 | 0.5482 | 0.918 | **−0.0623 [−0.099,−0.027] SIG** |
+
+**Monotonically NEGATIVE** in α (0→0.0, 0.2→−0.041, 0.5→−0.062), significant at both. hit@5 _rises_ (SPECTER pulls relevant docs into the pool) but the top-rank ordering degrades — same failure mode as the citation arm: SPECTER optimizes topical/citation _relatedness_, not query _relevance_, so it floats related-but-less-relevant papers above the exact answer. Runs: `p3-specter-ab` (α=0.5), `p3-specter-ab-a02` (α=0.2). Disposition: kept as an eval-only arm (not in `OFFLINE_STRATEGIES`, never in the production query path), like the other documented negatives. **Nothing ships.**
 
 ## T9 — TLDR-prefix profile re-test (CONFIRMED NULL, ships nothing)
-New eval-only embed profile `cuda-qwen0.6b-tldr-v1`: prepends each paper's stored
-one-line TLDR (S2 `tldr.text`, 3,441/6,050 docs = 57%) to the chunk's embed+BM25 text
-(`augment_texts_for_tldr`, gated on the `tldr` profile-name substring like
-section-v1/contextual-v1; `_indexed_text_changes` updated so BM25 rebuilds with the
-prefixed text). Built on the desktop GPU via `reembed cuda-qwen0.6b-1024 →
-cuda-qwen0.6b-tldr-v1` (44,358 chunks, 11.6 chunks/s, 63.7 min; full re-embed — a new
-profile is all embed-cache misses; 174/174 batches prefixed = full-corpus coverage).
 
-A/B on catalog (n=49, desktop 44k index, bootstrap-CI):
-| arm | base nDCG@10 | tldr nDCG@10 | Δ (95% CI) |
-|---|---|---|---|
-| dense          | 0.5852 | 0.5962 | +0.0110 [−0.036,+0.061] NULL |
-| hybrid_sparse2 (prod) | 0.8591 | 0.8563 | −0.0028 [−0.022,+0.015] NULL |
+New eval-only embed profile `cuda-qwen0.6b-tldr-v1`: prepends each paper's stored one-line TLDR (S2 `tldr.text`, 3,441/6,050 docs = 57%) to the chunk's embed+BM25 text (`augment_texts_for_tldr`, gated on the `tldr` profile-name substring like section-v1/contextual-v1; `_indexed_text_changes` updated so BM25 rebuilds with the prefixed text). Built on the desktop GPU via `reembed cuda-qwen0.6b-1024 → cuda-qwen0.6b-tldr-v1` (44,358 chunks, 11.6 chunks/s, 63.7 min; full re-embed — a new profile is all embed-cache misses; 174/174 batches prefixed = full-corpus coverage).
 
-Both CIs straddle zero. The tiny dense bump is noise; the production hybrid is dead flat.
-**Third** falsification of prefix-embedding on this BM25-dominant corpus (after section-v1
-and contextual-v1). Runs: `p3-tldr-ab-base`, `p3-tldr-ab-tldr`, gate `p3-tldr-gate`.
-Disposition: profile kept as experimental-only (never promoted; production stays
-`cuda-qwen0.6b-1024`). The desktop `cuda-qwen0.6b-tldr-v1` index is a throwaway A/B
-artifact. **Nothing ships.** Closes P3 (T7 NULL, T8 NEGATIVE, T9 NULL → P3 ships nothing,
-the clean documented result the plan anticipated).
+A/B on catalog (n=49, desktop 44k index, bootstrap-CI): | arm | base nDCG@10 | tldr nDCG@10 | Δ (95% CI) | |---|---|---|---| | dense | 0.5852 | 0.5962 | +0.0110 [−0.036,+0.061] NULL | | hybrid_sparse2 (prod) | 0.8591 | 0.8563 | −0.0028 [−0.022,+0.015] NULL |
+
+Both CIs straddle zero. The tiny dense bump is noise; the production hybrid is dead flat. **Third** falsification of prefix-embedding on this BM25-dominant corpus (after section-v1 and contextual-v1). Runs: `p3-tldr-ab-base`, `p3-tldr-ab-tldr`, gate `p3-tldr-gate`. Disposition: profile kept as experimental-only (never promoted; production stays `cuda-qwen0.6b-1024`). The desktop `cuda-qwen0.6b-tldr-v1` index is a throwaway A/B artifact. **Nothing ships.** Closes P3 (T7 NULL, T8 NEGATIVE, T9 NULL → P3 ships nothing, the clean documented result the plan anticipated).
 
 ## Known limitations / pending (externally gated)
+
 - No-DOI tail (~1114, mostly JGAA) — blocked on OpenAlex search budget reset (**midnight UTC**); converges via a resume pass.
 - Citation-prior coverage ceiling ~34% (rest are DOI-less, never in citation crawl) → P3 eval likely NULL; prior ships OFF.
 - 0.6B rebuild + P3 eval gates (gold-set + LLM judge) — pending.
