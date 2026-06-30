@@ -1,0 +1,78 @@
+# RAG → S3 backup manifest (declarative source of truth).
+#
+# Consumed by scripts/_manifest.py, which expands the globs against the on-disk
+# layout and emits a flat job list for backup_to_s3.sh / restore_from_s3.sh.
+#
+# S3 key layout (bucket from $RAG_BACKUP_BUCKET or `tofu output`). Derived artifacts
+# are IMMUTABLE and run-stamped (<run-id> = <UTC>-<host>, minted per invocation):
+#
+#   <tool>/corpus/<dir>/...                              (aws s3 sync,  GLACIER_IR; NOT run-stamped)
+#   <tool>/indexes/<embed-profile>/<run-id>/archive.tar.zst        (tar+zstd, STANDARD_IA → GLACIER@180d)
+#   <tool>/retrieval-indexes/<model>/<run-id>/archive.tar.zst
+#   <tool>/related/<model>/<run-id>/archive.tar.zst
+#   <tool>/extracted/<extraction-model>/<run-id>/archive.tar.zst
+#   <tool>/eval/<name>/<run-id>/archive.tar.zst
+#   <tool>/meta/<run-id>/<file>                          (aws s3 cp,    STANDARD)
+#   _catalog/runs/<run-id>.json                          (in-bucket catalog, source of truth)
+#
+# The logical ARTIFACT id (the catalog PK) is the run-id-free key: <tool>/<category>/<name>.
+# Unchanged content is deduped: a new catalog row points at the prior run's object
+# instead of re-uploading (immutable history without duplicate storage).
+#
+# SCALABILITY / no collisions: the categories below are GLOBS — a new embed profile
+# under data/indexes/ or a new retrieval model is picked up automatically with NO edit
+# here. MLX and CUDA builds never collide because the profile name (the directory
+# basename) is the S3 sub-key, and those names carry the backend (mlx-* vs cuda-*).
+# A whole new RAG tool is one new [tool.<name>] block; a new extractor is one line.
+
+[defaults]
+# Applied to every tool. Names match either a path segment or a basename glob.
+# These are volatile/regenerable or noise — never backed up.
+exclude = [
+  "embed_cache",
+  "logs",
+  "*.log",
+  "*.bak",
+  "*.exitcode",
+  "*.pre-enrich.bak",
+  "*-shm",
+  "*-wal",
+  "contextual_cache.json",
+]
+
+# ---------------------------------------------------------------------------
+# graph-layout-rag — the big one (~27 GB): prod + secondary indexes, 8.5 GB corpus.
+# ---------------------------------------------------------------------------
+[tool.graph-layout-rag]
+data_dir          = "graph-layout-rag/data"
+corpus            = ["raw"]                 # → corpus/raw/  (3,017 PDFs)
+indexes           = ["indexes/*", "lancedb"]
+retrieval_indexes = ["retrieval-indexes/*"] # the 14 GB gemini-2-structure-v1 dense index
+related           = ["related/*"]           # scincl / specter2 vectors
+eval              = ["eval"]                # benchmark run history (tarred whole)
+meta              = ["citations.sqlite", "harvest.db", "manifest.json", "ingest_state.json", "harvest_checkpoint.json"]
+
+[tool.graph-layout-rag.extracted]
+"docling-v1" = "extract_cache"
+
+# ---------------------------------------------------------------------------
+# rag-literature-rag (~9 GB): 13 index profiles, 2.6 GB corpus, docling + raptor.
+# ---------------------------------------------------------------------------
+[tool.rag-literature-rag]
+data_dir = "rag-literature-rag/data"
+corpus   = ["raw"]                          # → corpus/raw/  (1,422 PDFs)
+indexes  = ["indexes/*"]
+eval     = ["eval"]                         # benchmark run history (tarred whole)
+meta     = ["harvest.db", "manifest.json", "harvest_checkpoint.json"]
+
+[tool.rag-literature-rag.extracted]
+"docling-v1" = "extract_cache"
+"raptor-v1"  = "raptor_cache"
+
+# ---------------------------------------------------------------------------
+# repo-rag (~0.5 GB): code-ingested, no PDF corpus / no docling extract.
+# ---------------------------------------------------------------------------
+[tool.repo-rag]
+data_dir = "repo-rag/data"
+indexes  = ["indexes/*", "lancedb", "bm25"]
+meta     = ["graph.sqlite", "manifest.json", "ingest_state.json"]
