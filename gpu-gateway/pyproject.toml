@@ -12,6 +12,8 @@ dependencies = [
     "httpx>=0.27.0",
     "pydantic>=2.0.0",
     "sentence-transformers>=3.0.0",
+    "bitsandbytes>=0.44.0",
+    "accelerate>=1.1.0",
     # torch with CUDA 12.x is installed separately via pip index URL:
     # pip install torch --index-url https://download.pytorch.org/whl/cu124
 ]

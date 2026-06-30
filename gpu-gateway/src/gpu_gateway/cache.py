@@ -93,7 +93,7 @@ class SQLiteCache:
             await db.executemany(
                 "INSERT OR REPLACE INTO embed_cache(key, vector, model_id, created_at) VALUES (?,?,?,?)",
                 [
-                    (key, model_id, struct.pack(f"{len(vec)}f", *vec), now)
+                    (key, struct.pack(f"{len(vec)}f", *vec), model_id, now)
                     for key, model_id, vec in entries
                 ],
             )

@@ -42,7 +42,21 @@ class _DenseEmbedBase:
 
 @serve.deployment
 class DenseEmbed4B(_DenseEmbedBase):
-    pass
+    def _ensure_loaded(self) -> None:
+        if self._model is None:
+            from sentence_transformers import SentenceTransformer
+            from transformers import BitsAndBytesConfig
+            # Qwen3-4B is ~8 GB in bf16 — OOMs on an 8 GB card.
+            # BitsAndBytesConfig(load_in_8bit=True) reduces to ~4 GB.
+            bnb = BitsAndBytesConfig(load_in_8bit=True)
+            log.info("lazy-loading dense embed model %s (int8, 1024-dim MRL)", self._model_path)
+            self._model = SentenceTransformer(
+                self._model_path,
+                device="cuda",
+                truncate_dim=1024,
+                model_kwargs={"quantization_config": bnb},
+            )
+            log.info("loaded %s", self._model_path)
 
 
 @serve.deployment
