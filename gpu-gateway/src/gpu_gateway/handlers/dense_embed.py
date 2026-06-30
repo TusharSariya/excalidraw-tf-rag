@@ -31,6 +31,9 @@ class _DenseEmbedBase:
             from sentence_transformers import SentenceTransformer
             log.info("lazy-loading dense embed model %s", self._model_path)
             self._model = SentenceTransformer(self._model_path, device="cuda")
+            # Cap input sequence length — long code chunks produce O(seq²) attention
+            # tensors that OOM an 8 GB card even at batch_size=32.
+            self._model.max_seq_length = 2048
             log.info("loaded %s", self._model_path)
 
     async def unload(self) -> None:
@@ -43,7 +46,9 @@ class _DenseEmbedBase:
 
     async def __call__(self, texts: list[str]) -> list[list[float]]:
         self._ensure_loaded()
-        vecs = self._model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
+        # batch_size=32 keeps activation memory well under 8 GB regardless of how many
+        # texts the caller sends in a single HTTP request.
+        vecs = self._model.encode(texts, normalize_embeddings=True, show_progress_bar=False, batch_size=32)
         return vecs.tolist()
 
 
@@ -63,9 +68,24 @@ class DenseEmbed4B(_DenseEmbedBase):
                 truncate_dim=1024,
                 model_kwargs={"quantization_config": bnb},
             )
+            self._model.max_seq_length = 2048
             log.info("loaded %s", self._model_path)
 
 
 @serve.deployment
 class DenseEmbed06B(_DenseEmbedBase):
-    pass
+    def _ensure_loaded(self) -> None:
+        if self._model is None:
+            from sentence_transformers import SentenceTransformer
+            log.info("lazy-loading dense embed model %s", self._model_path)
+            self._model = SentenceTransformer(self._model_path, device="cuda")
+            # 512 tokens: attention scales as seq², and 2048 OOMs an 8 GB card.
+            self._model.max_seq_length = 512
+            log.info("loaded %s", self._model_path)
+
+    async def __call__(self, texts: list[str]) -> list[list[float]]:
+        self._ensure_loaded()
+        # batch_size=4: 0.6B FFN intermediate is large; batch_size=32 OOMs
+        # (28 layers × 32 × 512 × 4096 × 2B ≈ 7 GB of activations alone).
+        vecs = self._model.encode(texts, normalize_embeddings=True, show_progress_bar=False, batch_size=4)
+        return vecs.tolist()

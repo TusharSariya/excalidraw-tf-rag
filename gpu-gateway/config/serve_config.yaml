@@ -34,7 +34,7 @@ applications:
 
       - name: DenseEmbed06B
         num_replicas: 1
-        request_timeout_s: 10
+        request_timeout_s: 120    # batch_size=4 × 256 texts = 64 forward passes; ~60s worst case
         ray_actor_options:
           num_cpus: 1
           num_gpus: 0.12    # 800MB / 6500MB usable
