@@ -141,6 +141,37 @@ def cmd_content_sig() -> int:
     return 0
 
 
+def cmd_sqlite_sig() -> int:
+    """Logical signature of a sqlite db: sha256 over its sorted `.dump` SQL.
+
+    A consistent backup (`sqlite3 .backup` / `conn.backup()`) is byte-different
+    from the source by design — page layout, freelist and rowid gaps differ even
+    though every row is identical. So a raw byte/content-sig comparison gives a
+    false mismatch when drilling a backed-up db. Comparing the logical dump
+    instead proves the two databases hold the same data, which is what "is this
+    backup good?" actually means. Uses only the stdlib sqlite3 module so it works
+    on machines without the sqlite3 CLI (the desktop has none)."""
+    import sqlite3
+
+    if len(sys.argv) < 3:
+        sys.exit("usage: _catalog.py sqlite-sig <path>")
+    path = sys.argv[2]
+    # Open read-only via URI so we never create/modify the file being checked.
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        ok = conn.execute("PRAGMA integrity_check").fetchone()[0]
+        if ok != "ok":
+            sys.exit(f"sqlite-sig: integrity_check failed for {path}: {ok}")
+        h = hashlib.sha256()
+        for line in conn.iterdump():
+            h.update(line.encode("utf-8", "surrogatepass"))
+            h.update(b"\n")
+    finally:
+        conn.close()
+    sys.stdout.write(h.hexdigest())
+    return 0
+
+
 def cmd_finalize() -> int:
     """NDJSON records (stdin) → one pretty run-manifest object (stdout)."""
     records = [json.loads(line) for line in sys.stdin if line.strip()]
@@ -169,6 +200,8 @@ def main() -> int:
         return cmd_extract_latest()
     if cmd == "content-sig":
         return cmd_content_sig()
+    if cmd == "sqlite-sig":
+        return cmd_sqlite_sig()
     if cmd == "finalize":
         return cmd_finalize()
     sys.exit(f"error: unknown subcommand {cmd!r}")
