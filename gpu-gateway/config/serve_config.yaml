@@ -59,14 +59,6 @@ applications:
         user_config:
           ollama_url: "http://127.0.0.1:11434"
 
-      - name: VRAMCoordinator
-        num_replicas: 1
-        ray_actor_options:
-          num_cpus: 0
-          num_gpus: 0
-
-      - name: SQLiteCache
-        num_replicas: 1
-        ray_actor_options:
-          num_cpus: 0
-          num_gpus: 0
+      # VRAMCoordinator and SQLiteCache are @ray.remote actors (not @serve.deployment),
+      # so they are NOT listed here. Ray Serve creates them automatically via serve.bind()
+      # in main.py when the app is imported.

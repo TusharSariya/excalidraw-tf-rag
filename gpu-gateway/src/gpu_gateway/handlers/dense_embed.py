@@ -1,7 +1,9 @@
 """Dense embedding deployments (Qwen3-4B and Qwen3-0.6B).
 
 user_config is delivered via reconfigure() in Ray Serve 2.x — NOT __init__.
-Weight loading must happen in reconfigure() or the model will never load.
+Models are loaded LAZILY on the first __call__ to avoid all three models loading
+into VRAM simultaneously at startup (which would OOM an 8 GB card before the
+VRAMCoordinator lock is active). After the first load the model stays in VRAM.
 """
 
 from __future__ import annotations
@@ -21,18 +23,19 @@ class _DenseEmbedBase:
         self._model_path: str = ""
 
     def reconfigure(self, config: dict) -> None:
-        from sentence_transformers import SentenceTransformer
+        # Store the model path; actual loading is deferred to the first __call__.
+        self._model_path = config["model"]
+        self._model = None  # reset so __call__ reloads when config changes
 
-        path = config["model"]
-        if self._model is None or path != self._model_path:
-            log.info("loading dense embed model %s", path)
-            self._model = SentenceTransformer(path, device="cuda")
-            self._model_path = path
-            log.info("loaded %s", path)
+    def _ensure_loaded(self) -> None:
+        if self._model is None:
+            from sentence_transformers import SentenceTransformer
+            log.info("lazy-loading dense embed model %s", self._model_path)
+            self._model = SentenceTransformer(self._model_path, device="cuda")
+            log.info("loaded %s", self._model_path)
 
     async def __call__(self, texts: list[str]) -> list[list[float]]:
-        if self._model is None:
-            raise RuntimeError("model not loaded — reconfigure() not called yet")
+        self._ensure_loaded()
         vecs = self._model.encode(texts, normalize_embeddings=True, show_progress_bar=False)
         return vecs.tolist()
 
