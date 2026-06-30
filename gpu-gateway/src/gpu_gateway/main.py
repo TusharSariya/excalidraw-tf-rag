@@ -31,15 +31,26 @@ log = logging.getLogger("gpu_gateway.main")
 class GatewayHTTP:
     def __init__(
         self,
-        coordinator: Any,
-        cache: Any,
         embed4b: Any,
         embed06b: Any,
         reranker: Any,
         llm: Any,
     ) -> None:
-        self._coordinator = coordinator
-        self._cache = cache
+        # VRAMCoordinator and SQLiteCache are @ray.remote actors (not @serve.deployment).
+        # We create them lazily here (get_if_exists via try/except) with lifetime="detached"
+        # so they survive GatewayHTTP restarts without namespace-matching issues.
+        try:
+            self._coordinator = ray.get_actor("gateway_coordinator")
+        except ValueError:
+            self._coordinator = VRAMCoordinator.options(
+                name="gateway_coordinator", lifetime="detached", num_cpus=0
+            ).remote()
+        try:
+            self._cache = ray.get_actor("gateway_cache")
+        except ValueError:
+            self._cache = SQLiteCache.options(
+                name="gateway_cache", lifetime="detached", num_cpus=0
+            ).remote()
         self._embed4b = embed4b
         self._embed06b = embed06b
         self._reranker = reranker
@@ -178,16 +189,13 @@ class GatewayHTTP:
 
 
 # serve.bind() wiring — exported as `app` for `serve run config/serve_config.yaml`
-coordinator = VRAMCoordinator.bind()
-cache = SQLiteCache.bind()
+# VRAMCoordinator and SQLiteCache are @ray.remote actors created inside GatewayHTTP.__init__.
 embed4b = DenseEmbed4B.bind()
 embed06b = DenseEmbed06B.bind()
 reranker = RerankerDeployment.bind()
 llm = LLMDeployment.bind()
 
 app = GatewayHTTP.bind(
-    coordinator=coordinator,
-    cache=cache,
     embed4b=embed4b,
     embed06b=embed06b,
     reranker=reranker,
