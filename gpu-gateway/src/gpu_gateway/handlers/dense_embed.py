@@ -1,9 +1,8 @@
 """Dense embedding deployments (Qwen3-4B and Qwen3-0.6B).
 
 user_config is delivered via reconfigure() in Ray Serve 2.x — NOT __init__.
-Models are loaded LAZILY on the first __call__ to avoid all three models loading
-into VRAM simultaneously at startup (which would OOM an 8 GB card before the
-VRAMCoordinator lock is active). After the first load the model stays in VRAM.
+Models are loaded LAZILY on first __call__ and EVICTED before LLM requests
+(GatewayHTTP calls unload() before forwarding to Ollama so the GPU is free).
 """
 
 from __future__ import annotations
@@ -33,6 +32,14 @@ class _DenseEmbedBase:
             log.info("lazy-loading dense embed model %s", self._model_path)
             self._model = SentenceTransformer(self._model_path, device="cuda")
             log.info("loaded %s", self._model_path)
+
+    async def unload(self) -> None:
+        if self._model is not None:
+            import torch
+            del self._model
+            self._model = None
+            torch.cuda.empty_cache()
+            log.info("unloaded %s", self._model_path)
 
     async def __call__(self, texts: list[str]) -> list[list[float]]:
         self._ensure_loaded()

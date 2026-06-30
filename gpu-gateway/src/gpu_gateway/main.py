@@ -152,6 +152,10 @@ class GatewayHTTP:
         return JSONResponse({"results": results, "model": model})
 
     async def _chat(self, body: dict) -> JSONResponse:
+        # Evict embed/rerank models so Ollama gets the full GPU.
+        await self._embed4b.unload.remote()
+        await self._embed06b.unload.remote()
+        await self._reranker.unload.remote()
         acquired = False
         try:
             await self._coordinator.acquire.remote("llm")

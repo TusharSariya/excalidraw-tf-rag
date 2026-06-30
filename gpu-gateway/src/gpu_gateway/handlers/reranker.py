@@ -30,6 +30,14 @@ class RerankerDeployment:
             self._model = CrossEncoder(self._model_path, device="cuda")
             log.info("loaded %s", self._model_path)
 
+    async def unload(self) -> None:
+        if self._model is not None:
+            import torch
+            del self._model
+            self._model = None
+            torch.cuda.empty_cache()
+            log.info("unloaded %s", self._model_path)
+
     async def __call__(self, query: str, passages: list[str]) -> list[float]:
         self._ensure_loaded()
         pairs = [(query, p) for p in passages]
