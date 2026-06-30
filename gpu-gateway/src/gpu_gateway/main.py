@@ -45,6 +45,14 @@ log = logging.getLogger("gpu_gateway.main")
 # VRAM budget table (MB) — measured on RTX 3060 Ti with expandable_segments:True.
 # Used by _evict_for() to decide what to evict before loading a new model.
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Tools root — three levels up from this file (gpu_gateway/ → src/ → gpu-gateway/ → tools/)
+# ---------------------------------------------------------------------------
+_TOOLS_ROOT = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..")
+)
+_KNOWN_TOOLS = {"graph-layout-rag", "repo-rag", "rag-literature-rag"}
+
 _VRAM_MB: dict[str, int] = {
     "cuda-qwen4b-1024": 5800,    # Qwen3-4B int8, 1024-dim MRL
     "cuda-qwen0.6b-1024": 1800,  # Qwen3-0.6B BF16, seq=512
@@ -169,6 +177,9 @@ class GatewayHTTP:
         if path in ("/v1/chat/completions", "/v1/chat/completions/"):
             body = await request.json()
             return await self._chat(body)
+        if path in ("/v1/search", "/v1/search/"):
+            body = await request.json()
+            return await self._search(body)
         return JSONResponse({"error": f"unknown path {path}"}, status_code=404)
 
     async def _embeddings(self, body: dict) -> JSONResponse:
@@ -276,6 +287,90 @@ class GatewayHTTP:
             if acquired:
                 await self._coordinator.release.remote("llm")
         return JSONResponse(result)
+
+    async def _search(self, body: dict) -> JSONResponse:
+        """Run a full RAG search on the desktop, returning JSON results.
+
+        The subprocess runs `uv run <tool> query` in the tool's directory with
+        RAG_GPU_GATEWAY_URL=http://localhost:8765 so embedding calls loop back
+        through the gateway's own model deployments. GRAPH_RAG_GATEWAY_SEARCH
+        is stripped from the subprocess env to prevent infinite recursion.
+
+        Request body:
+            tool    — "graph-layout-rag" | "repo-rag" | "rag-literature-rag"
+            query   — query text (required)
+            profile — embed profile (default: cuda-qwen0.6b-1024)
+            top     — number of results (default: 8)
+            flags   — extra CLI flags e.g. ["--tag", "constraints", "--pdf-only"]
+        """
+        import asyncio
+        import shutil
+
+        tool = body.get("tool", "graph-layout-rag")
+        query = body.get("query", "")
+        profile = body.get("profile", "cuda-qwen0.6b-1024")
+        top = int(body.get("top", 8))
+        flags: list[str] = [str(f) for f in body.get("flags", [])]
+
+        if not query:
+            return JSONResponse({"error": "query is required"}, status_code=400)
+        if tool not in _KNOWN_TOOLS:
+            return JSONResponse({"error": f"unknown tool {tool!r}"}, status_code=400)
+
+        tool_root = os.path.join(_TOOLS_ROOT, tool)
+        if not os.path.isdir(tool_root):
+            return JSONResponse(
+                {"error": f"tool root not found: {tool_root}"}, status_code=500
+            )
+
+        uv = shutil.which("uv") or os.path.expanduser("~/.local/bin/uv")
+        cmd = [
+            uv, "run", "--no-sync", tool,
+            "query", query,
+            "--embed-profile", profile,
+            "--top", str(top),
+            "--json",
+            *flags,
+        ]
+
+        env = os.environ.copy()
+        env["RAG_GPU_GATEWAY_URL"] = "http://localhost:8765"
+        env.pop("GRAPH_RAG_GATEWAY_SEARCH", None)   # prevent recursion
+        env.pop("RAG_LOCAL_EMBED_DEVICE", None)      # never load models directly
+
+        log.info("search: tool=%s profile=%s top=%d query=%r flags=%s",
+                 tool, profile, top, query[:80], flags)
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                cwd=tool_root,
+                env=env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120.0)
+        except asyncio.TimeoutError:
+            return JSONResponse({"error": "search timed out (120s)"}, status_code=504)
+        except Exception as exc:  # noqa: BLE001
+            log.error("search subprocess error: %s", exc)
+            return JSONResponse({"error": str(exc)}, status_code=500)
+
+        if proc.returncode != 0:
+            detail = stderr.decode("utf-8", errors="replace")
+            log.error("search failed exit=%d stderr=%s", proc.returncode, detail[:500])
+            return JSONResponse(
+                {"error": "search subprocess failed", "detail": detail},
+                status_code=500,
+            )
+
+        try:
+            data = json.loads(stdout)
+        except json.JSONDecodeError as exc:
+            raw = stdout.decode("utf-8", errors="replace")[:300]
+            log.error("search bad JSON: %s | raw=%s", exc, raw)
+            return JSONResponse({"error": "bad JSON from search", "raw": raw}, status_code=500)
+
+        return JSONResponse(data)
 
     async def _health(self) -> JSONResponse:
         gpu_info: list[dict] = []

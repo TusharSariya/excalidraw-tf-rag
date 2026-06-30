@@ -18,7 +18,7 @@ applications:
       - name: GatewayHTTP
         num_replicas: 1
         max_ongoing_requests: 100
-        request_timeout_s: 60
+        request_timeout_s: 180    # /v1/search subprocess timeout is 120s; keep 60s headroom
         ray_actor_options:
           num_cpus: 0.5
           num_gpus: 0

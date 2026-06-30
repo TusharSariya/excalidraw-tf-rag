@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 
 import click
@@ -561,6 +562,98 @@ def query_cmd(
             err=True,
         )
         sys.exit(1)
+
+    # Gateway delegation: when GRAPH_RAG_GATEWAY_SEARCH=1, run on desktop via HTTP.
+    # The gateway runs the full search (embed + LanceDB) and streams JSON back.
+    # No local index required on the Mac.
+    _gw_url = os.environ.get("RAG_GPU_GATEWAY_URL", "")
+    if os.environ.get("GRAPH_RAG_GATEWAY_SEARCH") and _gw_url:
+        import urllib.error
+        import urllib.request
+
+        # For gateway delegation, always default to the CUDA-native profile.
+        # RAG_EMBED_PROFILE may be a cloud profile (gemini-2) that the desktop
+        # subprocess cannot call — the gateway always runs on the GPU.
+        _profile = embed_profile or "cuda-qwen0.6b-1024"
+        _flags: list[str] = []
+        if tag:
+            _flags += ["--tag", tag]
+        if category:
+            _flags += ["--category", category]
+        if pdf_only:
+            _flags.append("--pdf-only")
+        if source:
+            _flags += ["--source", source]
+        if year_min is not None:
+            _flags += ["--year-min", str(year_min)]
+        if venue:
+            _flags += ["--venue", venue]
+        if arxiv_category:
+            _flags += ["--arxiv-category", arxiv_category]
+        if genre:
+            _flags += ["--genre", genre]
+        if exclude_retracted:
+            _flags.append("--exclude-retracted")
+        if rerank is True:
+            _flags.append("--rerank")
+        elif rerank is False:
+            _flags.append("--no-rerank")
+        if not hybrid:
+            _flags.append("--no-hybrid")
+        if expand != "off":
+            _flags += ["--expand", expand]
+        if sparse_weight != SPARSE_WEIGHT:
+            _flags += ["--sparse-weight", str(sparse_weight)]
+        if dense_weight != DENSE_WEIGHT:
+            _flags += ["--dense-weight", str(dense_weight)]
+        if citation_prior_weight != 0.0:
+            _flags += ["--citation-prior-weight", str(citation_prior_weight)]
+        if sort_by != "relevance":
+            _flags += ["--sort", sort_by]
+
+        _body = json.dumps({
+            "tool": "graph-layout-rag",
+            "query": text,
+            "profile": _profile,
+            "top": top,
+            "flags": _flags,
+        }).encode()
+        _req = urllib.request.Request(
+            f"{_gw_url.rstrip('/')}/v1/search",
+            data=_body,
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(_req, timeout=120) as _resp:
+                _data = json.loads(_resp.read())
+        except urllib.error.URLError as _exc:
+            click.echo(f"Gateway search failed: {_exc}", err=True)
+            sys.exit(1)
+
+        _results = _data.get("results", [])
+        if as_json:
+            click.echo(json.dumps(_data, indent=2))
+            return
+        if not _results:
+            click.echo("No results.")
+            sys.exit(1)
+        for _i, _r in enumerate(_results, 1):
+            _page = f" p.{_r['page']}" if _r.get("page") else ""
+            _ret = "  ⚠ RETRACTED" if _r.get("is_retracted") else ""
+            _sem = "  ★ seminal" if _r.get("seminal") else ""
+            click.echo(f"{_i}. [{_r['score']}] {_r['title']}{_page}{_ret}{_sem}")
+            click.echo(f"   {_r['source_url']}")
+            if _r.get("tldr"):
+                click.echo(f"   TLDR: {_r['tldr']}")
+            if _r.get("cited_by_count") is not None:
+                click.echo(
+                    f"   cited-by {_r['cited_by_count']} "
+                    f"({_r.get('in_corpus_cited_by_count', 0)} in corpus)"
+                )
+            click.echo(f"   {_r['excerpt'][:200]}...")
+            click.echo()
+        return
+
     try:
         results = search(
             text,
