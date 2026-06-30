@@ -68,8 +68,17 @@ class DenseEmbed4B(_DenseEmbedBase):
                 truncate_dim=1024,
                 model_kwargs={"quantization_config": bnb},
             )
-            self._model.max_seq_length = 2048
+            # 4B at int8 ≈ 5.7 GB; only ~2 GB left for activations.
+            # seq=256 keeps FFN activations to <100 MB per layer.
+            self._model.max_seq_length = 256
             log.info("loaded %s", self._model_path)
+
+    async def __call__(self, texts: list[str]) -> list[list[float]]:
+        self._ensure_loaded()
+        # batch_size=8, seq=256: FFN activation = 8 × 256 × 8192 × 2B ≈ 32 MB/layer —
+        # well within the ~1.5 GB headroom left after loading 5.7 GB of int8 weights.
+        vecs = self._model.encode(texts, normalize_embeddings=True, show_progress_bar=False, batch_size=8)
+        return vecs.tolist()
 
 
 @serve.deployment

@@ -1,8 +1,22 @@
-"""GatewayHTTP — Ray Serve router.
+"""GatewayHTTP — Ray Serve router with automatic LRU VRAM eviction.
 
 This module's `app` export is what `serve run config/serve_config.yaml` imports
 (import_path: gpu_gateway.main:app). It must be a ray.serve.Application built
 with serve.bind(), not a bare FastAPI app.
+
+## VRAM management
+
+GatewayHTTP tracks which models are "known to be loaded" in _loaded_at (model →
+monotonic timestamp). Before every embed/rerank dispatch it calls _evict_for(),
+which evicts LRU models until the new model fits within _CARD_MB. This means:
+
+  - 0.6B ↔ 4B switches are automatic — no manual kill required
+  - LLM requests still evict everything (Ollama needs the full card)
+  - On actor crash/restart the model is cleared from tracking; the next request
+    reloads it after any necessary eviction
+
+VRAM budgets are measured observations on the RTX 3060 Ti (8 GB / 7822 MB
+usable). Update _VRAM_MB if you load different quantizations.
 """
 
 from __future__ import annotations
@@ -11,6 +25,7 @@ import json
 import logging
 import os
 import subprocess
+import time
 from typing import Any
 
 import ray
@@ -25,6 +40,26 @@ from gpu_gateway.handlers.llm import LLMDeployment
 from gpu_gateway.handlers.reranker import RerankerDeployment
 
 log = logging.getLogger("gpu_gateway.main")
+
+# ---------------------------------------------------------------------------
+# VRAM budget table (MB) — measured on RTX 3060 Ti with expandable_segments:True.
+# Used by _evict_for() to decide what to evict before loading a new model.
+# ---------------------------------------------------------------------------
+_VRAM_MB: dict[str, int] = {
+    "cuda-qwen4b-1024": 5800,    # Qwen3-4B int8, 1024-dim MRL
+    "cuda-qwen0.6b-1024": 1800,  # Qwen3-0.6B BF16, seq=512
+    "bge-reranker-v2-m3": 1200,  # BGE reranker v2 m3
+}
+_CARD_MB = 7200  # conservative ceiling — leaves ~600 MB for driver/CUDA overhead
+
+
+def _model_handle_name(model: str) -> str:
+    """Canonical model name for tracking (normalises unknown 0.6B profiles)."""
+    if model == "cuda-qwen4b-1024":
+        return "cuda-qwen4b-1024"
+    if model == "bge-reranker-v2-m3":
+        return "bge-reranker-v2-m3"
+    return "cuda-qwen0.6b-1024"
 
 
 @serve.deployment
@@ -56,9 +91,74 @@ class GatewayHTTP:
         self._reranker = reranker
         self._llm = llm
 
+        # LRU VRAM tracker: canonical model name → last-used monotonic timestamp.
+        # Set when a model call succeeds; cleared when unloaded or on actor error.
+        self._loaded_at: dict[str, float] = {}
+
+    # ------------------------------------------------------------------
+    # VRAM orchestration
+    # ------------------------------------------------------------------
+
+    def _handle_for(self, canonical: str) -> Any:
+        if canonical == "cuda-qwen4b-1024":
+            return self._embed4b
+        if canonical == "bge-reranker-v2-m3":
+            return self._reranker
+        return self._embed06b
+
+    async def _evict_for(self, canonical: str) -> None:
+        """LRU-evict loaded models until `canonical` fits within _CARD_MB.
+
+        Never evicts the model we're about to load (it may already be loaded
+        and we just want a second call — timestamp will be updated after).
+        """
+        needed = _VRAM_MB.get(canonical, 1800)
+        current_total = sum(_VRAM_MB.get(m, 0) for m in self._loaded_at)
+
+        while current_total + needed > _CARD_MB:
+            # candidates: everything loaded except the target model
+            candidates = [(m, ts) for m, ts in self._loaded_at.items() if m != canonical]
+            if not candidates:
+                log.warning(
+                    "cannot evict further — budget %d MB still needed for %s (%d MB)",
+                    _CARD_MB, canonical, needed,
+                )
+                break
+            evict = min(candidates, key=lambda x: x[1])[0]
+            evict_mb = _VRAM_MB.get(evict, 0)
+            log.info(
+                "vram-evict: unloading %s (%d MB) to make room for %s (%d MB)",
+                evict, evict_mb, canonical, needed,
+            )
+            try:
+                await self._handle_for(evict).unload.remote()
+            except Exception as exc:  # noqa: BLE001
+                log.warning("evict %s failed (actor may already be dead): %s", evict, exc)
+            self._loaded_at.pop(evict, None)
+            current_total -= evict_mb
+
+    async def _evict_all(self) -> None:
+        """Unload every tracked model (used before LLM requests)."""
+        for canonical in list(self._loaded_at):
+            try:
+                await self._handle_for(canonical).unload.remote()
+            except Exception as exc:  # noqa: BLE001
+                log.warning("evict-all %s failed: %s", canonical, exc)
+        self._loaded_at.clear()
+
+    def _mark_loaded(self, canonical: str) -> None:
+        self._loaded_at[canonical] = time.monotonic()
+
+    def _mark_unloaded(self, canonical: str) -> None:
+        self._loaded_at.pop(canonical, None)
+
+    # ------------------------------------------------------------------
+    # Request handlers
+    # ------------------------------------------------------------------
+
     async def __call__(self, request: Request) -> JSONResponse:
         path = request.url.path
-        if path == "/health" or path == "/health/":
+        if path in ("/health", "/health/"):
             return await self._health()
         if path in ("/v1/embeddings", "/v1/embeddings/"):
             body = await request.json()
@@ -73,6 +173,7 @@ class GatewayHTTP:
 
     async def _embeddings(self, body: dict) -> JSONResponse:
         model = body.get("model", "cuda-qwen4b-1024")
+        canonical = _model_handle_name(model)
         texts: list[str] = body.get("input", [])
         if isinstance(texts, str):
             texts = [texts]
@@ -86,12 +187,19 @@ class GatewayHTTP:
         miss_texts = [texts[i] for i in miss_indices]
 
         if miss_texts:
-            handle = self._embed4b if model == "cuda-qwen4b-1024" else self._embed06b
+            handle = self._handle_for(canonical)
+            # Evict LRU models if necessary, then acquire the embed slot.
+            await self._evict_for(canonical)
             acquired = False
             try:
                 await self._coordinator.acquire.remote("embed")
                 acquired = True
                 new_vecs: list[list[float]] = await handle.remote(miss_texts)
+                self._mark_loaded(canonical)
+            except Exception:
+                # Actor may have crashed/been restarted — clear stale tracking.
+                self._mark_unloaded(canonical)
+                raise
             finally:
                 if acquired:
                     await self._coordinator.release.remote("embed")
@@ -116,6 +224,7 @@ class GatewayHTTP:
 
     async def _rerank(self, body: dict) -> JSONResponse:
         model = body.get("model", "bge-reranker-v2-m3")
+        canonical = "bge-reranker-v2-m3"
         query: str = body.get("query", "")
         passages: list[str] = body.get("passages", [])
 
@@ -127,16 +236,20 @@ class GatewayHTTP:
         miss_passages = [passages[i] for i in miss_indices]
 
         if miss_passages:
+            await self._evict_for(canonical)
             acquired = False
             try:
                 await self._coordinator.acquire.remote("embed")
                 acquired = True
                 scores: list[float] = await self._reranker.remote(query, miss_passages)
+                self._mark_loaded(canonical)
+            except Exception:
+                self._mark_unloaded(canonical)
+                raise
             finally:
                 if acquired:
                     await self._coordinator.release.remote("embed")
 
-            # Store scores as 1-float vectors in cache
             store = [
                 (keys[miss_indices[j]], model, [scores[j]])
                 for j in range(len(miss_passages))
@@ -152,10 +265,8 @@ class GatewayHTTP:
         return JSONResponse({"results": results, "model": model})
 
     async def _chat(self, body: dict) -> JSONResponse:
-        # Evict embed/rerank models so Ollama gets the full GPU.
-        await self._embed4b.unload.remote()
-        await self._embed06b.unload.remote()
-        await self._reranker.unload.remote()
+        # Ollama needs the full card — evict everything tracked.
+        await self._evict_all()
         acquired = False
         try:
             await self._coordinator.acquire.remote("llm")
@@ -189,6 +300,11 @@ class GatewayHTTP:
             "status": "ok",
             "gpus": gpu_info,
             "cache_entries": cache_count,
+            # expose tracked model state for observability
+            "loaded_models": {
+                m: round(time.monotonic() - ts, 1)
+                for m, ts in self._loaded_at.items()
+            },
         })
 
 
