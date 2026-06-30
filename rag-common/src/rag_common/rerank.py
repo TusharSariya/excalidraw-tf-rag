@@ -109,6 +109,19 @@ def rerank(
         return rows[:top]
 
     name = model_name or rerank_model_name()
+
+    if os.getenv("RAG_GPU_GATEWAY_URL"):
+        from rag_common.remote_embed import rerank_remote
+        passages = [(row.get(text_key) or "")[:max_rerank_chars()] for row in rows]
+        try:
+            scores = rerank_remote(query, passages, model_id=name)
+        except Exception as exc:  # noqa: BLE001
+            log.warning("gateway rerank failed (%s); returning unranked top-%d", exc, top)
+            return rows[:top]
+        scored = [{**row, "rerank_score": round(scores[i], 6)} for i, row in enumerate(rows)]
+        scored.sort(key=lambda r: r["rerank_score"], reverse=True)
+        return scored[:top]
+
     try:
         model = _get_cross_encoder(name)
     except Exception as exc:  # noqa: BLE001 — degrade rather than fail a query

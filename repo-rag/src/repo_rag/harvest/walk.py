@@ -19,7 +19,23 @@ EXCLUDE_DIR_NAMES = {
     "bm25",
     "raw",
     ".terraform",
+    "graphify-out",
+    "indexes",
+    "retrieval-indexes",
+    "embed_cache",
+    "extract_cache",
+    "bibliography-scan-cache",
+    "raptor_cache",
+    "dev-dist",
+    "releases",
 }
+
+EXCLUDE_PATH_PREFIXES = (
+    "tools/graph-layout-rag/data/",
+    "tools/rag-literature-rag/data/",
+    "tools/repo-rag/data/",
+    "graphify-out/",
+)
 
 # Longest-line threshold above which a JS file is treated as minified/vendored
 # and skipped. Hand-written source virtually never exceeds this; bundled output
@@ -50,7 +66,7 @@ HANDOFF_MARKDOWN = {
     "REGION_SUBNET_VERTICAL_BANDS_PLAN.md",
 }
 
-# Scoped roots per plan — avoids indexing examples/, tooling, etc.
+# Scoped roots per plan — avoids indexing non-product tooling trees.
 INCLUDE_ROOTS: tuple[str, ...] = (
     "docs",
     "packages/excalidraw",
@@ -87,9 +103,7 @@ def _is_excluded(rel: str, name: str) -> bool:
     parts = rel.split("/")
     if any(part in EXCLUDE_DIR_NAMES for part in parts):
         return True
-    if rel.startswith("tools/graph-layout-rag/data/"):
-        return True
-    if rel.startswith("tools/repo-rag/data/"):
+    if any(rel.startswith(prefix) for prefix in EXCLUDE_PATH_PREFIXES):
         return True
     if rel.startswith("packages/backend/terraform/"):
         return True

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 from rag_common.config import EmbedConfig, EmbedStats, LocalEmbedMode, local_config
 from rag_common.gemini_embed import GeminiFatalError, embed_gemini_texts, probe_gemini
@@ -79,6 +80,11 @@ def embed_texts(
         return []
 
     cfg = config or resolve_embed_config(prefix)
+
+    if os.getenv("RAG_GPU_GATEWAY_URL") and cfg.backend == "local":
+        from rag_common.remote_embed import embed_remote_texts
+        model_id = getattr(cfg, "profile", None) or cfg.model
+        return embed_remote_texts(texts, model_id=model_id)
 
     if cfg.backend == "local":
         if stats is not None:

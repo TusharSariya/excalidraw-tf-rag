@@ -38,7 +38,7 @@ DEFAULT_OPENCODE_BIN = "opencode"
 
 def llm_backend() -> str:
     raw = os.getenv("RAG_LLM_BACKEND", DEFAULT_BACKEND).strip().lower()
-    if raw in ("gemini", "ollama", "mlx", "opencode"):
+    if raw in ("gemini", "ollama", "mlx", "opencode", "gateway"):
         return raw
     return DEFAULT_BACKEND
 
@@ -85,7 +85,7 @@ def gemini_model() -> str:
 
 def active_model() -> str:
     backend = llm_backend()
-    if backend == "ollama":
+    if backend in ("ollama", "gateway"):
         return ollama_model()
     if backend == "mlx":
         return mlx_model()
@@ -116,6 +116,9 @@ def generate_text(
     max_tokens: int = 512,
 ) -> str:
     backend = llm_backend()
+    if backend == "gateway":
+        resolved = model or ollama_model()
+        return _generate_gateway(prompt, model=resolved, temperature=temperature, max_tokens=max_tokens)
     if backend == "ollama":
         resolved = model or ollama_model()
         return _generate_ollama(
@@ -137,6 +140,50 @@ def generate_text(
         return _generate_opencode(prompt, model=resolved)
     resolved = model or gemini_model()
     return _generate_gemini(prompt, model=resolved)
+
+
+def _generate_gateway(
+    prompt: str,
+    *,
+    model: str,
+    temperature: float,
+    max_tokens: int,
+) -> str:
+    """Generate via the GPU gateway /v1/chat/completions (proxied to Ollama on desktop)."""
+    gateway_url = os.getenv("RAG_GPU_GATEWAY_URL", "").rstrip("/")
+    if not gateway_url:
+        raise RuntimeError("RAG_LLM_BACKEND=gateway but RAG_GPU_GATEWAY_URL is not set")
+    url = f"{gateway_url}/v1/chat/completions"
+    key = os.getenv("RAG_GPU_GATEWAY_KEY", "")
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": False,
+    }
+    body = json.dumps(payload).encode("utf-8")
+    request = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Content-Type": "application/json",
+            **({"X-API-Key": key} if key else {}),
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=90) as response:
+            data = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"GPU gateway HTTP {exc.code}: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise RuntimeError(f"GPU gateway unreachable at {gateway_url}: {exc}") from exc
+    text = _extract_chat_text(data)
+    if not text:
+        raise RuntimeError(f"Empty GPU gateway response from {model}")
+    return text
 
 
 def _generate_opencode(prompt: str, *, model: str, timeout: float = 180.0) -> str:

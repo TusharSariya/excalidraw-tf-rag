@@ -74,14 +74,43 @@ if [[ -n "$DRILL" ]]; then
   rel="$(aws s3api head-object --bucket "$BUCKET" --key "$key" --query 'Metadata.localrel' --output text 2>/dev/null)"
   [[ -n "$rel" && "$rel" != "None" ]] || rel="$subpath"
   scratch="$(mktemp -d -t ragdrill.XXXXXX)"; trap 'rm -rf "$scratch"' EXIT
-  log "drill: restoring $key → scratch"
-  aws s3 cp "s3://$BUCKET/$key" - --only-show-errors | zstd -d --long=31 -q | "$TAR" -C "$scratch" -xf -
-  restored="$scratch/$(basename "$rel")"
   live="$data_dir/$rel"
-  got="$("$PY" "$SCRIPT_DIR/_catalog.py" content-sig "$restored")"
-  want="$("$PY" "$SCRIPT_DIR/_catalog.py" content-sig "$live")"
+  log "drill: restoring $key → scratch"
+  # Tarball artifacts (indexes/extracted/related/eval) end in archive.tar.zst and
+  # are zstd+tar streams. Meta artifacts are plain per-file copies. Restoring a
+  # plain copy through zstd|tar would fail, so branch on the key shape.
+  if [[ "$key" == *archive.tar.zst ]]; then
+    aws s3 cp "s3://$BUCKET/$key" - --only-show-errors | zstd -d --long=31 -q | "$TAR" -C "$scratch" -xf -
+    restored="$scratch/$(basename "$rel")"
+    got="$("$PY" "$SCRIPT_DIR/_catalog.py" content-sig "$restored")"
+    want="$("$PY" "$SCRIPT_DIR/_catalog.py" content-sig "$live")"
+    if [[ "$got" == "$want" ]]; then
+      log "drill PASS — restored bytes match live $rel (content-sig $got)"
+      exit 0
+    fi
+    die "drill FAIL — restored $rel differs from live (got $got want $want)"
+  fi
+
+  # Plain copy. Pull the object to a scratch file as-is.
+  restored="$scratch/$(basename "$rel")"
+  aws s3 cp "s3://$BUCKET/$key" "$restored" --only-show-errors
+  # sqlite/db meta is stored as a `.backup` logical snapshot — byte-different from
+  # the live file by design, so compare the logical dump (proves same data),
+  # which also runs integrity_check on the restored db. Everything else is a
+  # verbatim copy, so a raw sha256 is the right check.
+  if [[ "$restored" == *.sqlite || "$restored" == *.db ]]; then
+    got="$("$PY" "$SCRIPT_DIR/_catalog.py" sqlite-sig "$restored")"
+    want="$("$PY" "$SCRIPT_DIR/_catalog.py" sqlite-sig "$live")"
+    if [[ "$got" == "$want" ]]; then
+      log "drill PASS — restored db is valid and logically identical to live $rel (sqlite-sig $got)"
+      exit 0
+    fi
+    die "drill FAIL — restored db $rel differs logically from live (got $got want $want)"
+  fi
+  got="$(sha256sum "$restored" | cut -d' ' -f1)"
+  want="$(sha256sum "$live" | cut -d' ' -f1)"
   if [[ "$got" == "$want" ]]; then
-    log "drill PASS — restored bytes match live $rel (content-sig $got)"
+    log "drill PASS — restored bytes match live $rel (sha256 $got)"
     exit 0
   fi
   die "drill FAIL — restored $rel differs from live (got $got want $want)"

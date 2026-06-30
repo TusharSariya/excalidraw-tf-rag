@@ -162,9 +162,18 @@ Remote OpenAI indexing logs include estimated tokens, request latency, batch TPM
 - Terraform code: `packages/excalidraw/components/terraform*`
 - Core packages: `packages/{excalidraw,element,common,math,utils}/**`
 - App layer: `excalidraw-app/`, `functions/`, `packages/backend/`
+- RAG tool **source** under `tools/` (Python/MD for repo-rag, graph-layout-rag, rag-literature-rag)
 - Tests: `**/*.test.{ts,tsx}`
 
-Excluded: `node_modules/`, `dist/`, snapshots, lockfiles, binaries.
+Excluded (see also `.graphifyignore` / `.cursorignore` at repo root):
+
+- Build/deps noise: `node_modules/`, `dist/`, `build/`, snapshots, lockfiles, binaries
+- Path prefixes: `tools/graph-layout-rag/data/`, `tools/rag-literature-rag/data/`, `tools/repo-rag/data/`, `graphify-out/`, `packages/backend/terraform/`
+- Dir names anywhere in path: `indexes/`, `retrieval-indexes/`, `embed_cache/`, `extract_cache/`, `lancedb/`, `bm25/`, `raw/`, `.venv/`, `graphify-out/`
+- SQLite/DB blobs: `*.db`, `*.sqlite` and WAL/SHM sidecars
+- Locale copies except `packages/excalidraw/locales/en.json`; minified JS bundles
+
+Harvest uses `git ls-files` under scoped include roots, so `.gitignore` is honored for tracked paths.
 
 ## Cost (text-embedding-3-large)
 

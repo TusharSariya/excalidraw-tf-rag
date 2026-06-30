@@ -1,0 +1,30 @@
+[Unit]
+Description=GPU Inference Gateway (Ray Serve)
+After=network.target ollama.service
+Wants=ollama.service
+
+[Service]
+Type=simple
+User=USER
+WorkingDirectory=/home/USER/excalidraw-tf/tools/gpu-gateway
+
+# Start Ray head node if it is not already running
+ExecStartPre=/bin/bash -c \
+  '/home/USER/excalidraw-tf/tools/gpu-gateway/.venv/bin/ray status 2>/dev/null || \
+   /home/USER/excalidraw-tf/tools/gpu-gateway/.venv/bin/ray start --head --disable-usage-stats'
+
+# serve run is foreground (Type=simple); systemd manages the lifecycle
+ExecStart=/home/USER/excalidraw-tf/tools/gpu-gateway/.venv/bin/serve run \
+  config/serve_config.yaml
+
+# Drain in-flight requests before tearing down Ray
+ExecStop=/home/USER/excalidraw-tf/tools/gpu-gateway/.venv/bin/serve shutdown \
+  --address http://127.0.0.1:8265
+ExecStopPost=/home/USER/excalidraw-tf/tools/gpu-gateway/.venv/bin/ray stop
+
+TimeoutStopSec=120
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

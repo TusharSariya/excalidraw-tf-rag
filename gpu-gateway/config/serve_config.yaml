@@ -1,0 +1,72 @@
+# tools/gpu-gateway/config/serve_config.yaml
+# Deploy with: serve run config/serve_config.yaml
+# (from tools/gpu-gateway/ with .venv/bin/serve or after `uv sync`)
+#
+# runtime_env.pip is intentionally omitted — Ray would create an isolated pip env
+# that overrides the uv venv. Rely on the venv activated before `serve run`.
+
+proxy_location: HeadOnly
+http_options:
+  host: 0.0.0.0
+  port: 8765
+
+applications:
+  - name: gpu-gateway
+    route_prefix: /
+    import_path: gpu_gateway.main:app
+    deployments:
+      - name: GatewayHTTP
+        num_replicas: 1
+        max_ongoing_requests: 100
+        request_timeout_s: 60
+        ray_actor_options:
+          num_cpus: 0.5
+          num_gpus: 0
+
+      - name: DenseEmbed4B
+        num_replicas: 1
+        request_timeout_s: 30
+        ray_actor_options:
+          num_cpus: 1
+          num_gpus: 0.46    # 3000MB / 6500MB usable
+        user_config:
+          model: "Qwen/Qwen3-Embedding-4B"
+
+      - name: DenseEmbed06B
+        num_replicas: 1
+        request_timeout_s: 10
+        ray_actor_options:
+          num_cpus: 1
+          num_gpus: 0.12    # 800MB / 6500MB usable
+        user_config:
+          model: "Qwen/Qwen3-Embedding-0.6B"
+
+      - name: RerankerDeployment
+        num_replicas: 1
+        request_timeout_s: 15
+        ray_actor_options:
+          num_cpus: 1
+          num_gpus: 0.15    # 1000MB / 6500MB usable
+        user_config:
+          model: "BAAI/bge-reranker-v2-m3"
+
+      - name: LLMDeployment
+        num_replicas: 1
+        request_timeout_s: 90    # Ollama cold-start ~10s; OLLAMA_KEEP_ALIVE=0 adds ~1s unload
+        ray_actor_options:
+          num_cpus: 0.5
+          num_gpus: 0            # Ollama manages its own VRAM externally
+        user_config:
+          ollama_url: "http://127.0.0.1:11434"
+
+      - name: VRAMCoordinator
+        num_replicas: 1
+        ray_actor_options:
+          num_cpus: 0
+          num_gpus: 0
+
+      - name: SQLiteCache
+        num_replicas: 1
+        ray_actor_options:
+          num_cpus: 0
+          num_gpus: 0
