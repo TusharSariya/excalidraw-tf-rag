@@ -1,0 +1,29 @@
+[project]
+name = "gpu-gateway"
+version = "0.1.0"
+description = "Persistent GPU inference gateway — Ray Serve + SQLite cache"
+requires-python = ">=3.11"
+dependencies = [
+    "ray[serve]>=2.10,<3",
+    "aiosqlite>=0.20.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+mcp = [
+    "fastmcp>=0.9.0",
+    "httpx>=0.27.0",
+]
+
+[project.scripts]
+gpu-gateway-mcp = "gpu_gateway.mcp_server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/gpu_gateway"]
