@@ -21,6 +21,8 @@ import os
 import random
 import re
 import time
+import urllib.error
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
@@ -134,6 +136,12 @@ def judge_model() -> str:
     via ``local_llm``); reusing that model makes Phase-4 transform evaluation
     circular (the same model both writes the expansion and grades its hits).
     """
+    http_backend = _http_judge_backend()
+    if http_backend in ("opencode", "auto"):
+        return os.getenv("GRAPH_RAG_JUDGE_HTTP_MODEL", "opencode-go/deepseek-v4-flash")
+    if http_backend == "deepseek":
+        return os.getenv("GRAPH_RAG_DEEPSEEK_JUDGE_MODEL", "deepseek-chat")
+
     from rag_common.local_llm import llm_backend, mlx_model, ollama_model, opencode_model
 
     backend = llm_backend()
@@ -205,6 +213,149 @@ def _parse_grade(text: str) -> tuple[int, str]:
     return 0, raw[:200]
 
 
+# --- Direct-HTTP dual-backend judge (opencode-go Zen + DeepSeek API) --------
+# Bypasses rag_common.local_llm's opencode-CLI path for the OpenAI-compatible
+# HTTP endpoints, so a large judging run gets (a) real concurrency (judge_pool
+# owns its threads) and (b) automatic FAILOVER when one backend runs out of
+# credits. Opt in via GRAPH_RAG_JUDGE_BACKEND:
+#   "opencode" -> opencode-go only ; "deepseek" -> DeepSeek API only ;
+#   "auto"     -> opencode-go, fail over to DeepSeek on credit exhaustion.
+# Unset keeps the legacy local_llm/gemini dispatch below untouched.
+_OPENCODE_URL = "https://opencode.ai/zen/go/v1/chat/completions"
+_OPENCODE_UA = "opencode/1.17.11"  # non-empty UA required; Cloudflare 403s urllib's default
+_DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
+_HTTP_RETRYABLE = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
+_HTTP_CREDIT = frozenset({401, 402, 403})  # auth / insufficient-balance -> fail over, don't retry
+
+
+class _JudgeCreditError(RuntimeError):
+    """A backend refused for auth/credit reasons (401/402/403) — try the next one."""
+
+
+def _http_judge_backend() -> str:
+    return os.getenv("GRAPH_RAG_JUDGE_BACKEND", "").strip().lower()
+
+
+def _backend_order(backend: str) -> list[str]:
+    if backend == "auto":
+        return ["opencode", "deepseek"]
+    if backend in ("opencode", "deepseek"):
+        return [backend]
+    return []
+
+
+def _opencode_key() -> str:
+    key = os.getenv("OPENCODE_API_KEY", "").strip()
+    if key:
+        return key
+    try:
+        auth = json.loads(
+            (Path.home() / ".local/share/opencode/auth.json").read_text(encoding="utf-8")
+        )
+        return str((auth.get("opencode-go") or {}).get("key", "")).strip()
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return ""
+
+
+def _deepseek_key() -> str:
+    return os.getenv("DEEPSEEK_API_KEY", "").strip()
+
+
+def _http_chat_grade(
+    url: str, key: str, api_model: str, prompt: str, *, user_agent: str | None = None
+) -> tuple[int, str]:
+    """POST one OpenAI-compatible chat completion and parse a 0-3 grade.
+
+    Retries transient HTTP/timeout with jittered backoff; raises
+    ``_JudgeCreditError`` on 401/402/403 (credit/auth → caller fails over); raises
+    the last exception on persistent transient failure (so judge_pool records a
+    retryable miss, never a fake grade-0).
+    """
+    payload = json.dumps(
+        {
+            "model": api_model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.0,
+            "max_tokens": 256,
+        }
+    ).encode()
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    if user_agent:
+        headers["User-Agent"] = user_agent
+
+    last_exc: Exception | None = None
+    for attempt in range(5):
+        try:
+            req = urllib.request.Request(url, data=payload, headers=headers)
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                data = json.load(resp)
+            text = ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+            if not text.strip():
+                raise ValueError("empty judge response")
+            return _parse_grade(text)
+        except urllib.error.HTTPError as exc:
+            last_exc = exc
+            if exc.code in _HTTP_CREDIT:
+                raise _JudgeCreditError(f"backend refused ({exc.code})") from exc
+            if exc.code in _HTTP_RETRYABLE and attempt < 4:
+                retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                base = (
+                    float(retry_after)
+                    if (retry_after and str(retry_after).isdigit())
+                    else min(30.0, 2**attempt)
+                )
+                time.sleep(base + random.uniform(0, max(0.5, base * 0.25)))
+                continue
+            raise
+        except _JudgeCreditError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — timeout/empty/decode → retry then raise
+            last_exc = exc
+            if attempt < 4:
+                time.sleep(min(30.0, 1.5 * (2**attempt)) + random.uniform(0, 1.0))
+                continue
+            raise
+    raise last_exc or RuntimeError("http judge failed")
+
+
+def _judge_one_opencode(query: str, doc: dict[str, Any], model: str) -> tuple[int, str]:
+    key = _opencode_key()
+    if not key:
+        raise _JudgeCreditError("opencode: no OPENCODE_API_KEY / auth.json opencode-go key")
+    api_model = model.split("/", 1)[1] if "/" in model else model  # strip "opencode-go/" prefix
+    return _http_chat_grade(
+        _OPENCODE_URL, key, api_model, build_judge_prompt(query, doc), user_agent=_OPENCODE_UA
+    )
+
+
+def _judge_one_deepseek(query: str, doc: dict[str, Any], model: str) -> tuple[int, str]:
+    key = _deepseek_key()
+    if not key:
+        raise _JudgeCreditError("deepseek: DEEPSEEK_API_KEY unset")
+    # The Zen id (deepseek-v4-flash) is not a DeepSeek-API model name; map to a
+    # configurable direct-API model (default deepseek-chat).
+    api_model = os.getenv("GRAPH_RAG_DEEPSEEK_JUDGE_MODEL", "deepseek-chat")
+    return _http_chat_grade(_DEEPSEEK_URL, key, api_model, build_judge_prompt(query, doc))
+
+
+_HTTP_JUDGES = {"opencode": _judge_one_opencode, "deepseek": _judge_one_deepseek}
+
+
+def _judge_one_http(query: str, doc: dict[str, Any], model: str, backend: str) -> tuple[int, str]:
+    """Grade via the HTTP backends in order, failing over on credit/other errors."""
+    last_exc: Exception | None = None
+    for name in _backend_order(backend):
+        try:
+            return _HTTP_JUDGES[name](query, doc, model)
+        except _JudgeCreditError as exc:
+            log.warning("judge backend %s refused/exhausted (%s); failing over", name, exc)
+            last_exc = exc
+        except Exception as exc:  # noqa: BLE001 — one backend down; try the next before giving up
+            log.warning("judge backend %s failed (%s); failing over", name, exc)
+            last_exc = exc
+    raise last_exc or RuntimeError(f"no usable judge backend for {backend!r}")
+
+
 def _judge_one(query: str, doc: dict[str, Any], model: str) -> tuple[int, str]:
     """Grade one (query, doc) pair via the active ``local_llm`` backend.
 
@@ -213,6 +364,10 @@ def _judge_one(query: str, doc: dict[str, Any], model: str) -> tuple[int, str]:
     deterministic ``temperature=0.0`` client call. The Ollama path dispatches
     through ``rag_common.local_llm.generate_text`` at ``temperature=0.0``.
     """
+    http_backend = _http_judge_backend()
+    if http_backend:
+        return _judge_one_http(query, doc, model, http_backend)
+
     from rag_common.local_llm import llm_backend
 
     prompt = build_judge_prompt(query, doc)

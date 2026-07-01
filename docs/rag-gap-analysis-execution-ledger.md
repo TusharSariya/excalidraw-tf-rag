@@ -87,4 +87,16 @@ Gold relevant-doc sets were curated partly *from* the corpus, so "relevant docs 
 - The **true corpus-completeness** question ("what relevant literature are we missing entirely?") is **NOT** answered by gold recall ceiling. It needs **reference-coverage** (% of a paper's *cited* DOIs present in corpus), which is gold-independent and reads `citations.sqlite`. That's the honest version of Phase-0.1's "reference coverage" and is deferred to a `coverage --references` mode (needs the citation graph; overlaps Phase 3A keying).
 - Net: `eval coverage` correctly says *acquisition won't move the current benchmark*; it does **not** say *the corpus is complete*. To make acquisition measurable we must either **expand the gold set** to include currently-missing topics or **measure reference-coverage**. Logged as a required follow-up before investing in Phase 2A.
 
+## 2026-07-01 ~04:45 NDT — Phase 0.3 SHIPPED: dual-backend HTTP judge (opencode-go + DeepSeek) with credit-failover
+
+Ported RLR's direct-HTTP opencode judge into GLR `eval/judge.py` and extended it to a **failover pair**, opt-in via `GRAPH_RAG_JUDGE_BACKEND` (`opencode` | `deepseek` | `auto`). `auto` grades via opencode-go Zen, and on a **credit/auth signal (HTTP 401/402/403)** raises `_JudgeCreditError` and fails over to the DeepSeek API — distinct from the transient set (`408/409/425/429/5xx`, which retries with jittered backoff). Persistent all-backend failure raises (so `judge_pool` records a retryable miss, never a fake grade-0 — the pooling-bias trap). Legacy `local_llm`/gemini path untouched when the env is unset. `judge_model()` now returns the backend-correct model id. Added the keys to `.env.example`.
+
+- **Live-validated**: a real opencode-go call graded a Sugiyama paper vs "layered graph drawing crossing minimization" → **GRADE=3** with a coherent reason. End-to-end HTTP path works on the available `auth.json` opencode-go key.
+- **DeepSeek failover**: unit-tested (mocked) — no `DEEPSEEK_API_KEY` on this box, so the live DeepSeek arm can't be exercised tonight; **provisioning that key is the one remaining step** before `auto` can actually fail over in anger. Model-name gotcha baked in: Zen's `deepseek-v4-flash` ≠ DeepSeek-API `deepseek-chat` (configurable via `GRAPH_RAG_DEEPSEEK_JUDGE_MODEL`).
+- 7 new mocked unit tests pass; 25 existing judge tests still green (no regression); ruff clean.
+- Cache honesty note (D7): in `auto` mode the cache key stays the single `GRAPH_RAG_JUDGE_HTTP_MODEL` string even if a grade actually came from the DeepSeek arm — keeps the qrels single-model, at a small fidelity cost documented in code.
+
+### Reembed status (background): 4B index build in progress
+`ingest reembed 0.6B→4B` running (copied BM25, embedding 41,083 chunks at batch 256 via gateway). ~18/161 batches at ~17 s/batch → ETA ~40 min. This unblocks the Phase 1 4B-vs-0.6B re-measurement on the **existing catalog-nl qrels** (no judge needed for that comparison).
+
 <!-- New entries appended below, newest-last, always timestamped. -->
