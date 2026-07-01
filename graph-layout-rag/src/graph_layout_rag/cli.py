@@ -35,6 +35,7 @@ def eval_group() -> None:
 
 from graph_layout_rag.eval.benchmark import benchmark_cmd  # noqa: E402
 from graph_layout_rag.eval.commands import validate_gold_cmd  # noqa: E402
+from graph_layout_rag.eval.coverage import coverage_cmd  # noqa: E402
 from graph_layout_rag.eval.experimental_index import build_retrieval_index_cmd  # noqa: E402
 from graph_layout_rag.eval.pool_commands import (  # noqa: E402
     corpus_health_cmd,
@@ -47,7 +48,6 @@ from graph_layout_rag.eval.pool_commands import (  # noqa: E402
     pool_merge_cmd,
 )
 from graph_layout_rag.eval.retrieval import retrieval_eval_cmd  # noqa: E402
-from graph_layout_rag.eval.coverage import coverage_cmd  # noqa: E402
 
 eval_group.add_command(retrieval_eval_cmd, name="retrieval")
 eval_group.add_command(coverage_cmd, name="coverage")
