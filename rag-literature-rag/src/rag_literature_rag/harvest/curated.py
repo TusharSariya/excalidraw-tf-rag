@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from rag_literature_rag.manifest import ManifestItem
 
-
 IMPLEMENTER_GUIDES = [
     {
         "id": "haystack-rag-pipeline",

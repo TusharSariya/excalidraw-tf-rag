@@ -13,6 +13,7 @@ version + backend + model + doc fingerprint + chunk index) so re-ingest is
 cheap and deterministic, and changing the prompt/backend/model never reuses
 stale context lines across A/B experiments.
 """
+
 from __future__ import annotations
 
 import json
@@ -21,9 +22,10 @@ import os
 import random
 import time
 
+from rag_common.local_llm import active_model, generate_text, llm_backend
+
 from graph_layout_rag.ingest.chunk import TextChunk
 from graph_layout_rag.paths import DATA_DIR
-from rag_common.local_llm import active_model, generate_text, llm_backend
 
 log = logging.getLogger("graph_layout_rag.ingest.contextual")
 
@@ -158,7 +160,9 @@ def augment_texts_for_context(chunks: list[TextChunk], texts: list[str]) -> list
                 if attempt > 0:
                     log.info(
                         "context gen succeeded for %s after %d retr%s",
-                        keys[i], attempt, "y" if attempt == 1 else "ies",
+                        keys[i],
+                        attempt,
+                        "y" if attempt == 1 else "ies",
                     )
                 return i, ctx, False
             except Exception as exc:  # noqa: BLE001 — decide retry vs. fallback below
@@ -167,19 +171,25 @@ def augment_texts_for_context(chunks: list[TextChunk], texts: list[str]) -> list
                     break
                 delay = min(
                     CONTEXT_GEN_MAX_DELAY_S,
-                    CONTEXT_GEN_BASE_DELAY_S * (2 ** attempt),
+                    CONTEXT_GEN_BASE_DELAY_S * (2**attempt),
                 )
                 delay += random.uniform(0, delay * 0.25)  # jitter
                 log.warning(
                     "context gen transient failure for %s (attempt %d/%d, retrying in %.1fs): %s",
-                    keys[i], attempt + 1, CONTEXT_GEN_MAX_RETRIES + 1, delay, exc,
+                    keys[i],
+                    attempt + 1,
+                    CONTEXT_GEN_MAX_RETRIES + 1,
+                    delay,
+                    exc,
                 )
                 time.sleep(delay)
         # HARD failure: retries exhausted or a non-retryable error. Fall back
         # to the raw (unaugmented) chunk rather than aborting ingest.
         log.warning(
             "context gen FALLBACK (raw chunk, no context line) for %s after %d attempt(s): %s",
-            keys[i], CONTEXT_GEN_MAX_RETRIES + 1, last_exc,
+            keys[i],
+            CONTEXT_GEN_MAX_RETRIES + 1,
+            last_exc,
         )
         return i, "", True
 
@@ -210,7 +220,4 @@ def augment_texts_for_context(chunks: list[TextChunk], texts: list[str]) -> list
             failure_rate,
         )
 
-    return [
-        (f"Context: {cache[k]}\n{t}" if cache.get(k) else t)
-        for k, t in zip(keys, texts)
-    ]
+    return [(f"Context: {cache[k]}\n{t}" if cache.get(k) else t) for k, t in zip(keys, texts)]

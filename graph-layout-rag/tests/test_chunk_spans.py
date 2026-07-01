@@ -1,8 +1,8 @@
 from graph_layout_rag.ingest.chunk import (
     CHUNK_CHARS,
+    chunk_pages,
     embed_body_text,
     embed_input_text,
-    chunk_pages,
 )
 from graph_layout_rag.ingest.extract import PageText
 from graph_layout_rag.manifest import ManifestItem

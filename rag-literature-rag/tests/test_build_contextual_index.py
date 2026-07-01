@@ -42,7 +42,9 @@ class _FakeSearch:
 class _FakeTable:
     def __init__(self):
         self.schema = type("Schema", (), {"names": ["doc_id", "vector", "text"]})()
-        self.search_obj = _FakeSearch([{"doc_id": "a", "text": "one"}, {"doc_id": "b", "text": "two"}])
+        self.search_obj = _FakeSearch(
+            [{"doc_id": "a", "text": "one"}, {"doc_id": "b", "text": "two"}]
+        )
 
     def count_rows(self):
         return 2

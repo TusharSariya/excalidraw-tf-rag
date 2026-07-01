@@ -5,6 +5,7 @@ the top text-ranked docs' SPECTER2 vectors and multiplicatively blends each cand
 doc's cosine-to-centroid into the text fusion score. These tests mock retrieval and the
 SPECTER2 store so the blend math is validated without an index or GPU.
 """
+
 from __future__ import annotations
 
 import math
@@ -35,15 +36,19 @@ def _patch(monkeypatch, *, candidates, vectors, db_exists=True):
     """Wire retrieve_candidates/format_results/store so the strategy runs offline."""
     monkeypatch.setattr(strat, "_filters", lambda *a, **k: None)
 
-    import graph_layout_rag.query.retrieve as retrieve
-    import graph_layout_rag.query.search as search
     import graph_layout_rag.citation_store as store
     import graph_layout_rag.paths as paths
+    import graph_layout_rag.query.retrieve as retrieve
+    import graph_layout_rag.query.search as search
 
-    monkeypatch.setattr(retrieve, "retrieve_candidates", lambda *a, **k: [dict(c) for c in candidates])
+    monkeypatch.setattr(
+        retrieve, "retrieve_candidates", lambda *a, **k: [dict(c) for c in candidates]
+    )
     # format_results: return the (already re-sorted) rows' doc_ids in order.
     monkeypatch.setattr(
-        search, "format_results", lambda rows, **k: [{"doc_id": r["doc_id"], "score": r.get("fusion_score")} for r in rows]
+        search,
+        "format_results",
+        lambda rows, **k: [{"doc_id": r["doc_id"], "score": r.get("fusion_score")} for r in rows],
     )
     monkeypatch.setattr(store, "connect", lambda *a, **k: object())
     monkeypatch.setattr(store, "specter2_for_doc", lambda db, doc: vectors.get(doc))
@@ -55,7 +60,9 @@ def _patch(monkeypatch, *, candidates, vectors, db_exists=True):
 
     monkeypatch.setattr(paths, "CITATIONS_DB_PATH", _P)
     # The strategy closes db; our stub object has no close — give it one.
-    monkeypatch.setattr(store, "connect", lambda *a, **k: type("C", (), {"close": lambda self: None})())
+    monkeypatch.setattr(
+        store, "connect", lambda *a, **k: type("C", (), {"close": lambda self: None})()
+    )
 
 
 def test_specter_boost_promotes_related_doc(monkeypatch):
@@ -68,7 +75,7 @@ def test_specter_boost_promotes_related_doc(monkeypatch):
     ]
     vectors = {
         "seed": [1.0, 0.0],
-        "d_hi": [1.0, 0.0],   # cosine 1.0 with centroid
+        "d_hi": [1.0, 0.0],  # cosine 1.0 with centroid
         "d_low": [0.0, 1.0],  # cosine 0.0
     }
     _patch(monkeypatch, candidates=candidates, vectors=vectors)

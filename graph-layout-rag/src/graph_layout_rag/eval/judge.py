@@ -12,6 +12,7 @@ system-ranking correlation.
 Concurrency + on-disk checkpointing mirror `ingest/contextual.py` so a full pool
 (a few thousand judgments) is feasible and re-runs are cheap.
 """
+
 from __future__ import annotations
 
 import json
@@ -34,9 +35,7 @@ DEFAULT_JUDGE_MODEL = "gemini-3.1-pro-preview"
 # (e.g. Mac MLX ‖ desktop CUDA, validated in parallel) write SEPARATE files and
 # never lost-update each other — `_save_cache` rewrites the whole file, so two
 # writers sharing one path would clobber. Grades are model-keyed regardless.
-CACHE_PATH = Path(
-    os.getenv("GRAPH_RAG_JUDGE_CACHE", str(DATA_DIR / "eval" / "judge_cache.json"))
-)
+CACHE_PATH = Path(os.getenv("GRAPH_RAG_JUDGE_CACHE", str(DATA_DIR / "eval" / "judge_cache.json")))
 MAX_ABSTRACT_CHARS = 1500
 MAX_EXCERPT_CHARS = 800
 
@@ -97,6 +96,7 @@ def _is_fatal_auth(exc: Exception | None) -> bool:
 
 class JudgeAuthError(RuntimeError):
     """Raised to abort the whole judge run on a systemic auth/account failure."""
+
 
 _RUBRIC = (
     "You are a relevance assessor for a graph-drawing / graph-layout literature "
@@ -312,7 +312,9 @@ def judge_pool(pool: dict[str, Any], *, model: str | None = None) -> dict[str, A
                     cache[key] = verdict
                 if done % 200 == 0:
                     _save_cache(cache)
-                    log.info("judged %d/%d (uncached transient fails: %d)", done, len(misses), skipped)
+                    log.info(
+                        "judged %d/%d (uncached transient fails: %d)", done, len(misses), skipped
+                    )
         _save_cache(cache)
         log.info(
             "judged %d new (query, doc) pairs; %d left uncached (transient — rerun to retry)",
@@ -410,8 +412,7 @@ def validate_judge_hg7(
     # de-biased pool's payoff — dense surfacing relevant docs BM25 missed — for
     # judge bias.) Two-sided gap: bias in either direction trips the gate.
     bias = abs(
-        float(audit.get("dense_disagree_rate", 0.0))
-        - float(audit.get("bm25_disagree_rate", 0.0))
+        float(audit.get("dense_disagree_rate", 0.0)) - float(audit.get("bm25_disagree_rate", 0.0))
     )
     passed = _hg7_decide(spearman, kappa, bias)
     return {

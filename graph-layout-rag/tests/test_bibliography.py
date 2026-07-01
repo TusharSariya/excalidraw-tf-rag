@@ -77,7 +77,9 @@ def test_scan_seed_pdf_caches_by_content_hash(tmp_path, monkeypatch):
         return "Reference 10.1007/3-540-45848-4_3"
 
     monkeypatch.setattr("graph_layout_rag.harvest.bibliography.PKG_ROOT", tmp_path)
-    monkeypatch.setattr("graph_layout_rag.harvest.bibliography.BIBLIOGRAPHY_SCAN_CACHE_DIR", tmp_path / "cache")
+    monkeypatch.setattr(
+        "graph_layout_rag.harvest.bibliography.BIBLIOGRAPHY_SCAN_CACHE_DIR", tmp_path / "cache"
+    )
     monkeypatch.setattr("graph_layout_rag.harvest.bibliography.read_pdf_text", extract)
 
     first = _scan_seed_pdf(item)
@@ -111,7 +113,9 @@ def test_scan_seed_pdf_invalidates_when_content_changes(tmp_path, monkeypatch):
         return f"Reference 10.1007/example-{calls}"
 
     monkeypatch.setattr("graph_layout_rag.harvest.bibliography.PKG_ROOT", tmp_path)
-    monkeypatch.setattr("graph_layout_rag.harvest.bibliography.BIBLIOGRAPHY_SCAN_CACHE_DIR", tmp_path / "cache")
+    monkeypatch.setattr(
+        "graph_layout_rag.harvest.bibliography.BIBLIOGRAPHY_SCAN_CACHE_DIR", tmp_path / "cache"
+    )
     monkeypatch.setattr("graph_layout_rag.harvest.bibliography.read_pdf_text", extract)
 
     first = _scan_seed_pdf(item)

@@ -6,6 +6,7 @@ is PDF-backed docs only). This script gives the true picture across all docs.
 Usage:
     uv run python scripts/single_chunk_rate.py
 """
+
 from __future__ import annotations
 
 import sys
@@ -16,7 +17,6 @@ ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 import lancedb  # noqa: E402
-
 from graph_layout_rag.paths import PKG_ROOT  # noqa: E402
 
 PROFILE = "cuda-qwen0.6b-1024"
@@ -42,9 +42,9 @@ def main() -> None:
 
     print(f"docs:         {total:,}")
     print(f"chunks:       {len(rows):,}")
-    print(f"single-chunk: {single:,} ({100*single/total:.1f}%)")
-    print(f"<300-char:    {short:,} ({100*short/total:.1f}%)")
-    print(f"mean chunks/doc: {len(rows)/total:.1f}")
+    print(f"single-chunk: {single:,} ({100 * single / total:.1f}%)")
+    print(f"<300-char:    {short:,} ({100 * short / total:.1f}%)")
+    print(f"mean chunks/doc: {len(rows) / total:.1f}")
 
 
 if __name__ == "__main__":

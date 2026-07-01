@@ -71,6 +71,7 @@ def test_enrich_no_candidates():
 
 # --- provider chain ---
 
+
 def test_openalex_decodes_inverted_index():
     with patch.object(
         enrich_mod,
@@ -82,17 +83,21 @@ def test_openalex_decodes_inverted_index():
 
 def test_fetch_abstract_falls_through_to_crossref_then_s2():
     # OpenAlex misses, Crossref misses, S2 hits — chain returns S2's abstract.
-    with patch.object(enrich_mod, "_from_openalex", return_value=None), patch.object(
-        enrich_mod, "_from_crossref", return_value=None
-    ), patch.object(enrich_mod, "_from_semantic_scholar", return_value="s2 abstract"):
+    with (
+        patch.object(enrich_mod, "_from_openalex", return_value=None),
+        patch.object(enrich_mod, "_from_crossref", return_value=None),
+        patch.object(enrich_mod, "_from_semantic_scholar", return_value="s2 abstract"),
+    ):
         assert enrich_mod._fetch_abstract("10.1/a") == "s2 abstract"
 
 
 def test_fetch_abstract_stops_at_first_hit():
     # OpenAlex hits — Crossref/S2 must not be consulted.
-    with patch.object(enrich_mod, "_from_openalex", return_value="oa abstract"), patch.object(
-        enrich_mod, "_from_crossref"
-    ) as cr, patch.object(enrich_mod, "_from_semantic_scholar") as s2:
+    with (
+        patch.object(enrich_mod, "_from_openalex", return_value="oa abstract"),
+        patch.object(enrich_mod, "_from_crossref") as cr,
+        patch.object(enrich_mod, "_from_semantic_scholar") as s2,
+    ):
         assert enrich_mod._fetch_abstract("10.1/a") == "oa abstract"
         cr.assert_not_called()
         s2.assert_not_called()

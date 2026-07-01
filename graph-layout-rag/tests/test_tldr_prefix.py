@@ -3,6 +3,7 @@
 Validates the profile gate and the prepend behavior (per-doc TLDR shared across its
 chunks, fail-soft when a doc has no TLDR) without touching a real index or store.
 """
+
 from __future__ import annotations
 
 import graph_layout_rag.ingest.tldr_prefix as tp
@@ -37,7 +38,9 @@ def test_is_tldr_profile():
 # ----------------------------------------------------------------- augmentation
 def test_prepends_tldr_per_doc(monkeypatch):
     # d1 has a TLDR (shared by both its chunks); d2 has none → left unchanged.
-    monkeypatch.setattr(tp, "_tldr_by_doc", lambda ids: {"d1": "Layered drawings minimize crossings."})
+    monkeypatch.setattr(
+        tp, "_tldr_by_doc", lambda ids: {"d1": "Layered drawings minimize crossings."}
+    )
     chunks = [_chunk("d1", "body-a", 0), _chunk("d1", "body-b", 1), _chunk("d2", "body-c", 0)]
     texts = ["body-a", "body-b", "body-c"]
     out = augment_texts_for_tldr(chunks, texts)

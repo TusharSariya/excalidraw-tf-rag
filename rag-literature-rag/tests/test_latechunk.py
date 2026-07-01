@@ -1,4 +1,5 @@
 """Tests for late-chunk window assignment + profile gating (no model load)."""
+
 from __future__ import annotations
 
 from rag_literature_rag.ingest.chunk import TextChunk, assign_late_chunk_windows
@@ -36,7 +37,7 @@ def test_window_spans_index_back_to_chunk_text():
     assert chunks[0].window_id == chunks[1].window_id
     wt = chunks[0].window_text
     for c in chunks:
-        assert wt[c.window_char_start:c.window_char_end] == c.text
+        assert wt[c.window_char_start : c.window_char_end] == c.text
 
 
 def test_window_splits_on_size_budget():
@@ -46,7 +47,7 @@ def test_window_splits_on_size_budget():
     assert len(wins) >= 2
     # spans still index correctly within each chunk's own window
     for c in chunks:
-        assert c.window_text[c.window_char_start:c.window_char_end] == c.text
+        assert c.window_text[c.window_char_start : c.window_char_end] == c.text
 
 
 def test_windows_never_span_two_documents():
@@ -96,6 +97,7 @@ def test_index_routes_latechunk_profile_and_bypasses_cache(monkeypatch):
         "rag_literature_rag.ingest.latechunk.embed_local_texts_with_tokens",
         fake_tokens,
     )
+
     def _boom(*a, **k):  # pragma: no cover - must never be called
         raise AssertionError("embed cache must be bypassed for latechunk")
 

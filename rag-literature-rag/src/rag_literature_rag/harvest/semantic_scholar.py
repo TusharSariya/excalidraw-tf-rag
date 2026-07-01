@@ -61,7 +61,12 @@ def _paper_to_item(paper: dict) -> ManifestItem:
         authors=authors,
         year=year,
         source="semantic-scholar",
-        url=pdf_url or (f"https://doi.org/{doi}" if doi else f"https://www.semanticscholar.org/paper/{paper.get('paperId', '')}"),
+        url=pdf_url
+        or (
+            f"https://doi.org/{doi}"
+            if doi
+            else f"https://www.semanticscholar.org/paper/{paper.get('paperId', '')}"
+        ),
         localPath=f"data/raw/pdf/{doc_id}.pdf" if pdf_url else None,
         contentType="application/pdf" if pdf_url else "text/metadata",
         status="metadata_only" if not pdf_url else "failed",

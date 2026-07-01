@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 from rag_common.config import EmbedConfig, EmbedStats
 from rag_common.embed import embed_query, embed_texts, finalize_embed_config
 from rag_common.openai_embed import resolve_workers

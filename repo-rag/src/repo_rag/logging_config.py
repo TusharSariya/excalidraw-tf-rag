@@ -47,7 +47,9 @@ def setup_logging(
             stream_handler = logging.StreamHandler(sys.stderr)
             stream_handler.setFormatter(formatter)
             root.addHandler(stream_handler)
-        if log_path is not None and not any(isinstance(h, logging.FileHandler) for h in root.handlers):
+        if log_path is not None and not any(
+            isinstance(h, logging.FileHandler) for h in root.handlers
+        ):
             log_path.parent.mkdir(parents=True, exist_ok=True)
             file_handler = logging.FileHandler(log_path, encoding="utf-8")
             file_handler.setFormatter(formatter)

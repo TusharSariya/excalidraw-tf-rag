@@ -124,7 +124,9 @@ def search(
     # or the model is unavailable — see rag_common.rerank.
     for row in merged:
         header = " ".join(filter(None, (row.get("file_path"), row.get("symbol"))))
-        row["_rerank_text"] = f"{header}\n{row.get('text') or ''}" if header else (row.get("text") or "")
+        row["_rerank_text"] = (
+            f"{header}\n{row.get('text') or ''}" if header else (row.get("text") or "")
+        )
     ranked = rerank_candidates(query, merged, top=top, text_key="_rerank_text", enabled=rerank)
     log.debug(
         "hybrid dense=%d sparse=%d merged=%d ranked=%d",

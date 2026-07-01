@@ -112,7 +112,8 @@ def rerank(
 
     if os.getenv("RAG_GPU_GATEWAY_URL"):
         from rag_common.remote_embed import rerank_remote
-        passages = [(row.get(text_key) or "")[:max_rerank_chars()] for row in rows]
+
+        passages = [(row.get(text_key) or "")[: max_rerank_chars()] for row in rows]
         try:
             scores = rerank_remote(query, passages, model_id=name)
         except Exception as exc:  # noqa: BLE001
@@ -128,7 +129,7 @@ def rerank(
         log.warning("reranker %s unavailable (%s); returning unranked top-%d", name, exc, top)
         return rows[:top]
 
-    pairs = [(query, (row.get(text_key) or "")[:max_rerank_chars()]) for row in rows]
+    pairs = [(query, (row.get(text_key) or "")[: max_rerank_chars()]) for row in rows]
     try:
         try:
             scores = model.predict(pairs, batch_size=_rerank_batch_size())
@@ -140,10 +141,7 @@ def rerank(
         log.warning("rerank predict failed (%s); returning unranked top-%d", exc, top)
         return rows[:top]
 
-    scored = [
-        {**row, "rerank_score": round(float(score), 6)}
-        for row, score in zip(rows, scores)
-    ]
+    scored = [{**row, "rerank_score": round(float(score), 6)} for row, score in zip(rows, scores)]
     scored.sort(key=lambda r: r["rerank_score"], reverse=True)
     return scored[:top]
 
@@ -194,7 +192,7 @@ def rerank_listwise_llm(
         return rows[:top]
 
     head = rows[: max(pool, top)]
-    tail = rows[len(head):]
+    tail = rows[len(head) :]
     lines = []
     for i, row in enumerate(head):
         title = (row.get("title") or "").strip()

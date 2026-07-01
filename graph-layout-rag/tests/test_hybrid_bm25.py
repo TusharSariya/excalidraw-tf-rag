@@ -94,6 +94,8 @@ def test_rrf_defaults_favor_sparse_at_new_weights():
     # At equal weight (the pre-campaign default) the two should tie and the
     # ordering is not guaranteed sparse-first -- confirms the assertion above
     # is actually exercising the new weights, not RRF's tie-break order.
-    equal_weight_fused = reciprocal_rank_fusion(dense, sparse, top=10, dense_weight=1.0, sparse_weight=1.0)
+    equal_weight_fused = reciprocal_rank_fusion(
+        dense, sparse, top=10, dense_weight=1.0, sparse_weight=1.0
+    )
     equal_scores = {r["id"]: r["fusion_score"] for r in equal_weight_fused}
     assert equal_scores["dense_top:0"] == equal_scores["sparse_top:0"]

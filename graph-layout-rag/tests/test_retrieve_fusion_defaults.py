@@ -4,6 +4,7 @@ arm calls reciprocal_rank_fusion with no weight kwargs, so it silently
 inherits whatever query/hybrid.py's module constants say (Codex #6 blast
 radius). A regression here means the two arms have drifted apart.
 """
+
 from __future__ import annotations
 
 from graph_layout_rag.query import retrieve as retrieve_mod
@@ -34,9 +35,13 @@ def _patch_common(monkeypatch, calls):
     monkeypatch.setattr(retrieve_mod, "reciprocal_rank_fusion", fake_rrf)
     monkeypatch.setattr(retrieve_mod, "resolve_retrieve_context", lambda **k: _FakeContext())
     monkeypatch.setattr(retrieve_mod, "_pool_size", lambda **k: 10)
-    monkeypatch.setattr(retrieve_mod, "_dense_search", lambda *a, **k: [{"id": "d:0", "score": 0.5}])
+    monkeypatch.setattr(
+        retrieve_mod, "_dense_search", lambda *a, **k: [{"id": "d:0", "score": 0.5}]
+    )
     monkeypatch.setattr(retrieve_mod, "_embed_vector", lambda *a, **k: [0.1, 0.2])
-    monkeypatch.setattr(retrieve_mod.bm25, "search_bm25", lambda *a, **k: [{"id": "s:0", "score": 1.0}])
+    monkeypatch.setattr(
+        retrieve_mod.bm25, "search_bm25", lambda *a, **k: [{"id": "s:0", "score": 1.0}]
+    )
     monkeypatch.setattr(retrieve_mod, "_apply_filters", lambda candidates, filters: candidates)
 
 
@@ -63,9 +68,13 @@ def test_retrieve_multi_query_inherits_promoted_defaults_via_module_constants(mo
     monkeypatch.setattr(retrieve_mod, "reciprocal_rank_fusion", fake_rrf_no_kwargs_path)
     monkeypatch.setattr(retrieve_mod, "resolve_retrieve_context", lambda **k: _FakeContext())
     monkeypatch.setattr(retrieve_mod, "_pool_size", lambda **k: 10)
-    monkeypatch.setattr(retrieve_mod, "_dense_search", lambda *a, **k: [{"id": "d:0", "score": 0.5}])
+    monkeypatch.setattr(
+        retrieve_mod, "_dense_search", lambda *a, **k: [{"id": "d:0", "score": 0.5}]
+    )
     monkeypatch.setattr(retrieve_mod, "_embed_vector", lambda *a, **k: [0.1, 0.2])
-    monkeypatch.setattr(retrieve_mod.bm25, "search_bm25", lambda *a, **k: [{"id": "s:0", "score": 1.0}])
+    monkeypatch.setattr(
+        retrieve_mod.bm25, "search_bm25", lambda *a, **k: [{"id": "s:0", "score": 1.0}]
+    )
     monkeypatch.setattr(retrieve_mod, "_apply_filters", lambda candidates, filters: candidates)
 
     retrieve_mod.retrieve_multi_query(["query"], hybrid=True)

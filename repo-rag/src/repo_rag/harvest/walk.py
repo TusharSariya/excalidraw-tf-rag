@@ -84,8 +84,21 @@ INCLUDE_ROOTS: tuple[str, ...] = (
 )
 
 SOURCE_SUFFIXES = (
-    ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts",
-    ".md", ".mdx", ".json", ".jsonc", ".toml", ".yaml", ".yml",
+    ".ts",
+    ".tsx",
+    ".js",
+    ".jsx",
+    ".mjs",
+    ".cjs",
+    ".mts",
+    ".cts",
+    ".md",
+    ".mdx",
+    ".json",
+    ".jsonc",
+    ".toml",
+    ".yaml",
+    ".yml",
 )
 CONFIG_FILES = {"package.json", "tsconfig.json", "wrangler.jsonc"}
 ROOT_CONFIG_FILES = CONFIG_FILES | {"dependency-cruiser.js", "eslint.config.mjs"}
@@ -145,7 +158,15 @@ def _classify_source_type(rel: str, is_test: bool) -> str:
         name = Path(rel).name
         if name.startswith("terraform"):
             return "terraform"
-    if rel.startswith(("packages/excalidraw/", "packages/element/", "packages/common/", "packages/math/", "packages/utils/")):
+    if rel.startswith(
+        (
+            "packages/excalidraw/",
+            "packages/element/",
+            "packages/common/",
+            "packages/math/",
+            "packages/utils/",
+        )
+    ):
         return "code"
     if rel.startswith(("excalidraw-app/", "functions/", "packages/backend/")):
         return "app"
@@ -239,7 +260,11 @@ def harvest_repo(root: Path | None = None) -> RepoManifest:
         if _is_noise_content(rel, path):
             continue
 
-        is_test = ".test." in path.name or path.name.endswith(".test.ts") or path.name.endswith(".test.tsx")
+        is_test = (
+            ".test." in path.name
+            or path.name.endswith(".test.ts")
+            or path.name.endswith(".test.tsx")
+        )
         source_type = _classify_source_type(rel, is_test)
         entries.append(
             FileEntry(

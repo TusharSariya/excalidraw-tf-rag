@@ -3,8 +3,8 @@ from unittest.mock import patch
 from graph_layout_rag.harvest.doi_resolver import (
     _arxiv_pdf_url,
     _openalex_has_oa_pdf,
-    _pmc_pdf_urls,
     _plos_pdf_url,
+    _pmc_pdf_urls,
     _springer_pdf_url,
     pick_pdf_urls,
     resolve_doi_with_fallbacks,
@@ -19,9 +19,7 @@ def test_springer_pdf_url():
 
 
 def test_arxiv_pdf_url():
-    assert _arxiv_pdf_url("10.48550/arXiv.2311.00533") == (
-        "https://arxiv.org/pdf/2311.00533.pdf"
-    )
+    assert _arxiv_pdf_url("10.48550/arXiv.2311.00533") == ("https://arxiv.org/pdf/2311.00533.pdf")
 
 
 def test_plos_pdf_url():
@@ -67,7 +65,9 @@ def test_pick_pdf_urls_merges_sources():
 
 def test_pick_pdf_urls_no_hal_or_paywall_by_default():
     with patch("graph_layout_rag.harvest.doi_resolver._unpaywall_pdf", return_value=[]):
-        with patch("graph_layout_rag.harvest.doi_resolver._semantic_scholar_pdf", return_value=None):
+        with patch(
+            "graph_layout_rag.harvest.doi_resolver._semantic_scholar_pdf", return_value=None
+        ):
             urls = pick_pdf_urls(
                 "10.1109/TVCG.2006.156",
                 None,
@@ -80,7 +80,9 @@ def test_pick_pdf_urls_no_hal_or_paywall_by_default():
 def test_pick_pdf_urls_paywall_guesses_last():
     work = {"best_oa_location": {"pdf_url": "https://example.com/oa.pdf"}}
     with patch("graph_layout_rag.harvest.doi_resolver._unpaywall_pdf", return_value=[]):
-        with patch("graph_layout_rag.harvest.doi_resolver._semantic_scholar_pdf", return_value=None):
+        with patch(
+            "graph_layout_rag.harvest.doi_resolver._semantic_scholar_pdf", return_value=None
+        ):
             urls = pick_pdf_urls(
                 "10.1145/1234567.1234567",
                 work,
@@ -97,7 +99,9 @@ def test_pick_pdf_urls_archive_only_when_requested():
         return_value=["https://web.archive.org/web/2020/https://example.com/a.pdf"],
     ) as archive_mock:
         with patch("graph_layout_rag.harvest.doi_resolver._unpaywall_pdf", return_value=[]):
-            with patch("graph_layout_rag.harvest.doi_resolver._semantic_scholar_pdf", return_value=None):
+            with patch(
+                "graph_layout_rag.harvest.doi_resolver._semantic_scholar_pdf", return_value=None
+            ):
                 urls = pick_pdf_urls("10.1145/1234567.1234567", None, include_archive=False)
     archive_mock.assert_not_called()
     assert not any("web.archive.org" in u for u in urls)
@@ -107,7 +111,9 @@ def test_pick_pdf_urls_archive_only_when_requested():
         return_value=["https://web.archive.org/web/2020/https://example.com/a.pdf"],
     ):
         with patch("graph_layout_rag.harvest.doi_resolver._unpaywall_pdf", return_value=[]):
-            with patch("graph_layout_rag.harvest.doi_resolver._semantic_scholar_pdf", return_value=None):
+            with patch(
+                "graph_layout_rag.harvest.doi_resolver._semantic_scholar_pdf", return_value=None
+            ):
                 urls = pick_pdf_urls("10.1145/1234567.1234567", None, include_archive=True)
     assert any("web.archive.org" in u for u in urls)
 

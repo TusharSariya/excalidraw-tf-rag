@@ -23,6 +23,7 @@ Critical assertions here:
   * a *genuinely* provenance-biased judge — one that disagrees with curated truth
     far more for one provenance — STILL FAILS the gate.
 """
+
 from __future__ import annotations
 
 import json
@@ -180,9 +181,7 @@ def test_clean_judge_passes(tmp_path: Path) -> None:
                 }
             },
         }
-        qrels_cases[cid] = {
-            doc: {"grade": 3, "reason": "rel", "systems": sysl, "curated": True}
-        }
+        qrels_cases[cid] = {doc: {"grade": 3, "reason": "rel", "systems": sysl, "curated": True}}
 
     result = judge_audit(
         str(_pool(tmp_path, pool_cases)),
@@ -246,7 +245,12 @@ def test_dense_only_relevant_docs_are_not_bias(tmp_path: Path) -> None:
             },
         }
         qrels_cases[cid] = {
-            dense_doc: {"grade": 3, "reason": "rel", "systems": ["dense", "colbert"], "curated": False},
+            dense_doc: {
+                "grade": 3,
+                "reason": "rel",
+                "systems": ["dense", "colbert"],
+                "curated": False,
+            },
             bm25_doc: {"grade": 0, "reason": "no", "systems": ["bm25"], "curated": False},
         }
 
@@ -305,7 +309,12 @@ def test_genuinely_biased_judge_still_caught(tmp_path: Path) -> None:
             },
         }
         qrels_cases[cid] = {
-            doc: {"grade": 0, "reason": "judge wrongly rejects dense", "systems": ["dense"], "curated": True}
+            doc: {
+                "grade": 0,
+                "reason": "judge wrongly rejects dense",
+                "systems": ["dense"],
+                "curated": True,
+            }
         }
 
     # Curated bm25-only docs the judge correctly grades 3 (truth=relevant).

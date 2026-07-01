@@ -1,0 +1,39 @@
+# Local pre-push guard for this repo. Install once:
+#
+#     cd tools && uvx pre-commit install --hook-type pre-push
+#
+# It mirrors CI's ruff gate and adds the guards CI can't (secrets, big files)
+# BEFORE anything leaves your machine — the repo's ~42 GB of data and .env API
+# keys are gitignored, and these hooks are the backstop if that ever slips.
+# Fast (seconds, no tests); tests run in CI.
+default_install_hook_types: [pre-push]
+default_stages: [pre-push]
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.20
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        # A LanceDB index / PDF corpus / model weight would blow past this;
+        # source and lockfiles never do.
+        args: [--maxkb=1024]
+      - id: detect-private-key
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      # Catches OPENAI/OPENALEX/Gemini tokens etc. — defence in depth beyond
+      # .gitignore, in case a secret is ever staged directly.
+      - id: gitleaks

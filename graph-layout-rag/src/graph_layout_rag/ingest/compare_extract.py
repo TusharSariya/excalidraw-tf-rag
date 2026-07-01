@@ -105,7 +105,9 @@ def _mean(rows: list[dict], backend: str, key: str) -> float:
     "Default: pymupdf + docling (no API cost). Add 'gemini' to include the vision backend.",
 )
 @click.option("--all", "all_backends", is_flag=True, help="Compare all backends (incl. gemini).")
-@click.option("--show-diff", is_flag=True, help="Print a clean excerpt per backend for the first doc.")
+@click.option(
+    "--show-diff", is_flag=True, help="Print a clean excerpt per backend for the first doc."
+)
 @click.option("--json", "as_json", is_flag=True, help="JSON output.")
 def compare_extract_cmd(
     limit: int, backends: tuple[str, ...], all_backends: bool, show_diff: bool, as_json: bool
@@ -142,8 +144,7 @@ def compare_extract_cmd(
                 {
                     **{k: v for k, v in r.items() if k != "backends"},
                     "backends": [
-                        {k: v for k, v in b.items() if not k.startswith("_")}
-                        for b in r["backends"]
+                        {k: v for k, v in b.items() if not k.startswith("_")} for b in r["backends"]
                     ],
                 }
             )
@@ -155,10 +156,7 @@ def compare_extract_cmd(
         return
 
     n = len(rows)
-    click.echo(
-        f"Compared {n} PDF(s) across: {', '.join(chosen)} "
-        f"(baseline: PyMuPDF-raw).\n"
-    )
+    click.echo(f"Compared {n} PDF(s) across: {', '.join(chosen)} (baseline: PyMuPDF-raw).\n")
     for r in rows:
         click.echo(
             f"- {r['doc_id']}  {r['title'][:66]}  "

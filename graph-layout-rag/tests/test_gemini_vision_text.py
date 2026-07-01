@@ -1,8 +1,6 @@
 import types
 from pathlib import Path
 
-import pytest
-
 from graph_layout_rag import gemini_vision_text
 from graph_layout_rag.ingest import extract as extract_mod
 from graph_layout_rag.manifest import ManifestItem

@@ -23,9 +23,13 @@ def test_google_rerank_orders_api_records(tmp_path):
         "RAG_LIT_GOOGLE_RANKING_CACHE": str(tmp_path / "cache.json"),
         "GOOGLE_CLOUD_PROJECT": "project",
     }
-    with patch.dict("os.environ", env, clear=True), patch(
-        "rag_literature_rag.eval.google_rerank._access_token",
-        return_value="token",
-    ), patch("rag_literature_rag.eval.google_rerank.httpx.post", return_value=response):
+    with (
+        patch.dict("os.environ", env, clear=True),
+        patch(
+            "rag_literature_rag.eval.google_rerank._access_token",
+            return_value="token",
+        ),
+        patch("rag_literature_rag.eval.google_rerank.httpx.post", return_value=response),
+    ):
         out = rerank_google("q", rows, top=2, model="m")
     assert [row["id"] for row in out] == ["b", "a"]

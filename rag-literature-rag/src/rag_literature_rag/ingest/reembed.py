@@ -13,7 +13,6 @@ import lancedb
 
 from rag_literature_rag.ingest.chunk import TextChunk, chunking_fingerprint
 from rag_literature_rag.ingest.embed import EmbedStats, prepare_embed_config
-from rag_literature_rag.ingest.latechunk import is_latechunk_profile
 from rag_literature_rag.ingest.index import (
     IndexPhaseStats,
     load_ingest_state,
@@ -21,6 +20,7 @@ from rag_literature_rag.ingest.index import (
     update_ingest_metadata,
     upsert_chunks,
 )
+from rag_literature_rag.ingest.latechunk import is_latechunk_profile
 from rag_literature_rag.ingest.log import setup_ingest_logging
 from rag_literature_rag.paths import CHUNKS_TABLE, profile_index_paths
 
@@ -74,9 +74,7 @@ def _latechunk_doc_batches(
     whole docs up to ~batch_size chunks. A single doc larger than batch_size still
     goes out whole (memory is bounded by one doc's window, not the batch).
     """
-    ordered = sorted(
-        rows, key=lambda r: (str(r.get("doc_id", "")), int(r.get("chunk_index", 0)))
-    )
+    ordered = sorted(rows, key=lambda r: (str(r.get("doc_id", "")), int(r.get("chunk_index", 0))))
     by_doc: dict[str, list[dict[str, Any]]] = {}
     doc_order: list[str] = []
     for r in ordered:

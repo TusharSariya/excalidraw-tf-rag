@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import urlparse
 
 import httpx
 
@@ -62,11 +61,20 @@ def _parse_rows(md: str) -> list[dict]:
                 doi = dm.group(0).rstrip(").,;")
         if not doi and not arxiv_id:
             continue
-        rows.append({"title": title, "url": url, "doi": doi, "tags": ["awesome-rag-table", tags_cell.lower().replace(" ", "-")]})
+        rows.append(
+            {
+                "title": title,
+                "url": url,
+                "doi": doi,
+                "tags": ["awesome-rag-table", tags_cell.lower().replace(" ", "-")],
+            }
+        )
     return rows
 
 
-def harvest_awesome_rag_table(*, dry_run: bool = False, workers: int | None = None, max_items: int = 120) -> list[ManifestItem]:
+def harvest_awesome_rag_table(
+    *, dry_run: bool = False, workers: int | None = None, max_items: int = 120
+) -> list[ManifestItem]:
     try:
         md = _fetch_table_markdown()
     except Exception:

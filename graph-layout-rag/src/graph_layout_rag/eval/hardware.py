@@ -4,7 +4,6 @@ import os
 import platform
 import resource
 import subprocess
-import time
 from dataclasses import dataclass
 
 
@@ -89,7 +88,9 @@ def memory_abort_reason(
     if rss is not None and rss > max_process_rss_gb:
         return f"process RSS {rss:.2f} GB exceeded {max_process_rss_gb:.2f} GB"
     if snapshot.available_gb is not None and snapshot.available_gb < min_available_gb:
-        return f"available memory {snapshot.available_gb:.2f} GB fell below {min_available_gb:.2f} GB"
+        return (
+            f"available memory {snapshot.available_gb:.2f} GB fell below {min_available_gb:.2f} GB"
+        )
     if (
         start_swap_gb is not None
         and snapshot.swap_used_gb is not None

@@ -18,9 +18,9 @@ If the BM25→dense gap narrows on the new qrels and dense's hole rate falls, th
 original verdict was partly a labeling artifact. If hybrid still wins on the
 neutral, low-hole judge, the verdict is robust.
 """
+
 from __future__ import annotations
 
-import math
 from typing import Any
 
 from rag_literature_rag.eval.gold_validation import EvalTrack, cases_for_track
@@ -124,7 +124,9 @@ def run_diagnostics(
                 ranked_rows = strategy.run(case, embed_profile=embed_profile, top=depth)
             except Exception:  # noqa: BLE001
                 continue
-            ranking = [canon(r.get("canonical_doc_id") or r.get("doc_id") or "") for r in ranked_rows]
+            ranking = [
+                canon(r.get("canonical_doc_id") or r.get("doc_id") or "") for r in ranked_rows
+            ]
             ranking = [d for d in ranking if d]
 
             rows.append(

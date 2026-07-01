@@ -3,11 +3,12 @@
 Covers the pure decision logic added for query expansion (A1) and the listwise
 reranker parsing + graceful-degradation paths (A3).
 """
+
 from __future__ import annotations
 
+from rag_common.rerank import _parse_rank_order, rerank_listwise_llm
 from rag_literature_rag.eval.strategies import ALL_STRATEGIES, strategy_registry
 from rag_literature_rag.query.search import _should_expand
-from rag_common.rerank import _parse_rank_order, rerank_listwise_llm
 
 
 def test_should_expand_short_query() -> None:

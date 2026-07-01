@@ -5,6 +5,7 @@ FILTER-ONLY index columns, and the retrieve path PRE-filters on them.
 Critical invariant: these fields must NOT enter the embedded/BM25 text (embedding
 metadata is A/B-proven NULL on this corpus and would cache-bust every chunk).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -73,7 +74,11 @@ def test_filter_fields_not_in_embed_text():
 
 def test_filter_fields_default_when_absent():
     item = ManifestItem(
-        id="d", title="t", source="s", url="u", status="ok",
+        id="d",
+        title="t",
+        source="s",
+        url="u",
+        status="ok",
     )
     chunk = chunk_metadata(item, "body")[0]
     assert chunk.venue is None
@@ -193,9 +198,7 @@ def test_apply_filters_exclude_retracted():
 
 
 def test_bm25_roundtrips_filter_fields(tmp_path: Path):
-    chunk = chunk_metadata(
-        _item(id="a"), "network simplex rank assignment in layered drawing"
-    )[0]
+    chunk = chunk_metadata(_item(id="a"), "network simplex rank assignment in layered drawing")[0]
     bm25.upsert_chunks([chunk], [chunk.text], index_dir=tmp_path / "bm25", rebuild=True)
     hits = bm25.search_bm25("network simplex", index_dir=tmp_path / "bm25", limit=10)
     assert hits
@@ -287,17 +290,34 @@ def test_cache_hit_reapplies_filter_fields_from_live_item():
     # cached chunks from an earlier build: venue was null then
     stale = [
         TextChunk(
-            doc_id="d1", title="T", text="body", page=1, chunk_index=i,
-            source_url="", year=2010, tags=[], authors=[], pipeline_categories=[],
-            venue=None, arxiv_category=None, genre=None,
+            doc_id="d1",
+            title="T",
+            text="body",
+            page=1,
+            chunk_index=i,
+            source_url="",
+            year=2010,
+            tags=[],
+            authors=[],
+            pipeline_categories=[],
+            venue=None,
+            arxiv_category=None,
+            genre=None,
         )
         for i in range(3)
     ]
     item = ManifestItem(
-        id="d1", title="T", source="openalex", url="", status="ok",
+        id="d1",
+        title="T",
+        source="openalex",
+        url="",
+        status="ok",
         venue="Journal of Graph Algorithms and Applications",
-        arxiv_category="cs.DS", genre="article", venue_type="journal",
-        oa_version="publishedVersion", is_retracted=False,
+        arxiv_category="cs.DS",
+        genre="article",
+        venue_type="journal",
+        oa_version="publishedVersion",
+        is_retracted=False,
     )
     out = _apply_filter_fields(stale, item)
     assert all(c.venue == "Journal of Graph Algorithms and Applications" for c in out)

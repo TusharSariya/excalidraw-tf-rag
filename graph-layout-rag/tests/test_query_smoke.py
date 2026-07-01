@@ -3,7 +3,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 from graph_layout_rag.env import load_env_file
 from graph_layout_rag.ingest.index import chunk_count
 from graph_layout_rag.paths import list_profile_indexes, profile_index_paths

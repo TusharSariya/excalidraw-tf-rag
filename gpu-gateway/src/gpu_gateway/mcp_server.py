@@ -42,8 +42,9 @@ def _post(path: str, payload: dict) -> dict:
     key = _api_key()
     body = json.dumps(payload).encode()
     req = urllib.request.Request(
-        url, data=body, headers={"Content-Type": "application/json",
-                                  **({"X-API-Key": key} if key else {})}
+        url,
+        data=body,
+        headers={"Content-Type": "application/json", **({"X-API-Key": key} if key else {})},
     )
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:

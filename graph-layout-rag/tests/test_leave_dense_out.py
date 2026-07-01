@@ -13,6 +13,7 @@ a lexical-vs-dense provenance; ``leave_dense_out_case_ids`` keeps only the cases
 lexical/BM25-family system surfaced, so the BM25-falls comparison can be recomputed
 on a subset whose existence does NOT depend on dense retrieval.
 """
+
 from __future__ import annotations
 
 import json

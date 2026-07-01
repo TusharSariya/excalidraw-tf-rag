@@ -56,7 +56,7 @@ def use_cuda_bnb_4bit(config: EmbedConfig | None = None) -> bool:
 
 
 def resolved_embed_backend(
-    config: "EmbedConfig | None" = None, *, model_name: str | None = None
+    config: EmbedConfig | None = None, *, model_name: str | None = None
 ) -> str:
     """Concrete embed backend AS RESOLVED ON THIS HOST.
 
@@ -180,8 +180,7 @@ def gemini_config(
     return EmbedConfig(
         backend="gemini",
         model=model or os.getenv("RAG_GEMINI_EMBED_MODEL", GEMINI_DEFAULT_MODEL),
-        dimensions=dimensions
-        or int(os.getenv("RAG_GEMINI_EMBED_DIMS", str(GEMINI_DEFAULT_DIMS))),
+        dimensions=dimensions or int(os.getenv("RAG_GEMINI_EMBED_DIMS", str(GEMINI_DEFAULT_DIMS))),
         profile=profile,
     )
 

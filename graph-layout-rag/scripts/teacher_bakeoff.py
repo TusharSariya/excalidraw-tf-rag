@@ -17,6 +17,7 @@ Usage (desktop):
   uv run --with ... python scripts/teacher_bakeoff.py --backend qwen3 \
       --model Qwen/Qwen3-Reranker-0.6B --tag qwen3-0.6b
 """
+
 from __future__ import annotations
 
 import argparse
@@ -25,7 +26,6 @@ import time
 from pathlib import Path
 
 import torch
-
 from graph_layout_rag.eval.metrics import case_metrics
 from graph_layout_rag.eval.qrels import (
     DEFAULT_RELEVANCE_THRESHOLD,
@@ -82,16 +82,16 @@ class CEBackend:
         from sentence_transformers import CrossEncoder
 
         self.m = CrossEncoder(
-            model, device="cuda", max_length=max_length,
+            model,
+            device="cuda",
+            max_length=max_length,
             automodel_args={"torch_dtype": torch.float16},
         )
 
     def score(self, query, docs, bs):
         import numpy as np
 
-        scores = self.m.predict(
-            [[query, d] for d in docs], batch_size=bs, show_progress_bar=False
-        )
+        scores = self.m.predict([[query, d] for d in docs], batch_size=bs, show_progress_bar=False)
         return np.asarray(scores, dtype=float).tolist()
 
 
@@ -105,7 +105,11 @@ class MxbaiBackend:
 
     def score(self, query, docs, bs):
         ranked = self.m.rank(
-            query, docs, top_k=len(docs), batch_size=bs, return_documents=False,
+            query,
+            docs,
+            top_k=len(docs),
+            batch_size=bs,
+            return_documents=False,
             sort=False,
         )
         # sort=False -> results in input order; .score per item
@@ -123,9 +127,7 @@ class Qwen3Backend:
         "based on the Query and the Instruct provided. Note that the answer can "
         'only be "yes" or "no".<|im_end|>\n<|im_start|>user\n'
     )
-    SUFFIX = (
-        "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
-    )
+    SUFFIX = "<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n"
     INSTRUCT = (
         "Given a graph-drawing / graph-layout search query, retrieve passages "
         "that are relevant to answering it."
@@ -157,9 +159,7 @@ class Qwen3Backend:
         self.suf_ids = self.tok.encode(self.SUFFIX, add_special_tokens=False)
 
     def _fmt(self, query, doc):
-        return (
-            f"<Instruct>: {self.INSTRUCT}\n<Query>: {query}\n<Document>: {doc}"
-        )
+        return f"<Instruct>: {self.INSTRUCT}\n<Query>: {query}\n<Document>: {doc}"
 
     @torch.no_grad()
     def score(self, query, docs, bs):
@@ -171,13 +171,15 @@ class Qwen3Backend:
             batch = docs[i : i + bs]
             texts = [self._fmt(query, d) for d in batch]
             enc = self.tok(
-                texts, truncation=True, max_length=body_max,
+                texts,
+                truncation=True,
+                max_length=body_max,
                 add_special_tokens=False,
             )
             input_ids = [self.pre_ids + ids + self.suf_ids for ids in enc["input_ids"]]
-            pad = self.tok.pad(
-                {"input_ids": input_ids}, padding=True, return_tensors="pt"
-            ).to("cuda")
+            pad = self.tok.pad({"input_ids": input_ids}, padding=True, return_tensors="pt").to(
+                "cuda"
+            )
             logits = self.model(**pad).logits[:, -1, :]
             tf = logits[:, [self.tok_false, self.tok_true]]
             p_yes = F.log_softmax(tf, dim=1)[:, 1].exp()
@@ -220,15 +222,15 @@ def main():
 
     t0 = time.time()
     backend = make_backend(args)
-    print(f"[{args.tag}] loaded in {time.time()-t0:.1f}s", flush=True)
+    print(f"[{args.tag}] loaded in {time.time() - t0:.1f}s", flush=True)
 
     per_case, t_nd, h_nd = [], [], []
     for i, (cid, case) in enumerate(sorted(cases.items())):
         query = case["query"]
         pooled = case["pooled"]
-        rel = set(
-            relevant_from_grades(labels.get(cid, {}), threshold=threshold)
-        ) | set(case.get("curated_relevant") or [])
+        rel = set(relevant_from_grades(labels.get(cid, {}), threshold=threshold)) | set(
+            case.get("curated_relevant") or []
+        )
         if not rel:
             continue
         doc_ids = list(pooled.keys())
@@ -250,7 +252,7 @@ def main():
         )
         mem = torch.cuda.max_memory_allocated() / 1e9
         print(
-            f"[{args.tag}] [{i+1}/{len(cases)}] {cid:46s} "
+            f"[{args.tag}] [{i + 1}/{len(cases)}] {cid:46s} "
             f"t={tm['ndcg@10']:.4f} h={hm['ndcg@10']:.4f} gpu={mem:.2f}GB",
             flush=True,
         )

@@ -7,7 +7,6 @@ synthetic reranked row and monkeypatch the three metadata sources.
 from __future__ import annotations
 
 import pytest
-
 from graph_layout_rag.citation_store import PaperMeta
 from graph_layout_rag.manifest import ManifestItem
 from graph_layout_rag.query import search as search_mod
@@ -106,9 +105,7 @@ def test_cited_by_falls_back_to_papers_meta_when_graph_lacks_doc(monkeypatch):
         "graph_layout_rag.citation_store.load_paper_meta_cached",
         lambda: {"doc-c": meta},
     )
-    monkeypatch.setattr(
-        "graph_layout_rag.query.citation_rank.load_graph_cached", lambda: None
-    )
+    monkeypatch.setattr("graph_layout_rag.query.citation_rank.load_graph_cached", lambda: None)
     monkeypatch.setattr(search_mod, "_manifest_by_doc", lambda: {})
 
     entry = format_results([_row("doc-c")], top=5, max_per_doc=2)[0]
@@ -118,12 +115,8 @@ def test_cited_by_falls_back_to_papers_meta_when_graph_lacks_doc(monkeypatch):
 
 
 def test_graceful_degrade_when_all_sources_empty(monkeypatch):
-    monkeypatch.setattr(
-        "graph_layout_rag.citation_store.load_paper_meta_cached", lambda: {}
-    )
-    monkeypatch.setattr(
-        "graph_layout_rag.query.citation_rank.load_graph_cached", lambda: None
-    )
+    monkeypatch.setattr("graph_layout_rag.citation_store.load_paper_meta_cached", lambda: {})
+    monkeypatch.setattr("graph_layout_rag.query.citation_rank.load_graph_cached", lambda: None)
     monkeypatch.setattr(search_mod, "_manifest_by_doc", lambda: {})
 
     out = format_results([_row("doc-absent")], top=5, max_per_doc=2)

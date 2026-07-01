@@ -351,9 +351,7 @@ TOPIC_DOI_SEEDS: list[dict] = [
         "doi": "10.7155/jgaa.00001",
         "tags": ["crossing", "layered"],
         "title_hint": "2-Layer Straightline Crossing Minimization (Jünger & Mutzel)",
-        "pdf_urls": [
-            "https://jgaa.info/index.php/jgaa/article/download/paper1/2965/2771"
-        ],
+        "pdf_urls": ["https://jgaa.info/index.php/jgaa/article/download/paper1/2965/2771"],
     },
     {
         "doi": "10.7155/jgaa.00088",

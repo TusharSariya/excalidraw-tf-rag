@@ -1,4 +1,4 @@
-from rag_literature_rag.harvest.providers import OpenAlexPolicy, OutcomeKind, ProviderPolicy
+from rag_literature_rag.harvest.providers import OpenAlexPolicy, ProviderPolicy
 
 
 class FakeClock:

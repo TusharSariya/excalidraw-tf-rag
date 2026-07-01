@@ -17,6 +17,7 @@ reruns strategies separately and can swallow exceptions per-case), so the
 gate must do its own explicit join and treat a missing/failed diagnostics
 row as a gate error, never a silent pass.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -92,12 +93,22 @@ def evaluate_gate(
 
         if base_row is None or "ndcg@10" not in base_row:
             findings.append(
-                GateFinding(track, "baseline_present", False, f"no baseline benchmark row for {baseline_strategy}/{track}")
+                GateFinding(
+                    track,
+                    "baseline_present",
+                    False,
+                    f"no baseline benchmark row for {baseline_strategy}/{track}",
+                )
             )
             continue
         if cand_row is None or "ndcg@10" not in cand_row:
             findings.append(
-                GateFinding(track, "candidate_present", False, f"no candidate benchmark row for {candidate_strategy}/{track}")
+                GateFinding(
+                    track,
+                    "candidate_present",
+                    False,
+                    f"no candidate benchmark row for {candidate_strategy}/{track}",
+                )
             )
             continue
 

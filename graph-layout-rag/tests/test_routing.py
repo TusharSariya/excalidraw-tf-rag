@@ -1,5 +1,4 @@
 import pytest
-
 from graph_layout_rag.query.routing import NL_MIN_TOKENS, classify_query_mode
 
 

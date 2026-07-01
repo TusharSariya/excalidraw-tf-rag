@@ -1,7 +1,5 @@
 """Toy-graph tests for the relatedness math (no network, no DB)."""
 
-from collections import defaultdict
-
 from graph_layout_rag.query.citation_rank import (
     CitationGraph,
     bibliographic_coupling,
@@ -119,9 +117,7 @@ def _stats_graph() -> CitationGraph:
 
 def test_in_corpus_stats_no_graph_returns_empty(monkeypatch):
     # graph=None with no store -> load_graph_cached returns None -> {}
-    monkeypatch.setattr(
-        "graph_layout_rag.query.citation_rank.load_graph_cached", lambda: None
-    )
+    monkeypatch.setattr("graph_layout_rag.query.citation_rank.load_graph_cached", lambda: None)
     assert in_corpus_citation_stats("doc-a", None) == {}
 
 
@@ -186,7 +182,7 @@ def test_load_graph_bridges_doc_id_by_doi(tmp_path, monkeypatch):
 
     g = load_graph(db)
     db.close()
-    assert g.doc_to_oa.get("direct-1") == "Wa"          # direct mapping preserved
-    assert g.doc_to_oa.get("bridged-2") == "Wb"         # recovered via DOI (case-normalized)
-    assert "nodoi-3" not in g.doc_to_oa                  # no DOI -> not bridged
+    assert g.doc_to_oa.get("direct-1") == "Wa"  # direct mapping preserved
+    assert g.doc_to_oa.get("bridged-2") == "Wb"  # recovered via DOI (case-normalized)
+    assert "nodoi-3" not in g.doc_to_oa  # no DOI -> not bridged
     assert g.oa_to_doc.get("Wb") == "bridged-2"

@@ -2,10 +2,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from openai import AuthenticationError
-
-from rag_common.config import EmbedConfig, local_config, openai_config
+from rag_common.config import local_config, openai_config
 from rag_common.embed import embed_texts, finalize_embed_config, resolve_embed_config
-from rag_common.openai_embed import OpenAIFatalError, truncate_to_token_limit
+from rag_common.openai_embed import truncate_to_token_limit
 
 
 def test_truncate_disallowed_special_tokens():
@@ -32,7 +31,9 @@ def test_explicit_openai_requires_key():
         resolve_embed_config()
 
 
-@patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-key", "RAG_EMBED_BACKEND": "auto"}, clear=True)
+@patch.dict(
+    "os.environ", {"OPENAI_API_KEY": "sk-test-key", "RAG_EMBED_BACKEND": "auto"}, clear=True
+)
 @patch("rag_common.openai_embed.OpenAI")
 def test_finalize_probe_auth_failure_falls_back(mock_openai_cls):
     mock_client = MagicMock()

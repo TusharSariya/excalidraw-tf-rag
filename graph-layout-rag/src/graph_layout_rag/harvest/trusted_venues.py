@@ -103,7 +103,11 @@ def _drops_specs(volume: dict) -> list[dict]:
             continue
         strings = _strings(article)
         doi = next(
-            (match.group(0) for text in strings if (match := re.search(r"10\.4230/LIPIcs\.[^\s\"<>]+", text))),
+            (
+                match.group(0)
+                for text in strings
+                if (match := re.search(r"10\.4230/LIPIcs\.[^\s\"<>]+", text))
+            ),
             None,
         )
         title = str(article.get("name") or article.get("headline") or "").strip()
@@ -165,9 +169,7 @@ def _jgaa_issue_urls() -> list[str]:
             continue
         soup = BeautifulSoup(html, "html.parser")
         issues.update(
-            str(a["href"])
-            for a in soup.select('a[href*="/issue/view/"]')
-            if a.get("href")
+            str(a["href"]) for a in soup.select('a[href*="/issue/view/"]') if a.get("href")
         )
         next_link = soup.select_one(".cmp_pagination a.next")
         if next_link and next_link.get("href"):
@@ -279,8 +281,10 @@ def harvest_trusted_venues(
             label="jgaa",
         )
         items.extend(issue_items)
-        if not dry_run and len(issue_items) == len(specs) and all(
-            item.status == "ok" for item in issue_items
+        if (
+            not dry_run
+            and len(issue_items) == len(specs)
+            and all(item.status == "ok" for item in issue_items)
         ):
             completed_issues.add(issue_url)
             checkpoint["jgaa_issues"] = sorted(completed_issues)

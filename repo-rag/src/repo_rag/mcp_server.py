@@ -17,7 +17,8 @@ from __future__ import annotations
 from typing import Any
 
 from repo_rag.context import assemble_context, read_entity
-from repo_rag.graph import find_entities, neighbors as graph_neighbors
+from repo_rag.graph import find_entities
+from repo_rag.graph import neighbors as graph_neighbors
 from repo_rag.query.search import search as hybrid_search
 
 

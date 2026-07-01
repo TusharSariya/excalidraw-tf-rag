@@ -32,6 +32,8 @@ def test_harvest_excludes_build_and_gitignored_artifacts():
 
 def test_harvest_keeps_only_english_locale():
     manifest = harvest_repo(REPO_ROOT)
-    locales = {p for p in (f.path for f in manifest.files) if p.startswith("packages/excalidraw/locales/")}
+    locales = {
+        p for p in (f.path for f in manifest.files) if p.startswith("packages/excalidraw/locales/")
+    }
     # en.json is source-of-truth UI strings; the ~57 translations are dropped as noise
     assert locales == {"packages/excalidraw/locales/en.json"}

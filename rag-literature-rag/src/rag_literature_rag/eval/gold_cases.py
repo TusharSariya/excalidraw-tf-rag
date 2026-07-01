@@ -210,10 +210,12 @@ GOLD_CASES: tuple[EvalCase, ...] = (
     EvalCase(
         id="best-practices-ablation",
         query="RAG best practices chunk size query expansion ablation study",
-        relevant_doc_ids=frozenset({
-            "doi-10-48550-arxiv-2407-01219",
-            "doi-10-48550-arxiv-2501-07391",
-        }),
+        relevant_doc_ids=frozenset(
+            {
+                "doi-10-48550-arxiv-2407-01219",
+                "doi-10-48550-arxiv-2501-07391",
+            }
+        ),
         category="engineering",
     ),
     EvalCase(
@@ -281,10 +283,12 @@ GOLD_CASES: tuple[EvalCase, ...] = (
     EvalCase(
         id="vague-agentic-loop",
         query="why does my RAG pipeline need iterative agentic retrieval loop",
-        relevant_doc_ids=frozenset({
-            "doi-10-48550-arxiv-2501-09136",
-            "doi-10-48550-arxiv-2603-07379",
-        }),
+        relevant_doc_ids=frozenset(
+            {
+                "doi-10-48550-arxiv-2501-09136",
+                "doi-10-48550-arxiv-2603-07379",
+            }
+        ),
         category="agentic",
         notes="Vague agent-style query; multiple survey papers are relevant.",
     ),
@@ -292,24 +296,24 @@ GOLD_CASES: tuple[EvalCase, ...] = (
 
 
 def gold_cases() -> list[EvalCase]:
-  """Return gold cases, optionally unioned with judged qrels from ``RAG_LIT_QRELS_PATH``.
+    """Return gold cases, optionally unioned with judged qrels from ``RAG_LIT_QRELS_PATH``.
 
-  Synthetic cases (``data/eval/gold_synth/cases.json``) are merged in **only** when
-  ``RAG_LIT_SYNTH_GOLD=1`` so the curated-42 set stays the pristine default. Because
-  pooling/benchmark/diagnostics all read through this function, the flag alone routes
-  the synthetic set through the entire existing eval pipeline.
-  """
-  import os
-  from pathlib import Path
+    Synthetic cases (``data/eval/gold_synth/cases.json``) are merged in **only** when
+    ``RAG_LIT_SYNTH_GOLD=1`` so the curated-42 set stays the pristine default. Because
+    pooling/benchmark/diagnostics all read through this function, the flag alone routes
+    the synthetic set through the entire existing eval pipeline.
+    """
+    import os
+    from pathlib import Path
 
-  cases = list(GOLD_CASES)
-  if os.getenv("RAG_LIT_SYNTH_GOLD", "").strip().lower() in {"1", "true", "yes"}:
-    from rag_literature_rag.eval.gold_synth import load_synth_cases
+    cases = list(GOLD_CASES)
+    if os.getenv("RAG_LIT_SYNTH_GOLD", "").strip().lower() in {"1", "true", "yes"}:
+        from rag_literature_rag.eval.gold_synth import load_synth_cases
 
-    cases = cases + load_synth_cases()
-  qrels_path = os.getenv("RAG_LIT_QRELS_PATH")
-  if qrels_path:
-    from rag_literature_rag.eval.qrels import apply_qrels_overlay, load_qrels
+        cases = cases + load_synth_cases()
+    qrels_path = os.getenv("RAG_LIT_QRELS_PATH")
+    if qrels_path:
+        from rag_literature_rag.eval.qrels import apply_qrels_overlay, load_qrels
 
-    cases = apply_qrels_overlay(cases, load_qrels(Path(qrels_path)))
-  return cases
+        cases = apply_qrels_overlay(cases, load_qrels(Path(qrels_path)))
+    return cases

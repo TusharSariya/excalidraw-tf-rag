@@ -1,4 +1,5 @@
 """Unit tests for late-chunking pooling math (no model load)."""
+
 from __future__ import annotations
 
 import math

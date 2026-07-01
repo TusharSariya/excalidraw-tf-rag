@@ -108,18 +108,17 @@ def render_markdown_report(payload: dict[str, Any]) -> str:
     ]
     if payload.get("llm_backend"):
         parts.append(
-            f"- LLM backend: `{payload['llm_backend']}` "
-            f"(`{payload.get('llm_model', '')}`)\n"
+            f"- LLM backend: `{payload['llm_backend']}` (`{payload.get('llm_model', '')}`)\n"
         )
     parts.extend(
         [
-        "- Metrics: doc-level hit-rate@k, true recall@k, MAP@10, MRR, and nDCG@10\n",
-        "- Strategies tested: "
-        + ", ".join(f"`{name}`" for name in payload["strategies_tested"])
-        + "\n\n",
-        "## Results\n\n",
-        _metric_table(completed),
-        "\n",
+            "- Metrics: doc-level hit-rate@k, true recall@k, MAP@10, MRR, and nDCG@10\n",
+            "- Strategies tested: "
+            + ", ".join(f"`{name}`" for name in payload["strategies_tested"])
+            + "\n\n",
+            "## Results\n\n",
+            _metric_table(completed),
+            "\n",
         ]
     )
 
@@ -142,7 +141,7 @@ def render_markdown_report(payload: dict[str, Any]) -> str:
             "## Agent playbook\n\n",
             "```bash\n",
             "# Default pipeline research query\n",
-            "yarn graph-rag:query \"network simplex rank assignment\" \\\n",
+            'yarn graph-rag:query "network simplex rank assignment" \\\n',
             "  --embed-profile gemini-2-structure-v1 \\\n",
             "  --category layer-assignment --pdf-only --json\n\n",
             "# Run offline benchmark\n",

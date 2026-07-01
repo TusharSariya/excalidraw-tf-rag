@@ -15,6 +15,7 @@ provides that call; index.py wiring is intentionally left as a documented seam
 (see embed_late_chunks docstring) to avoid disturbing the validated default
 embedding path until the 4B latechunk index is benchmarked.
 """
+
 from __future__ import annotations
 
 import logging

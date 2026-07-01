@@ -1,7 +1,5 @@
 """Toy-graph tests for the relatedness math (no network, no DB)."""
 
-from collections import defaultdict
-
 from rag_literature_rag.query.citation_rank import (
     CitationGraph,
     bibliographic_coupling,

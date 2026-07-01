@@ -5,11 +5,17 @@ description = "Persistent GPU inference gateway — Ray Serve + SQLite cache"
 requires-python = ">=3.11"
 dependencies = [
     "ray[serve]>=2.10,<3",
+    "protobuf>=3.20,<4",
     "aiosqlite>=0.20.0",
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
     "httpx>=0.27.0",
     "pydantic>=2.0.0",
+    "sentence-transformers>=3.0.0",
+    "bitsandbytes>=0.44.0",
+    "accelerate>=1.1.0",
+    # torch with CUDA 12.x is installed separately via pip index URL:
+    # pip install torch --index-url https://download.pytorch.org/whl/cu124
 ]
 
 [project.optional-dependencies]
@@ -17,6 +23,18 @@ mcp = [
     "fastmcp>=0.9.0",
     "httpx>=0.27.0",
 ]
+
+[dependency-groups]
+# Scheduler unit tests import only gpu_gateway.scheduler (pure stdlib) — no ray/torch,
+# so they run with `uv run --no-project --with pytest --with pytest-asyncio`.
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
 
 [project.scripts]
 gpu-gateway-mcp = "gpu_gateway.mcp_server:main"

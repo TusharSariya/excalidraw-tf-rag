@@ -1,8 +1,4 @@
-import json
-from pathlib import Path
-
 import pytest
-
 from rag_literature_rag.ingest.index import (
     chunk_count,
     chunking_fingerprint_mismatch,

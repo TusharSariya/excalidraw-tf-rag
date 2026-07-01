@@ -13,6 +13,7 @@ is ``catalog`` if the case has any relevant doc with no usable local PDF (so it
 catalog and pdf-deep-read). This keeps each split's category x track
 distribution close to the full set's.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -21,7 +22,7 @@ from collections import defaultdict
 from pathlib import Path
 
 from rag_literature_rag.eval.gold_cases import EvalCase, gold_cases
-from rag_literature_rag.eval.gold_validation import DEFAULT_SPLIT_PATH, GOLD_SPLITS, cases_for_track
+from rag_literature_rag.eval.gold_validation import DEFAULT_SPLIT_PATH, cases_for_track
 from rag_literature_rag.manifest import Manifest, load_manifest
 
 TEST_FRACTION = 0.3
@@ -50,7 +51,9 @@ def build_tune_test_split(
     rounding so every non-empty stratum contributes at least one test case.
     """
     manifest = manifest or load_manifest()
-    pdf_eligible_ids = {item.id for item in manifest.items if item.status == "ok" and item.localPath}
+    pdf_eligible_ids = {
+        item.id for item in manifest.items if item.status == "ok" and item.localPath
+    }
 
     cases = gold_cases()
     strata: dict[tuple[str, str], list[EvalCase]] = defaultdict(list)

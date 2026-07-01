@@ -2,6 +2,7 @@
 
 Read-only: samples chunk text from an existing LanceDB index.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -9,21 +10,24 @@ import json
 import os
 import sys
 import time
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import UTC, datetime
 from typing import Any
 
 from graph_layout_rag.env import load_env_file
 from graph_layout_rag.ingest.embed import prepare_embed_config
 from graph_layout_rag.paths import CHUNKS_TABLE, DATA_DIR, profile_index_paths
 from rag_common.config import EmbedConfig, use_cuda_bnb_4bit
-from rag_common.local_embed import _get_model_for_config, embed_local_texts, resolve_local_embed_device
+from rag_common.local_embed import (
+    _get_model_for_config,
+    embed_local_texts,
+    resolve_local_embed_device,
+)
 
 WARMUP = 32
 
 
 def _now_id() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _sample_texts(source_profile: str, n: int) -> list[str]:
@@ -101,7 +105,9 @@ def main() -> int:
     load_env_file()
     parser = argparse.ArgumentParser(description="Benchmark dense local embed throughput")
     parser.add_argument("--profile", required=True, help="Target embed profile name")
-    parser.add_argument("--source-profile", required=True, help="LanceDB profile to sample texts from")
+    parser.add_argument(
+        "--source-profile", required=True, help="LanceDB profile to sample texts from"
+    )
     parser.add_argument("--sample", type=int, default=512)
     parser.add_argument("--batch-size", type=int, default=16)
     args = parser.parse_args()

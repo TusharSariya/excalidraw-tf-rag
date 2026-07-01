@@ -12,15 +12,18 @@ Usage (desktop):
   HF_HUB_DISABLE_XET=1 uv run python scripts/teacher_fulltext_retest.py \
       --backend qwen3 --model Qwen/Qwen3-Reranker-0.6B --tag qwen3-0.6b-fulltext
 """
+
 from __future__ import annotations
 
 import argparse
+
+# reuse the backends from the bakeoff module
+import importlib.util
 import json
 import time
 from pathlib import Path
 
 import torch
-
 from graph_layout_rag.eval.metrics import case_metrics
 from graph_layout_rag.eval.qrels import (
     DEFAULT_RELEVANCE_THRESHOLD,
@@ -28,9 +31,6 @@ from graph_layout_rag.eval.qrels import (
     relevant_from_grades,
 )
 from graph_layout_rag.paths import CHUNKS_TABLE, profile_index_paths
-
-# reuse the backends from the bakeoff module
-import importlib.util
 
 _spec = importlib.util.spec_from_file_location(
     "teacher_bakeoff", Path(__file__).resolve().parent / "teacher_bakeoff.py"
@@ -51,12 +51,7 @@ def load_chunks_by_doc(profile: str) -> dict[str, list[str]]:
 
     paths = profile_index_paths(profile)
     db = lancedb.connect(str(paths.lance_dir))
-    rows = (
-        db.open_table(CHUNKS_TABLE)
-        .to_arrow()
-        .select(["doc_id", "text", "title"])
-        .to_pylist()
-    )
+    rows = db.open_table(CHUNKS_TABLE).to_arrow().select(["doc_id", "text", "title"]).to_pylist()
     by_doc: dict[str, list[str]] = {}
     for r in rows:
         did = r.get("doc_id")
@@ -98,16 +93,16 @@ def main():
 
     t0 = time.time()
     backend = _bk.make_backend(args)
-    print(f"[{args.tag}] backend loaded in {time.time()-t0:.1f}s", flush=True)
+    print(f"[{args.tag}] backend loaded in {time.time() - t0:.1f}s", flush=True)
 
     per_case, t_nd, h_nd = [], [], []
     missing_docs = 0
     for i, (cid, case) in enumerate(sorted(cases.items())):
         query = case["query"]
         pooled = case["pooled"]
-        rel = set(
-            relevant_from_grades(labels.get(cid, {}), threshold=threshold)
-        ) | set(case.get("curated_relevant") or [])
+        rel = set(relevant_from_grades(labels.get(cid, {}), threshold=threshold)) | set(
+            case.get("curated_relevant") or []
+        )
         if not rel:
             continue
         doc_ids = list(pooled.keys())
@@ -146,7 +141,7 @@ def main():
         )
         mem = torch.cuda.max_memory_allocated() / 1e9
         print(
-            f"[{args.tag}] [{i+1}/{len(cases)}] {cid:42s} "
+            f"[{args.tag}] [{i + 1}/{len(cases)}] {cid:42s} "
             f"t={tm['ndcg@10']:.4f} h={hm['ndcg@10']:.4f} "
             f"chunks={len(flat_docs)} gpu={mem:.2f}GB",
             flush=True,

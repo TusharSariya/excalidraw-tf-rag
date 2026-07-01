@@ -8,7 +8,9 @@ from graph_layout_rag.harvest.tags_inference import infer_harvest_tags
 
 
 def test_strict_layout_requires_multiple_keywords():
-    assert not is_layout_relevant("R: A Language and Environment for Statistical Computing", strict=True)
+    assert not is_layout_relevant(
+        "R: A Language and Environment for Statistical Computing", strict=True
+    )
     assert is_layout_relevant(
         "Layered graph drawing with crossing minimization",
         strict=True,

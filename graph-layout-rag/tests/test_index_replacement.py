@@ -24,14 +24,18 @@ def _chunk(idx: int) -> TextChunk:
 
 def test_bm25_replacement_removes_stale_tail(tmp_path: Path):
     index = tmp_path / "bm25"
-    bm25.upsert_chunks([_chunk(0), _chunk(1), _chunk(2)], ["a", "b", "stale"], index_dir=index, rebuild=True)
+    bm25.upsert_chunks(
+        [_chunk(0), _chunk(1), _chunk(2)], ["a", "b", "stale"], index_dir=index, rebuild=True
+    )
     bm25.upsert_chunks([_chunk(0)], ["fresh"], index_dir=index)
     assert bm25.chunk_count(index) == 1
     assert bm25.search_bm25("stale", index_dir=index) == []
 
 
 def test_lancedb_replacement_removes_stale_tail(tmp_path: Path, monkeypatch):
-    paths = ProfileIndexPaths("test", tmp_path, tmp_path / "lance", tmp_path / "state.json", tmp_path / "bm25")
+    paths = ProfileIndexPaths(
+        "test", tmp_path, tmp_path / "lance", tmp_path / "state.json", tmp_path / "bm25"
+    )
     cfg = EmbedConfig("local", "test", 2)
     monkeypatch.setattr(
         "graph_layout_rag.ingest.index.embed_texts",

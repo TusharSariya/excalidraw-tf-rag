@@ -15,6 +15,7 @@ disk for API cost: a 3072-dim vector is ~60 KB of JSON per chunk. Files are writ
 atomically; concurrent writers for the same key are safe (last writer wins, and all
 produce identical content for the same key).
 """
+
 from __future__ import annotations
 
 import hashlib

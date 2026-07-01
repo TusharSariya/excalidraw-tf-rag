@@ -1,7 +1,5 @@
 import json
 
-import pytest
-
 from graph_layout_rag.harvest import prune as prune_mod
 from graph_layout_rag.manifest import Manifest, ManifestItem
 
@@ -27,13 +25,30 @@ def _manifest():
         updatedAt="2026-01-01T00:00:00Z",
         items=[
             # on-topic discovered -> keep
-            _item("a", "Sugiyama layered graph drawing with crossing minimization", local="data/raw/pdf/a.pdf"),
+            _item(
+                "a",
+                "Sugiyama layered graph drawing with crossing minimization",
+                local="data/raw/pdf/a.pdf",
+            ),
             # off-topic discovered -> prune
-            _item("b", "Coarse root architecture of boreal tree species", local="data/raw/pdf/b.pdf"),
+            _item(
+                "b", "Coarse root architecture of boreal tree species", local="data/raw/pdf/b.pdf"
+            ),
             # off-topic discovered, leaked tag -> prune
-            _item("c", "Gradient-based learning applied to document recognition", tags=["openalex", "dagre", "layer-assignment"], local="data/raw/pdf/c.pdf"),
+            _item(
+                "c",
+                "Gradient-based learning applied to document recognition",
+                tags=["openalex", "dagre", "layer-assignment"],
+                local="data/raw/pdf/c.pdf",
+            ),
             # curated weak-title -> keep regardless
-            _item("d", "How to draw a compound digraph", source="topic-seed", tags=["sugiyama", "compound"], local="data/raw/pdf/d.pdf"),
+            _item(
+                "d",
+                "How to draw a compound digraph",
+                source="topic-seed",
+                tags=["sugiyama", "compound"],
+                local="data/raw/pdf/d.pdf",
+            ),
         ],
     )
 
@@ -58,7 +73,11 @@ def test_library_doc_sources_are_kept():
 
 
 def test_clean_tags_strips_leaked_topic_tag():
-    leaked = _item("c", "Gradient-based learning applied to document recognition", tags=["openalex", "dagre", "layer-assignment"])
+    leaked = _item(
+        "c",
+        "Gradient-based learning applied to document recognition",
+        tags=["openalex", "dagre", "layer-assignment"],
+    )
     cleaned = prune_mod.clean_tags(leaked)
     assert "dagre" not in cleaned
     assert "layer-assignment" not in cleaned
@@ -66,7 +85,9 @@ def test_clean_tags_strips_leaked_topic_tag():
 
 
 def test_clean_tags_preserves_curated():
-    seed = _item("d", "How to draw a compound digraph", source="topic-seed", tags=["sugiyama", "compound"])
+    seed = _item(
+        "d", "How to draw a compound digraph", source="topic-seed", tags=["sugiyama", "compound"]
+    )
     assert prune_mod.clean_tags(seed) == ["sugiyama", "compound"]
 
 

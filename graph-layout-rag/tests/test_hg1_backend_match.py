@@ -10,9 +10,8 @@ corrupted Stage A. These tests pin the fail-closed behavior.
 import warnings
 
 import pytest
-
-from rag_common.config import EmbedConfig, resolved_embed_backend
 from graph_layout_rag.query.retrieve import _assert_backend_match
+from rag_common.config import EmbedConfig, resolved_embed_backend
 
 
 class _Paths:

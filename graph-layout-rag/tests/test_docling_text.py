@@ -2,7 +2,6 @@ import builtins
 from pathlib import Path
 
 import pytest
-
 from graph_layout_rag import docling_text
 from graph_layout_rag.ingest import extract as extract_mod
 from graph_layout_rag.manifest import ManifestItem
@@ -58,9 +57,7 @@ def test_backend_routes_to_docling(tmp_path: Path, monkeypatch):
         called["clean"] = clean
         return sentinel
 
-    monkeypatch.setattr(
-        "graph_layout_rag.docling_text.extract_pages_docling", stub
-    )
+    monkeypatch.setattr("graph_layout_rag.docling_text.extract_pages_docling", stub)
     result = extract_mod.extract_pdf_result(item, backend="docling")
     assert result is sentinel
     assert called["clean"] is True

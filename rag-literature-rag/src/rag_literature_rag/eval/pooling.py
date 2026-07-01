@@ -15,13 +15,14 @@ The curated gold relevant docs are also folded into the pool (tagged
 ``curated``) so the judge grades them too; comparing the judge's grade on those
 known-relevant docs is a free check on judge quality.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import os
 from concurrent.futures import ThreadPoolExecutor
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -52,7 +53,7 @@ POOL_DIR = DATA_DIR / "eval" / "pool"
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _pool_workers() -> int:

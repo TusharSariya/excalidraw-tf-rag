@@ -18,28 +18,30 @@ applications:
       - name: GatewayHTTP
         num_replicas: 1
         max_ongoing_requests: 100
-        request_timeout_s: 60
+        request_timeout_s: 180    # /v1/search subprocess timeout is 120s; keep 60s headroom
         ray_actor_options:
           num_cpus: 0.5
           num_gpus: 0
 
       - name: DenseEmbed4B
         num_replicas: 1
-        request_timeout_s: 30
+        request_timeout_s: 60    # cold load + 50-item batch can reach 35-40s; was 30 (too tight)
         ray_actor_options:
           num_cpus: 1
           num_gpus: 0.46    # 3000MB / 6500MB usable
         user_config:
           model: "Qwen/Qwen3-Embedding-4B"
+          keep_on_cpu_after_evict: false   # opt-in RAM cache; 4B uses validate+fallback (bnb int8)
 
       - name: DenseEmbed06B
         num_replicas: 1
-        request_timeout_s: 10
+        request_timeout_s: 120    # batch_size=4 × 256 texts = 64 forward passes; ~60s worst case
         ray_actor_options:
           num_cpus: 1
           num_gpus: 0.12    # 800MB / 6500MB usable
         user_config:
           model: "Qwen/Qwen3-Embedding-0.6B"
+          keep_on_cpu_after_evict: false   # opt-in RAM cache (~1.2 GB RAM when parked)
 
       - name: RerankerDeployment
         num_replicas: 1
@@ -49,6 +51,7 @@ applications:
           num_gpus: 0.15    # 1000MB / 6500MB usable
         user_config:
           model: "BAAI/bge-reranker-v2-m3"
+          keep_on_cpu_after_evict: false   # opt-in RAM cache (~1.1 GB RAM when parked)
 
       - name: LLMDeployment
         num_replicas: 1
@@ -59,14 +62,7 @@ applications:
         user_config:
           ollama_url: "http://127.0.0.1:11434"
 
-      - name: VRAMCoordinator
-        num_replicas: 1
-        ray_actor_options:
-          num_cpus: 0
-          num_gpus: 0
-
-      - name: SQLiteCache
-        num_replicas: 1
-        ray_actor_options:
-          num_cpus: 0
-          num_gpus: 0
+      # SQLiteCache is a @ray.remote actor (not a @serve.deployment), so it is NOT
+      # listed here — GatewayHTTP creates it lazily on first use. VRAM is serialized
+      # in-process by GatewayHTTP's Scheduler (scheduler.py), which requires this
+      # deployment to stay at num_replicas: 1 (it fails closed otherwise).

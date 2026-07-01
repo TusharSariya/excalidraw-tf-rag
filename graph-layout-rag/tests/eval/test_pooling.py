@@ -1,11 +1,11 @@
 """Tests for graph_layout_rag.eval.pooling.merge_pools."""
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
 import pytest
-
 from graph_layout_rag.eval.pooling import merge_pools
 
 

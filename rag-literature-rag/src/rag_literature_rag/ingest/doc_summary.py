@@ -90,7 +90,9 @@ def normalize_source_text(chunks: list[TextChunk]) -> str:
     parts: list[str] = []
     for chunk in chunks:
         section = f"Section: {chunk.section_path}\n" if chunk.section_path else ""
-        page = f"Pages: {chunk.page}-{chunk.page_end}\n" if chunk.page_end else f"Page: {chunk.page}\n"
+        page = (
+            f"Pages: {chunk.page}-{chunk.page_end}\n" if chunk.page_end else f"Page: {chunk.page}\n"
+        )
         parts.append(
             f"[chunk {chunk.doc_id}:{chunk.chunk_index}]\n"
             f"{section}{page}{(chunk.text or '').strip()}"
@@ -202,8 +204,13 @@ def unload_ollama_model_for_docsummary(model: str | None = None) -> None:
     unload_ollama_model(model or docsummary_model(), host=ollama_host())
 
 
-# Backward-compatible alias used by ingest/run.py
-unload_ollama_model = unload_ollama_model_for_docsummary
+# Backward-compatible alias used by ingest/run.py.
+# NOTE(flagged): this rebinds the module-global `unload_ollama_model` that the
+# function above closes over — after this line, calling
+# unload_ollama_model_for_docsummary() re-resolves the name to this alias and
+# recurses. Pre-existing; left as-is (surfaced separately) rather than changed
+# under a lint-adoption PR.
+unload_ollama_model = unload_ollama_model_for_docsummary  # noqa: F811
 
 
 def build_document_summary(

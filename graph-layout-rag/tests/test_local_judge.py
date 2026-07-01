@@ -8,17 +8,17 @@ Covers:
 * The HG7 validation gate returns PASS/FAIL on synthetic agreement inputs above
   and below the rho>=0.70 / kappa>=0.70 / bias<0.25 thresholds.
 """
+
 from __future__ import annotations
 
 import pytest
-
 from graph_layout_rag.eval import judge as judge_mod
 from graph_layout_rag.eval.judge import _hg7_decide, _judge_one, judge_model, judge_pool
-
 
 # ---------------------------------------------------------------------------
 # _judge_one dispatch
 # ---------------------------------------------------------------------------
+
 
 def _doc() -> dict:
     return {"title": "Network Simplex layering", "abstract": "We layer via simplex."}
@@ -78,6 +78,7 @@ def test_judge_one_uses_gemini_path_when_gemini(monkeypatch):
 # cache key carries the active backend's model
 # ---------------------------------------------------------------------------
 
+
 def test_judge_model_resolves_ollama_model(monkeypatch):
     monkeypatch.setenv("RAG_LLM_BACKEND", "ollama")
     monkeypatch.setenv("RAG_OLLAMA_MODEL", "mistral-small:24b")
@@ -122,6 +123,7 @@ def test_cache_key_carries_ollama_model(monkeypatch, tmp_path):
 # ---------------------------------------------------------------------------
 # HG7 gate decision
 # ---------------------------------------------------------------------------
+
 
 def test_hg7_decide_pass():
     assert _hg7_decide(0.80, 0.75, 0.10) is True

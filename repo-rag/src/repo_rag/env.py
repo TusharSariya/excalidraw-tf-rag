@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 
 from rag_common.env import valid_openai_key
+
 from repo_rag.paths import ENV_EXAMPLE_PATH, ENV_PATH
 
 

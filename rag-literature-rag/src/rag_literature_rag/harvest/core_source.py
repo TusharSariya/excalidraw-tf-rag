@@ -186,7 +186,11 @@ def harvest_core(
             authors=spec.get("authors", []),
             year=spec.get("year"),
             source="core",
-            url=(spec["pdf_urls"][0] if spec["pdf_urls"] else (f"https://doi.org/{spec['doi']}" if spec["doi"] else "")),
+            url=(
+                spec["pdf_urls"][0]
+                if spec["pdf_urls"]
+                else (f"https://doi.org/{spec['doi']}" if spec["doi"] else "")
+            ),
             localPath=None,
             contentType="text/metadata",
             status="metadata_only" if (spec["title"] and spec["doi"]) else "failed",
@@ -199,7 +203,9 @@ def harvest_core(
         dest = PDF_DIR / f"{spec['id']}.pdf"
         for url in spec["pdf_urls"]:
             try:
-                dl = download_to_file(dest, url, doc_id=spec["id"], doi=spec.get("doi"), stage="core")
+                dl = download_to_file(
+                    dest, url, doc_id=spec["id"], doi=spec.get("doi"), stage="core"
+                )
                 if dl.get("ok") and dest.exists() and dest.read_bytes()[:4] == b"%PDF":
                     item.status = "ok"
                     item.url = url

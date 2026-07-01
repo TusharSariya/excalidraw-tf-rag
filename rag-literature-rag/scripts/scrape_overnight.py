@@ -7,9 +7,9 @@ verifies, and reports the ok-PDF delta. CORE is skipped (needs CORE_API_KEY).
 Run:
   uv run python scripts/scrape_overnight.py 2>&1 | tee data/scrape-overnight.log
 """
+
 from __future__ import annotations
 
-import logging
 import sys
 import traceback
 
@@ -57,8 +57,17 @@ def main() -> int:
                     added_ok += 1
                 upsert_item(manifest, it)
             save_manifest(manifest)
-            log.info("%s: fetched=%d ok_in_batch=%d running_ok=%d", name, len(items), added_ok, _ok(manifest))
-            print(f"[{name}] fetched={len(items)} ok_in_batch={added_ok} running_ok={_ok(manifest)}", flush=True)
+            log.info(
+                "%s: fetched=%d ok_in_batch=%d running_ok=%d",
+                name,
+                len(items),
+                added_ok,
+                _ok(manifest),
+            )
+            print(
+                f"[{name}] fetched={len(items)} ok_in_batch={added_ok} running_ok={_ok(manifest)}",
+                flush=True,
+            )
         except Exception as exc:  # noqa: BLE001 — one source must not kill the run
             log.exception("%s FAILED: %s", name, exc)
             print(f"[{name}] ERROR {type(exc).__name__}: {exc}", flush=True)
@@ -74,8 +83,8 @@ def main() -> int:
     after_total = len(manifest.items)
     after_ok = _ok(manifest)
     summary = (
-        f"DONE total {before_total}->{after_total} (+{after_total-before_total}) | "
-        f"ok {before_ok}->{after_ok} (+{after_ok-before_ok})"
+        f"DONE total {before_total}->{after_total} (+{after_total - before_total}) | "
+        f"ok {before_ok}->{after_ok} (+{after_ok - before_ok})"
     )
     log.info(summary)
     print(summary, flush=True)

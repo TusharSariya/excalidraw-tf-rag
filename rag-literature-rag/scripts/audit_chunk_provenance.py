@@ -11,15 +11,14 @@ Decision thresholds:
 Usage:
   uv run python3 scripts/audit_chunk_provenance.py [--sample N] [--all]
 """
+
 from __future__ import annotations
 
 import argparse
 import glob
 import hashlib
 import json
-import os
 import random
-import sys
 from collections import defaultdict
 from pathlib import Path
 
@@ -90,7 +89,7 @@ def detect_synthetic_markers(chunk_text: str) -> list[str]:
     # Table header repeat: first non-empty line appears again later
     for i, line in enumerate(lines):
         if line.strip() and line.startswith("|"):
-            later = [l for l in lines[i + 1 :] if l.strip() and l == line]
+            later = [ln for ln in lines[i + 1 :] if ln.strip() and ln == line]
             if later:
                 markers.append("TABLE_HEADER_REPEAT")
                 break
@@ -103,8 +102,10 @@ def detect_synthetic_markers(chunk_text: str) -> list[str]:
         if len(blocks) >= 2:
             # Are the blocks from different parts? Check if headings exist mid-chunk
             headings_mid = sum(
-                1 for b in blocks[1:]
-                if b.startswith("#") or (len(b.splitlines()) > 1 and b.splitlines()[0].startswith("#"))
+                1
+                for b in blocks[1:]
+                if b.startswith("#")
+                or (len(b.splitlines()) > 1 and b.splitlines()[0].startswith("#"))
             )
             if headings_mid > 0 or len(blocks) >= 3:
                 markers.append("DOUBLE_NEWLINE_JOIN")
@@ -126,7 +127,7 @@ def sample_chunk_cache_files(sample_n: int, all_files: bool = False) -> list[Pat
 
     # Shuffle and take a sample; we'll deduplicate by sha256 as we process
     random.shuffle(all_chunk_files)
-    return all_chunk_files[:max(sample_n * 3, 500)]  # oversample then dedup
+    return all_chunk_files[: max(sample_n * 3, 500)]  # oversample then dedup
 
 
 def run_audit(sample_n: int = 300, all_files: bool = False) -> dict:
@@ -186,14 +187,16 @@ def run_audit(sample_n: int = 300, all_files: bool = False) -> dict:
 
             # Collect examples (up to 3 per category)
             if len(examples[category]) < 3:
-                examples[category].append({
-                    "text_preview": text[:150].replace("\n", "\\n"),
-                    "page": page,
-                    "page_end": page_end,
-                    "detail": result,
-                    "markers": markers,
-                    "doc_sha256": sha256[:12],
-                })
+                examples[category].append(
+                    {
+                        "text_preview": text[:150].replace("\n", "\\n"),
+                        "page": page,
+                        "page_end": page_end,
+                        "detail": result,
+                        "markers": markers,
+                        "doc_sha256": sha256[:12],
+                    }
+                )
 
     return {
         "docs_processed": docs_processed,
@@ -219,7 +222,9 @@ def verdict(counts: dict) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Chunk provenance audit")
-    parser.add_argument("--sample", type=int, default=300, help="Number of unique documents to sample")
+    parser.add_argument(
+        "--sample", type=int, default=300, help="Number of unique documents to sample"
+    )
     parser.add_argument("--all", action="store_true", help="Process all chunk cache files (slow)")
     args = parser.parse_args()
 
@@ -234,7 +239,7 @@ def main() -> None:
     total = result["chunks_processed"]
     docs = result["docs_processed"]
 
-    print(f"=== CHUNK PROVENANCE AUDIT RESULTS ===")
+    print("=== CHUNK PROVENANCE AUDIT RESULTS ===")
     print(f"Documents processed: {docs}")
     print(f"Chunks processed:    {total}")
     print(f"Page cache misses:   {result['page_cache_misses']}")
@@ -248,11 +253,6 @@ def main() -> None:
         print(f"  {cat:<25} {n:>6} ({pct:5.1f}%)")
     print()
 
-    cross_page = sum(
-        1 for examples_list in result["examples"].values()
-        for ex in examples_list
-        if ex["detail"].get("cross_page")
-    )
     print("--- Synthetic Markers (may overlap) ---")
     for marker, n in result["synthetic_counts"].items():
         pct = n / total * 100 if total else 0
@@ -264,7 +264,9 @@ def main() -> None:
         exs = result["examples"].get(cat, [])
         print(f"\n  {cat}:")
         for ex in exs:
-            print(f"    doc={ex['doc_sha256']} page={ex['page']}-{ex['page_end']} markers={ex['markers']}")
+            print(
+                f"    doc={ex['doc_sha256']} page={ex['page']}-{ex['page_end']} markers={ex['markers']}"
+            )
             print(f"    text: {ex['text_preview']!r}")
     print()
 
@@ -272,7 +274,6 @@ def main() -> None:
     print(f"=== VERDICT: {v} ===")
     print()
 
-    exact_pct = counts.get("EXACT_SINGLE_PAGE", 0) / total * 100 if total else 0
     print("Implication for Track B (late-chunking) implementation:")
     if "OFFSET_TRACKING_VIABLE" in v:
         print("  Per-page char-offset approach is viable for the majority of chunks.")

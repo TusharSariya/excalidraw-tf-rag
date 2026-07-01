@@ -5,7 +5,7 @@ import json
 import os
 import platform
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -23,7 +23,7 @@ DEFAULT_MODELS = {
 
 
 def _now_id() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _slug(value: str) -> str:
@@ -60,8 +60,8 @@ def _clean_payload(row: dict[str, Any]) -> dict[str, Any]:
 
 def _qdrant():
     try:
-        from qdrant_client import QdrantClient, models
         from fastembed import LateInteractionTextEmbedding, SparseTextEmbedding
+        from qdrant_client import QdrantClient, models
     except ImportError as exc:
         raise click.ClickException(
             "Retrieval experiment dependencies are missing. "
@@ -120,9 +120,7 @@ def build_experimental_index(
             collection_name=collection,
             vectors_config={},
             sparse_vectors_config={
-                "splade": models.SparseVectorParams(
-                    index=models.SparseIndexParams(on_disk=True)
-                )
+                "splade": models.SparseVectorParams(index=models.SparseIndexParams(on_disk=True))
             },
         )
         vectors = model.embed(texts, batch_size=batch_size)
@@ -157,11 +155,15 @@ def build_experimental_index(
         )
         vectors = model.embed(texts, batch_size=batch_size)
         points = (
-            models.PointStruct(id=idx, payload=_clean_payload(row), vector={"colbert": vector.tolist()})
+            models.PointStruct(
+                id=idx, payload=_clean_payload(row), vector={"colbert": vector.tolist()}
+            )
             for idx, (row, vector) in enumerate(zip(rows, vectors))
         )
 
-    client.upload_points(collection_name=collection, points=points, batch_size=batch_size, wait=True)
+    client.upload_points(
+        collection_name=collection, points=points, batch_size=batch_size, wait=True
+    )
     meta = {
         "index_id": index_id,
         "kind": kind,
@@ -172,7 +174,7 @@ def build_experimental_index(
         "corpus_fingerprint": fingerprint,
         "chunks": len(rows),
         "batch_size": batch_size,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "build_seconds": round(time.monotonic() - started, 2),
         "memory_start": start_memory.to_dict(),
         "memory_end": memory_snapshot().to_dict(),
@@ -217,7 +219,11 @@ def search_experimental(
         with_payload=True,
     )
     return [
-        {**(point.payload or {}), "score": float(point.score), "experimental_index": meta["index_id"]}
+        {
+            **(point.payload or {}),
+            "score": float(point.score),
+            "experimental_index": meta["index_id"],
+        }
         for point in response.points
     ]
 

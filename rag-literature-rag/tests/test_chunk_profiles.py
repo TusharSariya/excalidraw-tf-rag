@@ -1,6 +1,8 @@
+from rag_common.config import EmbedConfig
+from rag_literature_rag.ingest import embed_cache
 from rag_literature_rag.ingest.chunk import (
-    chunk_pages_with_parents,
     chunk_pages,
+    chunk_pages_with_parents,
     chunk_profile_variant,
     chunking_fingerprint,
     embed_input_text,
@@ -8,11 +10,9 @@ from rag_literature_rag.ingest.chunk import (
     estimate_tokens,
     is_section_enriched_profile,
 )
-from rag_literature_rag.ingest import embed_cache
 from rag_literature_rag.ingest.extract import PageText
 from rag_literature_rag.ingest.extract_cache import _cache_key, _page_cache_key
 from rag_literature_rag.manifest import ManifestItem
-from rag_common.config import EmbedConfig
 
 
 def _item() -> ManifestItem:
@@ -128,6 +128,21 @@ def test_embed_cache_key_changes_on_text_title_and_config(tmp_path, monkeypatch)
     assert embed_cache.get(cfg, title="Title", text="body") == [0.1, 0.2, 0.3]
     assert embed_cache.get(cfg, title="Other", text="body") is None
     assert embed_cache.get(cfg, title="Title", text="other") is None
-    assert embed_cache.get(EmbedConfig("local", "model-a", 2, quant="bnb-4bit"), title="Title", text="body") is None
-    assert embed_cache.get(EmbedConfig("local", "model-b", 3, quant="bnb-4bit"), title="Title", text="body") is None
-    assert embed_cache.get(EmbedConfig("local", "model-a", 3, quant="none"), title="Title", text="body") is None
+    assert (
+        embed_cache.get(
+            EmbedConfig("local", "model-a", 2, quant="bnb-4bit"), title="Title", text="body"
+        )
+        is None
+    )
+    assert (
+        embed_cache.get(
+            EmbedConfig("local", "model-b", 3, quant="bnb-4bit"), title="Title", text="body"
+        )
+        is None
+    )
+    assert (
+        embed_cache.get(
+            EmbedConfig("local", "model-a", 3, quant="none"), title="Title", text="body"
+        )
+        is None
+    )

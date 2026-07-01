@@ -133,7 +133,7 @@ def render_markdown_report(payload: dict[str, Any]) -> str:
             "## Agent playbook\n\n",
             "```bash\n",
             "# Default RAG-literature research query\n",
-            "yarn rag-lit:query \"Self-RAG reflection tokens\" \\\n",
+            'yarn rag-lit:query "Self-RAG reflection tokens" \\\n',
             "  --embed-profile gemini-2-structure-v1 --json\n\n",
             "# Run offline benchmark\n",
             "yarn rag-lit:eval -- --embed-profile gemini-2-structure-v1\n\n",

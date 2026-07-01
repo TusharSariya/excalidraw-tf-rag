@@ -344,7 +344,9 @@ def parse_markdown_blocks(pages: list[PageText]) -> list[StructuralBlock]:
                         marker != "$$" and end.startswith(marker)
                     ):
                         break
-                add_block("formula" if formula else "code", "\n".join(body), page.page, page.page, section)
+                add_block(
+                    "formula" if formula else "code", "\n".join(body), page.page, page.page, section
+                )
                 continue
 
             if _LIST_RE.match(line):
@@ -361,7 +363,11 @@ def parse_markdown_blocks(pages: list[PageText]) -> list[StructuralBlock]:
             body = [line]
             idx += 1
             while idx < len(lines) and lines[idx].strip():
-                if _HEADING_RE.match(lines[idx]) or _FENCE_RE.match(lines[idx]) or _FORMULA_RE.match(lines[idx]):
+                if (
+                    _HEADING_RE.match(lines[idx])
+                    or _FENCE_RE.match(lines[idx])
+                    or _FORMULA_RE.match(lines[idx])
+                ):
                     break
                 if _is_table(lines, idx) or _LIST_RE.match(lines[idx]):
                     break
@@ -420,13 +426,17 @@ def _split_block(block: StructuralBlock, *, max_tokens: int) -> list[StructuralB
         sentences = [s.strip() for s in _SENTENCE_RE.split(block.text) if s.strip()]
         pieces = _pack_units(sentences, max_tokens=max_tokens, separator=" ")
     return [
-        StructuralBlock(block.kind, piece, block.page, block.page_end, block.section_path, block.block_index)
+        StructuralBlock(
+            block.kind, piece, block.page, block.page_end, block.section_path, block.block_index
+        )
         for piece in pieces
         if piece.strip()
     ]
 
 
-def _trailing_paragraph(blocks: list[StructuralBlock], *, overlap_tokens: int) -> StructuralBlock | None:
+def _trailing_paragraph(
+    blocks: list[StructuralBlock], *, overlap_tokens: int
+) -> StructuralBlock | None:
     for block in reversed(blocks):
         if block.kind == "paragraph" and estimate_tokens(block.text) <= overlap_tokens:
             return block
@@ -440,7 +450,9 @@ def _assemble_blocks(
     limits: ChunkLimits | None = None,
 ) -> list[list[StructuralBlock]]:
     limits = limits or _limits_for_profile(chunk_profile)
-    expanded = [part for block in blocks for part in _split_block(block, max_tokens=limits.max_tokens)]
+    expanded = [
+        part for block in blocks for part in _split_block(block, max_tokens=limits.max_tokens)
+    ]
     groups: list[list[StructuralBlock]] = []
     current: list[StructuralBlock] = []
     for block in expanded:
@@ -451,12 +463,18 @@ def _assemble_blocks(
             current = [overlap, block] if overlap and overlap is not block else [block]
         else:
             current.append(block)
-        if current and estimate_tokens("\n\n".join(b.text for b in current)) >= limits.target_tokens:
+        if (
+            current
+            and estimate_tokens("\n\n".join(b.text for b in current)) >= limits.target_tokens
+        ):
             groups.append(current)
             overlap = _trailing_paragraph(current, overlap_tokens=limits.overlap_tokens)
             current = [overlap] if overlap else []
     if current:
-        if groups and estimate_tokens("\n\n".join(b.text for b in current)) < limits.min_preferred_tokens:
+        if (
+            groups
+            and estimate_tokens("\n\n".join(b.text for b in current)) < limits.min_preferred_tokens
+        ):
             merged = "\n\n".join(b.text for b in [*groups[-1], *current])
             if estimate_tokens(merged) <= limits.max_tokens:
                 groups[-1].extend(current)
@@ -526,7 +544,9 @@ def map_children_to_parents(
         scored: list[tuple[int, int, int, int]] = []
         for idx, parent in enumerate(parents):
             overlap = len(ids & parent_ids[idx])
-            same_section = int(bool(child.section_path and child.section_path == parent.section_path))
+            same_section = int(
+                bool(child.section_path and child.section_path == parent.section_path)
+            )
             scored.append((overlap, same_section, -_page_distance(child, parent), -idx))
         _, _, _, neg_idx = max(scored)
         parent = parents[-neg_idx]

@@ -9,8 +9,8 @@ from rag_literature_rag.harvest.doi_resolver import (
     pick_pdf_urls,
     resolve_doi_with_fallbacks,
 )
-from rag_literature_rag.harvest.log import get_logger
 from rag_literature_rag.harvest.download import download_to_file
+from rag_literature_rag.harvest.log import get_logger
 from rag_literature_rag.harvest.parallel import parallel_map
 from rag_literature_rag.manifest import Manifest, ManifestItem, relative_local_path, upsert_item
 from rag_literature_rag.paths import PDF_DIR

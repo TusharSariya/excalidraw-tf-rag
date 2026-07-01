@@ -1,4 +1,5 @@
 """Tests for graph_layout_rag.eval.gold_synth."""
+
 from __future__ import annotations
 
 import json
@@ -7,13 +8,9 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
-
 from graph_layout_rag.eval.gold_synth import (
     LEAKAGE_JACCARD_MAX,
-    DUP_JACCARD_MAX,
-    FilterStats,
     Seed,
-    _TAG_TO_CATEGORY,
     _jaccard,
     _tokens,
     category_for,
@@ -129,8 +126,16 @@ def test_quality_filters_leakage() -> None:
 
 def test_quality_filters_near_dup_filtered() -> None:
     """Two queries that are near-duplicates of each other: the second should be dropped."""
-    s1 = _make_seed(doc_id="doc-a", title="Paper A on Edge Bundling", abstract="Edge bundling hierarchical visualization method.")
-    s2 = _make_seed(doc_id="doc-b", title="Paper B on Edge Bundling", abstract="Another edge bundling hierarchical visualization.")
+    s1 = _make_seed(
+        doc_id="doc-a",
+        title="Paper A on Edge Bundling",
+        abstract="Edge bundling hierarchical visualization method.",
+    )
+    s2 = _make_seed(
+        doc_id="doc-b",
+        title="Paper B on Edge Bundling",
+        abstract="Another edge bundling hierarchical visualization.",
+    )
     q1 = "how does hierarchical edge bundling reduce visual clutter in large graphs"
     q2 = "how does hierarchical edge bundling reduce visual clutter in large graphs"
     seeds = [s1, s2]

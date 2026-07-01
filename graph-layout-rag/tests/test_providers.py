@@ -77,7 +77,9 @@ def test_openalex_returns_last_outcome_when_all_keys_depleted(monkeypatch):
 def test_openalex_no_keys_passes_through(monkeypatch):
     monkeypatch.delenv("OPENALEX_API_KEYS", raising=False)
     monkeypatch.delenv("OPENALEX_API_KEY", raising=False)
-    policy, tried = _key_recording_policy({None: RequestOutcome(OutcomeKind.SUCCESS, status_code=200)})
+    policy, tried = _key_recording_policy(
+        {None: RequestOutcome(OutcomeKind.SUCCESS, status_code=200)}
+    )
     out = policy.request_openalex("GET", "https://api.openalex.org/works", operation="search")
     assert out.kind is OutcomeKind.SUCCESS
     assert tried == [None]

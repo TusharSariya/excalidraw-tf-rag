@@ -26,8 +26,17 @@ def _db(tmp_path, monkeypatch):
 
 def test_upsert_paper_idempotent_and_preserves(tmp_path, monkeypatch):
     db = _db(tmp_path, monkeypatch)
-    cs.upsert_paper(db, oa_id="W1", doi="10.1/a", doc_id="doc-a", title="A", year=1990,
-                    cited_by_count=100, in_corpus=True, enriched_at="t0")
+    cs.upsert_paper(
+        db,
+        oa_id="W1",
+        doi="10.1/a",
+        doc_id="doc-a",
+        title="A",
+        year=1990,
+        cited_by_count=100,
+        in_corpus=True,
+        enriched_at="t0",
+    )
     # A cheap external-neighbor re-upsert (nulls) must not clobber the full row.
     cs.upsert_paper(db, oa_id="W1")
     row = cs.paper_row(db, "W1")
@@ -55,11 +64,13 @@ def test_cites_and_influential_merge(tmp_path, monkeypatch):
 def test_authorship_and_counts(tmp_path, monkeypatch):
     db = _db(tmp_path, monkeypatch)
     cs.upsert_paper(db, oa_id="W1", doi="10.1/a", doc_id="doc-a", in_corpus=True, enriched_at="t")
-    cs.add_authorships(db, [(cs.author_key("Eades, P."), "doc-a"),
-                            (cs.author_key("Peter Eades"), "doc-b")])
+    cs.add_authorships(
+        db, [(cs.author_key("Eades, P."), "doc-a"), (cs.author_key("Peter Eades"), "doc-b")]
+    )
     # "Eades, P." and "Peter Eades" don't collapse, but exact repeats are ignored.
-    cs.add_authorships(db, [(cs.author_key("Sugiyama"), "doc-a"),
-                            (cs.author_key("Sugiyama"), "doc-b")])
+    cs.add_authorships(
+        db, [(cs.author_key("Sugiyama"), "doc-a"), (cs.author_key("Sugiyama"), "doc-b")]
+    )
     assert cs.coauthored_doc_ids(db, "doc-a") == {"doc-b"}  # shared "sugiyama"
     c = cs.counts(db)
     assert c["corpus_papers"] == 1 and c["cite_edges"] == 0 and c["authorship_edges"] == 4
@@ -143,8 +154,13 @@ def test_paper_meta_map_bulk(tmp_path, monkeypatch):
 def test_paper_meta_coalesce_partial_update_does_not_null(tmp_path, monkeypatch):
     db = _db(tmp_path, monkeypatch)
     cs.upsert_paper_meta(
-        db, "doc-a", tldr="keep", abstract="keep-abs", fwci=2.0,
-        biblio={"volume": "1"}, full_authors=[{"name": "X"}],
+        db,
+        "doc-a",
+        tldr="keep",
+        abstract="keep-abs",
+        fwci=2.0,
+        biblio={"volume": "1"},
+        full_authors=[{"name": "X"}],
     )
     # Later partial write touches only cited_by_count; existing columns survive.
     cs.upsert_paper_meta(db, "doc-a", cited_by_count=99)

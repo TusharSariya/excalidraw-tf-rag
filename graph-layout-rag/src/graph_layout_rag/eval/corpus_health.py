@@ -140,7 +140,9 @@ def audit_extraction_fallback(*, log_path: Path | None = None) -> list[Finding]:
             ok += 1
     total = ok + fallback
     if total == 0:
-        return [Finding("info", "no_extraction_records", "Ingest log has no per-doc extraction lines.")]
+        return [
+            Finding("info", "no_extraction_records", "Ingest log has no per-doc extraction lines.")
+        ]
     rate = fallback / total
     sev = "critical" if rate >= 0.5 else "warning" if rate >= 0.15 else "ok"
     return [

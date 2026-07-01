@@ -107,7 +107,7 @@ def embed_papers(
     out: list[list[float]] = []
     with torch.no_grad():
         for start in range(0, len(texts), batch_size):
-            batch = texts[start:start + batch_size]
+            batch = texts[start : start + batch_size]
             enc = tokenizer(
                 batch,
                 padding=True,

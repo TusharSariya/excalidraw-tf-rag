@@ -11,6 +11,7 @@ Usage:
     uv run python scripts/bench_encode_device.py --sample 256 --batch-size 8 --models splade,colbert,splade_v3
     GRAPH_RAG_FASTEMBED_CUDA=1 uv run python scripts/bench_encode_device.py --models splade,colbert
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,9 +19,10 @@ import json
 import platform
 import sys
 import time
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from graph_layout_rag.env import load_env_file
 from graph_layout_rag.eval.encode_device import fastembed_kwargs, resolve_encode_device
@@ -34,7 +36,7 @@ SPLADE_V3_DEFAULT = "naver/splade-v3"
 
 
 def _now_id() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
@@ -113,7 +115,9 @@ def _fastembed_arm(
     return _time_arm(name=label, encode_batch=encode_batch, texts=texts, batch_size=batch_size)
 
 
-def _splade_v3_arm(model_name: str, texts: list[str], batch_size: int, *, device: str) -> dict[str, Any]:
+def _splade_v3_arm(
+    model_name: str, texts: list[str], batch_size: int, *, device: str
+) -> dict[str, Any]:
     encoder = SpladeV3Encoder(model_name, device=device)
 
     def encode_batch(batch: list[str]) -> int:
@@ -324,7 +328,7 @@ def main() -> int:
 
     out_dir = args.out or (DATA_DIR / "eval" / "runs" / f"encode-device-bench-{_now_id()}")
     payload = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "platform": platform.platform(),
         "profile": args.profile,
         "sample": len(texts),

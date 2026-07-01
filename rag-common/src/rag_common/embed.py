@@ -6,7 +6,12 @@ import os
 from rag_common.config import EmbedConfig, EmbedStats, LocalEmbedMode, local_config
 from rag_common.gemini_embed import GeminiFatalError, embed_gemini_texts, probe_gemini
 from rag_common.local_embed import embed_local_texts
-from rag_common.openai_embed import OpenAIFatalError, embed_openai_texts, probe_openai, resolve_workers
+from rag_common.openai_embed import (
+    OpenAIFatalError,
+    embed_openai_texts,
+    probe_openai,
+    resolve_workers,
+)
 from rag_common.resolve import resolve_embed_config
 
 log = logging.getLogger("rag_common.embed")
@@ -83,6 +88,7 @@ def embed_texts(
 
     if os.getenv("RAG_GPU_GATEWAY_URL") and cfg.backend == "local":
         from rag_common.remote_embed import embed_remote_texts
+
         model_id = getattr(cfg, "profile", None) or cfg.model
         return embed_remote_texts(texts, model_id=model_id)
 

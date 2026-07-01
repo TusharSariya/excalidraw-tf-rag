@@ -7,7 +7,6 @@ from pathlib import Path
 
 from rag_literature_rag.catalog.taxonomy import (
     PIPELINE_CATEGORIES,
-    UNCATEGORIZED,
     categories_from_keywords,
     categories_from_tags,
 )
@@ -98,7 +97,6 @@ def build_catalog(
             continue
 
         categories, methods = classify_item(item)
-        hay = f"{item.title} {item.abstract or ''}"
         off_topic = flag_off_topic and not is_layout_relevant(item.title, item.abstract)
 
         entries.append(

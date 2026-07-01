@@ -9,8 +9,6 @@ is on but signals (graph node / year) are missing.
 
 from __future__ import annotations
 
-import copy
-
 from graph_layout_rag.query.citation_rank import CitationGraph
 from graph_layout_rag.query.hybrid import reciprocal_rank_fusion
 
@@ -91,9 +89,7 @@ def test_positive_weight_improves_high_citation_rank_but_stays_bounded() -> None
 def test_doc_absent_from_doc_to_oa_is_neutral() -> None:
     g = _graph()
     del g.doc_to_oa["docD"]  # docD now unmapped -> neutral prior, no crash
-    out = reciprocal_rank_fusion(
-        _dense(), _sparse(), citation_prior_weight=0.02, citation_graph=g
-    )
+    out = reciprocal_rank_fusion(_dense(), _sparse(), citation_prior_weight=0.02, citation_graph=g)
     ids = {r["id"] for r in out}
     assert "docD:0" in ids
     for r in out:
@@ -108,9 +104,7 @@ def test_missing_year_is_neutral_recency() -> None:
     sparse = [
         {"id": "docB:0", "doc_id": "docB", "score": 5.0, "year": None},
     ]
-    out = reciprocal_rank_fusion(
-        dense, sparse, citation_prior_weight=0.02, citation_graph=_graph()
-    )
+    out = reciprocal_rank_fusion(dense, sparse, citation_prior_weight=0.02, citation_graph=_graph())
     assert {r["id"] for r in out} == {"docA:0", "docB:0"}
     for r in out:
         assert r["fusion_score"] == r["fusion_score"]

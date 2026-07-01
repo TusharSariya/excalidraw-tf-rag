@@ -6,6 +6,7 @@ two productive sources (s2orc, europepmc) and reruns; existing_ids dedup means
 only genuinely new papers are added. doab (near-zero yield) and core (no key)
 are skipped.
 """
+
 from __future__ import annotations
 
 import sys
@@ -74,7 +75,10 @@ def main() -> int:
     before_total, before_ok = len(manifest.items), _ok(manifest)
     log.info("topup start: total=%d ok=%d", before_total, before_ok)
 
-    for name, fn, cap in [("s2orc", s2orc_mod.harvest_s2orc, 600), ("europepmc", pmc_mod.harvest_pmc, 600)]:
+    for name, fn, cap in [
+        ("s2orc", s2orc_mod.harvest_s2orc, 600),
+        ("europepmc", pmc_mod.harvest_pmc, 600),
+    ]:
         try:
             existing = {i.id for i in manifest.items}
             items = fn(max_works=cap, existing_ids=existing, workers=WORKERS)
@@ -82,8 +86,17 @@ def main() -> int:
             for it in items:
                 upsert_item(manifest, it)
             save_manifest(manifest)
-            log.info("%s: fetched=%d ok_in_batch=%d running_ok=%d", name, len(items), added_ok, _ok(manifest))
-            print(f"[{name}] fetched={len(items)} ok_in_batch={added_ok} running_ok={_ok(manifest)}", flush=True)
+            log.info(
+                "%s: fetched=%d ok_in_batch=%d running_ok=%d",
+                name,
+                len(items),
+                added_ok,
+                _ok(manifest),
+            )
+            print(
+                f"[{name}] fetched={len(items)} ok_in_batch={added_ok} running_ok={_ok(manifest)}",
+                flush=True,
+            )
         except Exception as exc:  # noqa: BLE001
             log.exception("%s FAILED: %s", name, exc)
             traceback.print_exc()
@@ -95,7 +108,7 @@ def main() -> int:
         log.exception("verify failed: %s", exc)
 
     after_total, after_ok = len(manifest.items), _ok(manifest)
-    summary = f"TOPUP DONE total {before_total}->{after_total} | ok {before_ok}->{after_ok} (+{after_ok-before_ok})"
+    summary = f"TOPUP DONE total {before_total}->{after_total} | ok {before_ok}->{after_ok} (+{after_ok - before_ok})"
     log.info(summary)
     print(summary, flush=True)
     return 0

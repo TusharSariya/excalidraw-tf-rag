@@ -9,8 +9,8 @@ from graph_layout_rag.harvest.doi_resolver import (
     pick_pdf_urls,
     resolve_doi_with_fallbacks,
 )
-from graph_layout_rag.harvest.log import get_logger
 from graph_layout_rag.harvest.download import download_to_file
+from graph_layout_rag.harvest.log import get_logger
 from graph_layout_rag.harvest.parallel import parallel_map
 from graph_layout_rag.manifest import Manifest, ManifestItem, relative_local_path, upsert_item
 from graph_layout_rag.paths import PDF_DIR

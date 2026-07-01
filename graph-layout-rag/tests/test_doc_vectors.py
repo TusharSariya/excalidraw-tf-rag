@@ -2,11 +2,10 @@
 
 from graph_layout_rag import doc_vectors
 
-
 _VECS = {
     "a": [1.0, 0.0],
-    "b": [0.9, 0.1],   # close to a
-    "c": [0.0, 1.0],   # far from a
+    "b": [0.9, 0.1],  # close to a
+    "c": [0.0, 1.0],  # far from a
 }
 
 

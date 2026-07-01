@@ -11,10 +11,16 @@ def read_entity(entity: str) -> list[dict]:
 
     output = []
     for row in find_entities(entity):
-        lines = (REPO_ROOT / row["file_path"]).read_text(encoding="utf-8", errors="replace").splitlines()
+        lines = (
+            (REPO_ROOT / row["file_path"])
+            .read_text(encoding="utf-8", errors="replace")
+            .splitlines()
+        )
         start = max(0, row["start_line"] - 4)
         end = min(len(lines), row["start_line"] + 80)
-        output.append({**row, "start_line": start + 1, "end_line": end, "text": "\n".join(lines[start:end])})
+        output.append(
+            {**row, "start_line": start + 1, "end_line": end, "text": "\n".join(lines[start:end])}
+        )
     return output
 
 

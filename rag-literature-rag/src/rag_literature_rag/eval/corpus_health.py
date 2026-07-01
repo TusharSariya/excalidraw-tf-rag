@@ -13,6 +13,7 @@ that a config-tuning loop never surfaces:
 So the audit checks corpus/infra health directly and emits ranked, actionable findings.
 It is read-only, cheap (no LLM, no embedding), and resumable — safe to run in a loop.
 """
+
 from __future__ import annotations
 
 import collections
@@ -130,7 +131,9 @@ def _scan_extraction_log(log_path: Path) -> dict[str, Any]:
     }
 
 
-def _qrel_overlap_detail(fallback_docs: dict[str, str], qrel_doc_weights: dict[str, int]) -> dict[str, Any]:
+def _qrel_overlap_detail(
+    fallback_docs: dict[str, str], qrel_doc_weights: dict[str, int]
+) -> dict[str, Any]:
     overlap = [
         {"doc_id": doc_id, "judged_cases": qrel_doc_weights[doc_id], "reason": reason}
         for doc_id, reason in fallback_docs.items()
@@ -144,7 +147,9 @@ def _qrel_overlap_detail(fallback_docs: dict[str, str], qrel_doc_weights: dict[s
     }
 
 
-def _active_index_fallback_docs(profile: str, fallback_docs: dict[str, str]) -> tuple[dict[str, str], dict[str, Any]]:
+def _active_index_fallback_docs(
+    profile: str, fallback_docs: dict[str, str]
+) -> tuple[dict[str, str], dict[str, Any]]:
     """Filter historical log fallbacks to docs that still look fallback-like in the current index."""
     if not fallback_docs:
         return {}, {"historical_fallback_docs": 0, "resolved_fallback_docs": 0}
@@ -217,8 +222,11 @@ def audit_chunk_distribution(profile: str, *, min_mean: float = 4.0) -> list[Fin
                 "abstract_only_collapse",
                 f"{len(one_chunk_pdf)}/{len(pdf_docs)} PDF-backed docs produced only 1 chunk "
                 f"({collapse_rate:.0%}) — the index is mostly abstracts, not full text.",
-                detail={"one_chunk_pdf_docs": len(one_chunk_pdf), "pdf_docs": len(pdf_docs),
-                        "sample": one_chunk_pdf[:10]},
+                detail={
+                    "one_chunk_pdf_docs": len(one_chunk_pdf),
+                    "pdf_docs": len(pdf_docs),
+                    "sample": one_chunk_pdf[:10],
+                },
                 remedy="Re-ingest full text: rag-literature-rag ingest --force --rebuild "
                 "--pdf-backend docling  (ensure PDFs finished downloading first).",
             )
@@ -235,8 +243,11 @@ def audit_chunk_distribution(profile: str, *, min_mean: float = 4.0) -> list[Fin
         )
     else:
         findings.append(
-            Finding("ok", "chunk_density_ok",
-                    f"Chunk density healthy (mean {mean:.1f}/doc, collapse {collapse_rate:.0%}).")
+            Finding(
+                "ok",
+                "chunk_density_ok",
+                f"Chunk density healthy (mean {mean:.1f}/doc, collapse {collapse_rate:.0%}).",
+            )
         )
     return findings
 
@@ -254,11 +265,12 @@ def audit_extraction_fallback(
     if not log_path or not log_path.is_file():
         return [Finding("info", "no_ingest_log", "No ingest log to scan for fallbacks.")]
     stats = _scan_extraction_log(log_path)
-    ok = stats["ok"]
     fallback = stats["fallback"]
     total = stats["total"]
     if total == 0:
-        return [Finding("info", "no_extraction_records", "Ingest log has no per-doc extraction lines.")]
+        return [
+            Finding("info", "no_extraction_records", "Ingest log has no per-doc extraction lines.")
+        ]
     fallback_docs = stats["fallback_docs"]
     index_detail: dict[str, Any] = {}
     if profile:
@@ -285,8 +297,12 @@ def audit_extraction_fallback(
                 **index_detail,
                 **qrel_overlap,
             },
-            remedy=("Many fall-backs at ~0.2s mean the PDF wasn't present/parseable when ingested; "
-                    "verify PDFs on disk then --force --rebuild." if sev != "ok" else ""),
+            remedy=(
+                "Many fall-backs at ~0.2s mean the PDF wasn't present/parseable when ingested; "
+                "verify PDFs on disk then --force --rebuild."
+                if sev != "ok"
+                else ""
+            ),
         )
     ]
 

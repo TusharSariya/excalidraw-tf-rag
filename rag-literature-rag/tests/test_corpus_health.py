@@ -48,7 +48,9 @@ def test_audit_extraction_fallback_reports_qrel_overlap(tmp_path: Path, monkeypa
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(corpus_health, "_load_qrel_doc_weights", lambda track: {"doc-c": 3, "doc-b": 1})
+    monkeypatch.setattr(
+        corpus_health, "_load_qrel_doc_weights", lambda track: {"doc-c": 3, "doc-b": 1}
+    )
 
     [finding] = corpus_health.audit_extraction_fallback(track="catalog", log_path=log_path)
 
@@ -73,7 +75,9 @@ def test_audit_extraction_fallback_ignores_resolved_index_docs(tmp_path: Path, m
         ),
         encoding="utf-8",
     )
-    monkeypatch.setattr(corpus_health, "_load_qrel_doc_weights", lambda track: {"doc-a": 3, "doc-b": 2})
+    monkeypatch.setattr(
+        corpus_health, "_load_qrel_doc_weights", lambda track: {"doc-a": 3, "doc-b": 2}
+    )
     monkeypatch.setattr(
         corpus_health,
         "_load_chunks",

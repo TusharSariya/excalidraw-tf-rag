@@ -30,14 +30,16 @@ def _api_key() -> str:
     return os.environ.get("RAG_GPU_GATEWAY_KEY", "")
 
 
-def embed_remote_texts(
+_GATEWAY_BATCH = 256  # texts per HTTP call — keeps each call <10 s and VRAM safe
+
+
+def _embed_one_batch(
     texts: list[str],
     *,
+    url: str,
+    key: str,
     model_id: str,
 ) -> list[list[float]]:
-    """Call /v1/embeddings on the desktop gateway. Returns one vector per text."""
-    url = f"{_gateway_url()}/v1/embeddings"
-    key = _api_key()
     body = json.dumps({"model": model_id, "input": texts}).encode()
     req = urllib.request.Request(
         url,
@@ -48,14 +50,37 @@ def embed_remote_texts(
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read())
         return [item["embedding"] for item in data["data"]]
-    except urllib.error.HTTPError as exc:  # must precede URLError (HTTPError subclasses it)
+    except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", errors="replace")
         raise GatewayError(f"Gateway {exc.code}: {detail}") from exc
     except urllib.error.URLError as exc:
         raise GatewayConnectionError(f"Gateway unreachable at {url}: {exc}") from exc
+
+
+def embed_remote_texts(
+    texts: list[str],
+    *,
+    model_id: str,
+) -> list[list[float]]:
+    """Call /v1/embeddings on the desktop gateway. Returns one vector per text.
+
+    Automatically chunks large inputs into _GATEWAY_BATCH-sized HTTP requests so
+    a single ingest call with thousands of chunks doesn't OOM the 8 GB GPU or
+    exceed the per-request timeout.
+    """
+    url = f"{_gateway_url()}/v1/embeddings"
+    key = _api_key()
+    if len(texts) <= _GATEWAY_BATCH:
+        return _embed_one_batch(texts, url=url, key=key, model_id=model_id)
+    results: list[list[float]] = []
+    for i in range(0, len(texts), _GATEWAY_BATCH):
+        results.extend(
+            _embed_one_batch(texts[i : i + _GATEWAY_BATCH], url=url, key=key, model_id=model_id)
+        )
+    return results
 
 
 def rerank_remote(

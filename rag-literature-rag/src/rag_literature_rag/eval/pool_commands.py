@@ -7,6 +7,7 @@ Workflow::
     eval diagnostics --track catalog --embed-profile P --qrels data/eval/qrels/catalog/qrels.json
     eval benchmark   --embed-profile P --qrels data/eval/qrels/catalog/qrels.json --report
 """
+
 from __future__ import annotations
 
 import json
@@ -30,10 +31,16 @@ def _experimental_indexes(splade_index: Path | None, colbert_index: Path | None)
 @click.command("pool")
 @click.option("--track", type=click.Choice(EVAL_TRACKS), required=True)
 @click.option("--embed-profile", required=True)
-@click.option("--system", "systems", multiple=True, help="Pool system (repeatable); default diverse set.")
+@click.option(
+    "--system", "systems", multiple=True, help="Pool system (repeatable); default diverse set."
+)
 @click.option("--depth", default=50, show_default=True, type=click.IntRange(min=1))
-@click.option("--splade-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None)
-@click.option("--colbert-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None)
+@click.option(
+    "--splade-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None
+)
+@click.option(
+    "--colbert-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None
+)
 @click.option("-o", "--output", "output", type=click.Path(path_type=Path), default=None)
 @click.option("-v", "--verbose", is_flag=True)
 def pool_cmd(
@@ -66,7 +73,12 @@ def pool_cmd(
 
 
 @click.command("judge")
-@click.option("--track", type=click.Choice(EVAL_TRACKS), default=None, help="Locate the default pool for this track.")
+@click.option(
+    "--track",
+    type=click.Choice(EVAL_TRACKS),
+    default=None,
+    help="Locate the default pool for this track.",
+)
 @click.option("--pool", "pool_file", type=click.Path(path_type=Path, exists=True), default=None)
 @click.option("--model", default=None, help="Judge LLM model (default RAG_LIT_JUDGE_LLM_MODEL).")
 @click.option("-o", "--output", "output", type=click.Path(path_type=Path), default=None)
@@ -90,7 +102,9 @@ def judge_cmd(
             raise click.ClickException("Pass --pool or --track to locate the pool.")
         pool_file = pool_path(track)  # type: ignore[arg-type]
         if not pool_file.is_file():
-            raise click.ClickException(f"No pool at {pool_file}; run `eval pool --track {track}` first.")
+            raise click.ClickException(
+                f"No pool at {pool_file}; run `eval pool --track {track}` first."
+            )
     pool = json.loads(Path(pool_file).read_text(encoding="utf-8"))
     resolved_model = model or judge_model()
     cases_out = judge_pool(pool, model=resolved_model)
@@ -115,10 +129,19 @@ def judge_cmd(
 @click.option("--track", type=click.Choice(EVAL_TRACKS), required=True)
 @click.option("--embed-profile", required=True)
 @click.option("--qrels", "qrels_path", type=click.Path(path_type=Path, exists=True), required=True)
-@click.option("--strategy", "strategies", multiple=True, help="Strategy (repeatable); default bm25,dense,hybrid.")
+@click.option(
+    "--strategy",
+    "strategies",
+    multiple=True,
+    help="Strategy (repeatable); default bm25,dense,hybrid.",
+)
 @click.option("--depth", default=20, show_default=True, type=click.IntRange(min=1))
-@click.option("--splade-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None)
-@click.option("--colbert-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None)
+@click.option(
+    "--splade-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None
+)
+@click.option(
+    "--colbert-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None
+)
 @click.option(
     "--split",
     type=click.Choice(["tune", "test"]),
@@ -154,21 +177,34 @@ def diagnostics_cmd(
     if output:
         Path(output).parent.mkdir(parents=True, exist_ok=True)
         Path(output).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        Path(output).with_suffix(".md").write_text(format_diagnostics_table(payload), encoding="utf-8")
+        Path(output).with_suffix(".md").write_text(
+            format_diagnostics_table(payload), encoding="utf-8"
+        )
     click.echo(format_diagnostics_table(payload))
 
 
 @click.command("qrels-backfill")
 @click.option("--track", type=click.Choice(EVAL_TRACKS), required=True)
 @click.option("--embed-profile", required=True)
-@click.option("--strategy", "strategies", multiple=True, help="Strategy (repeatable); default dense,hybrid,bm25.")
+@click.option(
+    "--strategy",
+    "strategies",
+    multiple=True,
+    help="Strategy (repeatable); default dense,hybrid,bm25.",
+)
 @click.option("--depth", default=10, show_default=True, type=click.IntRange(min=1))
 @click.option("--budget-usd", default=10.0, show_default=True, type=float)
 @click.option("--qrels", "qrels_path", type=click.Path(path_type=Path, exists=True), default=None)
 @click.option("--model", default=None, help="Judge LLM model (default RAG_LIT_JUDGE_LLM_MODEL).")
-@click.option("--splade-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None)
-@click.option("--colbert-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None)
-@click.option("--in-place", is_flag=True, help="Merge new labels into the qrels file after writing a backup.")
+@click.option(
+    "--splade-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None
+)
+@click.option(
+    "--colbert-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None
+)
+@click.option(
+    "--in-place", is_flag=True, help="Merge new labels into the qrels file after writing a backup."
+)
 @click.option("-v", "--verbose", is_flag=True)
 def qrels_backfill_cmd(
     track: str,
@@ -218,13 +254,13 @@ def gen_gold_split_cmd(test_fraction: float, seed: str, output: Path | None, for
     final deltas are reported on --split test only. Run once; re-running requires
     --force and invalidates prior tune/test comparisons.
     """
-    from rag_literature_rag.eval.gold_validation import DEFAULT_SPLIT_PATH
     from rag_literature_rag.eval.gold_split import (
         build_tune_test_split,
         format_split_report,
         validate_split_coverage,
         write_tune_test_split,
     )
+    from rag_literature_rag.eval.gold_validation import DEFAULT_SPLIT_PATH
 
     out_path = output or DEFAULT_SPLIT_PATH
     if out_path.exists() and not force:
@@ -265,8 +301,13 @@ def _count_judge_misses(pool: dict, model: str) -> int:
 @click.option("--n-pdf", default=200, show_default=True, type=click.IntRange(min=0))
 @click.option("--hard-frac", default=0.2, show_default=True, type=click.FloatRange(0.0, 1.0))
 @click.option("--seed", default=1234, show_default=True, type=int)
-@click.option("--budget-usd", default=10.0, show_default=True, type=float,
-              help="Refuse to judge if the estimated cache-miss spend exceeds this.")
+@click.option(
+    "--budget-usd",
+    default=10.0,
+    show_default=True,
+    type=float,
+    help="Refuse to judge if the estimated cache-miss spend exceeds this.",
+)
 @click.option("--depth", default=20, show_default=True, type=click.IntRange(min=1))
 @click.option("--gen-only", is_flag=True, help="Generate + write cases.json; skip pool/judge.")
 @click.option("-v", "--verbose", is_flag=True)
@@ -364,7 +405,7 @@ def corpus_health_cmd(embed_profile: str, track: str, as_json: bool) -> None:
     The highest-leverage self-improvement signal here: the biggest wins came from data
     and infrastructure defects, not retrieval-strategy tuning. Read-only, no LLM.
     """
-    from rag_literature_rag.eval.corpus_health import SEVERITY, run_audit
+    from rag_literature_rag.eval.corpus_health import run_audit
 
     report = run_audit(embed_profile, track=track)
     if as_json:
@@ -377,7 +418,9 @@ def corpus_health_cmd(embed_profile: str, track: str, as_json: bool) -> None:
         f"(critical={report['n_critical']} warning={report['n_warning']})\n"
     )
     for f in report["findings"]:
-        click.echo(f"  {icon.get(f['severity'], '?')} [{f['severity']}] {f['code']}: {f['message']}")
+        click.echo(
+            f"  {icon.get(f['severity'], '?')} [{f['severity']}] {f['code']}: {f['message']}"
+        )
         detail = f.get("detail") or {}
         if f["code"] == "extraction_fallback_rate":
             fallback_by_reason = detail.get("fallback_by_reason") or {}

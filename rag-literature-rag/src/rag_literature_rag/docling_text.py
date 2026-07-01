@@ -12,7 +12,8 @@ import os
 from functools import lru_cache
 from pathlib import Path
 
-from rag_literature_rag.pdf_text import PdfExtractResult, clean_markdown_text as _md_text
+from rag_literature_rag.pdf_text import PdfExtractResult
+from rag_literature_rag.pdf_text import clean_markdown_text as _md_text
 
 log = logging.getLogger("rag_literature_rag.docling")
 
@@ -52,8 +53,11 @@ def _env_positive_int(name: str, default: int) -> int:
 
 def _pipeline_options():
     """Build Docling pipeline options from env without constructing a converter."""
-    from docling.datamodel.pipeline_options import AcceleratorDevice, AcceleratorOptions
-    from docling.datamodel.pipeline_options import PdfPipelineOptions
+    from docling.datamodel.pipeline_options import (
+        AcceleratorDevice,
+        AcceleratorOptions,
+        PdfPipelineOptions,
+    )
 
     device = os.getenv("RAG_LIT_DOCLING_DEVICE", DEFAULT_DEVICE).strip().lower()
     valid_devices = {value.value for value in AcceleratorDevice}
@@ -68,9 +72,7 @@ def _pipeline_options():
     return PdfPipelineOptions(
         do_ocr=_env_bool("RAG_LIT_DOCLING_OCR", DEFAULT_OCR),
         do_table_structure=_env_bool("RAG_LIT_DOCLING_TABLES", DEFAULT_TABLES),
-        document_timeout=_env_positive_int(
-            "RAG_LIT_DOCLING_TIMEOUT_S", DEFAULT_TIMEOUT_S
-        ),
+        document_timeout=_env_positive_int("RAG_LIT_DOCLING_TIMEOUT_S", DEFAULT_TIMEOUT_S),
         accelerator_options=AcceleratorOptions(
             device=device,
             num_threads=_env_positive_int("RAG_LIT_DOCLING_THREADS", DEFAULT_THREADS),

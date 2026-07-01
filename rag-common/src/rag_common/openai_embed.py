@@ -4,14 +4,19 @@ import logging
 import os
 import threading
 import time
-from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
 
 import tiktoken
 from openai import OpenAI
 
 from rag_common.config import EmbedConfig, EmbedStats
-from rag_common.env import is_auth_error, is_openai_fatal_error, is_quota_error, is_rate_limit_error, valid_openai_key
+from rag_common.env import (
+    is_auth_error,
+    is_openai_fatal_error,
+    is_quota_error,
+    valid_openai_key,
+)
 
 log = logging.getLogger("rag_common.openai")
 
@@ -123,8 +128,10 @@ def _embed_batch(
                 model=cfg.model,
                 dimensions=cfg.dimensions,
             )
-            batch_tokens = response.usage.total_tokens if response.usage else sum(
-                count_tokens(t) for t in batch
+            batch_tokens = (
+                response.usage.total_tokens
+                if response.usage
+                else sum(count_tokens(t) for t in batch)
             )
             if stats is not None:
                 stats.add(tokens=batch_tokens, requests=1)
@@ -281,8 +288,7 @@ def embed_openai_texts(
 
     with ThreadPoolExecutor(max_workers=min(n_workers, total_batches)) as pool:
         futures = [
-            pool.submit(_run, batch_num, batch)
-            for batch_num, batch in enumerate(batches, start=1)
+            pool.submit(_run, batch_num, batch) for batch_num, batch in enumerate(batches, start=1)
         ]
         for future in as_completed(futures):
             idx, vecs = future.result()

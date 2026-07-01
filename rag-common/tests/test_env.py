@@ -1,6 +1,11 @@
 from unittest.mock import patch
 
-from rag_common.env import valid_gemini_auth, valid_gemini_key, valid_openai_key, valid_vertex_gemini_auth
+from rag_common.env import (
+    valid_gemini_auth,
+    valid_gemini_key,
+    valid_openai_key,
+    valid_vertex_gemini_auth,
+)
 
 
 def test_valid_openai_key_rejects_placeholder():

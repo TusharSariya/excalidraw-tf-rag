@@ -1,15 +1,19 @@
 import lancedb
-
 from rag_common.config import EmbedConfig
 from rag_literature_rag.ingest.chunk import TextChunk
 from rag_literature_rag.ingest.doc_summary import (
-    DocumentSummary,
     PROMPT_VERSION,
+    DocumentSummary,
     SummaryCacheStats,
     build_document_summary,
     summary_cache_key,
 )
-from rag_literature_rag.ingest.index import chunk_count, summary_count, upsert_chunks, upsert_summaries
+from rag_literature_rag.ingest.index import (
+    chunk_count,
+    summary_count,
+    upsert_chunks,
+    upsert_summaries,
+)
 from rag_literature_rag.manifest import ManifestItem
 from rag_literature_rag.paths import CHUNKS_TABLE, SUMMARIES_TABLE, ProfileIndexPaths
 
@@ -68,8 +72,12 @@ def test_docsummary_cache_key_changes_on_required_inputs():
 
 
 def test_docsummary_generation_uses_separate_cache(tmp_path, monkeypatch):
-    monkeypatch.setattr("rag_literature_rag.ingest.doc_summary.CACHE_DIR", tmp_path / "docsummary_cache")
-    monkeypatch.setattr("rag_literature_rag.ingest.doc_summary.docsummary_model", lambda: "gemma4:e4b")
+    monkeypatch.setattr(
+        "rag_literature_rag.ingest.doc_summary.CACHE_DIR", tmp_path / "docsummary_cache"
+    )
+    monkeypatch.setattr(
+        "rag_literature_rag.ingest.doc_summary.docsummary_model", lambda: "gemma4:e4b"
+    )
     calls = {"count": 0}
 
     def fake_generate(prompt: str, *, model: str) -> str:
@@ -77,11 +85,11 @@ def test_docsummary_generation_uses_separate_cache(tmp_path, monkeypatch):
         assert "problem, methods, datasets" in prompt
         assert model == "gemma4:e4b"
         return (
-                "This grounded retrieval summary describes the paper problem, BM25 and dense retrieval "
-                "methods, evaluated datasets, important acronyms, reported findings, known aliases, "
-                "and limitations without adding unsupported claims beyond the supplied source text. "
-                "It preserves retrieval terminology and connects the document to relevant query language."
-            )
+            "This grounded retrieval summary describes the paper problem, BM25 and dense retrieval "
+            "methods, evaluated datasets, important acronyms, reported findings, known aliases, "
+            "and limitations without adding unsupported claims beyond the supplied source text. "
+            "It preserves retrieval terminology and connects the document to relevant query language."
+        )
 
     monkeypatch.setattr("rag_literature_rag.ingest.doc_summary._generate_ollama", fake_generate)
     stats = SummaryCacheStats()
@@ -109,7 +117,9 @@ def test_docsummary_generation_uses_separate_cache(tmp_path, monkeypatch):
 
 
 def test_summary_index_preserves_provenance_without_overwriting_chunks(tmp_path, monkeypatch):
-    monkeypatch.setattr("rag_literature_rag.ingest.embed_cache._CACHE_DIR", tmp_path / "embed_cache")
+    monkeypatch.setattr(
+        "rag_literature_rag.ingest.embed_cache._CACHE_DIR", tmp_path / "embed_cache"
+    )
     paths = ProfileIndexPaths(
         "test",
         tmp_path,

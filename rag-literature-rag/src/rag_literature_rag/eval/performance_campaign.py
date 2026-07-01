@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import statistics
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +15,8 @@ from rag_literature_rag.eval.fallback_repair import (
     index_doc_stats,
     invalidate_repair_caches,
     run_fallback_audit,
+)
+from rag_literature_rag.eval.fallback_repair import (
     write_report as write_fallback_report,
 )
 from rag_literature_rag.eval.qrels import load_qrels
@@ -33,7 +35,7 @@ FULL_CANDIDATE_PROFILES = (
 
 
 def _timestamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
 
 
 def _qrels_path(track: str) -> Path:
@@ -58,7 +60,9 @@ def summarize_benchmark(payload: dict[str, Any], *, repaired_doc_ids: set[str]) 
     for result in payload.get("results", []):
         cases = result.get("cases") or []
         repaired_cases = [case for case in cases if _case_matches_repaired(case, repaired_doc_ids)]
-        unrelated_cases = [case for case in cases if not _case_matches_repaired(case, repaired_doc_ids)]
+        unrelated_cases = [
+            case for case in cases if not _case_matches_repaired(case, repaired_doc_ids)
+        ]
 
         def slice_stats(slice_cases: list[dict[str, Any]]) -> dict[str, Any]:
             return {
@@ -97,7 +101,9 @@ def summarize_benchmark(payload: dict[str, Any], *, repaired_doc_ids: set[str]) 
 
 def index_resource_stats(embed_profile: str) -> dict[str, Any]:
     paths = profile_index_paths(embed_profile)
-    files = [path for path in paths.root.rglob("*") if path.is_file()] if paths.root.exists() else []
+    files = (
+        [path for path in paths.root.rglob("*") if path.is_file()] if paths.root.exists() else []
+    )
     return {
         "profile": embed_profile,
         "index_root": str(paths.root),
@@ -128,7 +134,7 @@ def campaign_plan_payload(
     stages: tuple[str, ...],
 ) -> dict[str, Any]:
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "baseline_profile": baseline_profile,
         "candidate_profiles": list(candidate_profiles),
         "passes": passes,
@@ -139,10 +145,7 @@ def campaign_plan_payload(
         "matrix": [
             {"stage": "baseline-current", "profile": baseline_profile},
             {"stage": "repair-only", "profile": baseline_profile},
-            *[
-                {"stage": f"repair+{profile}", "profile": profile}
-                for profile in candidate_profiles
-            ],
+            *[{"stage": f"repair+{profile}", "profile": profile} for profile in candidate_profiles],
         ],
         "not_in_scope": [
             "default profile promotion",
@@ -191,10 +194,7 @@ def write_campaign_report(payload: dict[str, Any], path: Path) -> None:
 
 
 def _run_health_stage(run_dir: Path, *, baseline_profile: str) -> dict[str, Any]:
-    out = {
-        track: run_audit(baseline_profile, track=track)
-        for track in TRACKS
-    }
+    out = {track: run_audit(baseline_profile, track=track) for track in TRACKS}
     _write_json(run_dir / "corpus-health.json", out)
     return out
 
@@ -259,20 +259,45 @@ def _run_diagnostics_stage(
 
 @click.command("performance-campaign")
 @click.option("--baseline-profile", default=DEFAULT_BASELINE_PROFILE, show_default=True)
-@click.option("--candidate-profile", "candidate_profiles", multiple=True, help="Candidate profile; repeatable.")
-@click.option("--strategy", "strategies", multiple=True, default=DEFAULT_STRATEGIES, show_default=True)
+@click.option(
+    "--candidate-profile",
+    "candidate_profiles",
+    multiple=True,
+    help="Candidate profile; repeatable.",
+)
+@click.option(
+    "--strategy", "strategies", multiple=True, default=DEFAULT_STRATEGIES, show_default=True
+)
 @click.option("--passes", default=3, show_default=True, type=click.IntRange(min=1))
 @click.option(
     "--stage",
     "stages",
     multiple=True,
-    type=click.Choice(["plan", "health", "repair-audit", "repair", "baseline", "candidates", "diagnostics"]),
+    type=click.Choice(
+        ["plan", "health", "repair-audit", "repair", "baseline", "candidates", "diagnostics"]
+    ),
     help="Stage to execute; default writes plan only unless --execute is set.",
 )
-@click.option("--execute", is_flag=True, help="Run selected stages. Without this, only write campaign plan artifacts.")
-@click.option("--build-candidates", is_flag=True, help="Build candidate profile indexes before benchmarking them.")
-@click.option("--pdf-backend", default="docling", show_default=True, type=click.Choice(["pymupdf", "docling"]))
-@click.option("--top-repair", default=0, show_default=True, type=click.IntRange(min=0), help="Repair audit limit; 0 = all.")
+@click.option(
+    "--execute",
+    is_flag=True,
+    help="Run selected stages. Without this, only write campaign plan artifacts.",
+)
+@click.option(
+    "--build-candidates",
+    is_flag=True,
+    help="Build candidate profile indexes before benchmarking them.",
+)
+@click.option(
+    "--pdf-backend", default="docling", show_default=True, type=click.Choice(["pymupdf", "docling"])
+)
+@click.option(
+    "--top-repair",
+    default=0,
+    show_default=True,
+    type=click.IntRange(min=0),
+    help="Repair audit limit; 0 = all.",
+)
 @click.option("--min-available-gb", default=8.0, show_default=True, type=click.FloatRange(min=1))
 @click.option("--run-dir", type=click.Path(path_type=Path), default=None)
 @click.option("--json", "as_json", is_flag=True, help="Print the campaign manifest JSON.")
@@ -292,7 +317,11 @@ def performance_campaign_cmd(
 ) -> None:
     """Run or materialize the staged RAG performance campaign."""
     selected_candidates = candidate_profiles or FULL_CANDIDATE_PROFILES
-    selected_stages = stages or (("plan",) if not execute else ("health", "repair-audit", "repair", "baseline", "diagnostics"))
+    selected_stages = stages or (
+        ("plan",)
+        if not execute
+        else ("health", "repair-audit", "repair", "baseline", "diagnostics")
+    )
     root = run_dir or DATA_DIR / "eval" / "runs" / f"{_timestamp()}-rag-performance-campaign"
     root.mkdir(parents=True, exist_ok=True)
 
@@ -309,7 +338,9 @@ def performance_campaign_cmd(
     outputs: dict[str, Any] = {"run_dir": str(root), "plan": manifest}
     if execute:
         if "health" in selected_stages:
-            outputs["health"] = _run_health_stage(root / "health", baseline_profile=baseline_profile)
+            outputs["health"] = _run_health_stage(
+                root / "health", baseline_profile=baseline_profile
+            )
         if "repair-audit" in selected_stages or "repair" in selected_stages:
             audit = run_fallback_audit(top=top_repair)
             outputs["repair_audit"] = audit
@@ -317,7 +348,8 @@ def performance_campaign_cmd(
         repair_ids: set[str] = set()
         if "repair" in selected_stages:
             repair_rows = [
-                row for row in outputs["repair_audit"]["rows"]
+                row
+                for row in outputs["repair_audit"]["rows"]
                 if row["classification"] == "repairable_local_extraction"
             ]
             repair_doc_ids = [row["doc_id"] for row in repair_rows]
@@ -351,11 +383,17 @@ def performance_campaign_cmd(
                     top=0,
                     include_gemini=False,
                     reproduce=False,
-                ) if repair_ids else None,
+                )
+                if repair_ids
+                else None,
             }
         else:
             audit_rows = outputs.get("repair_audit", {}).get("rows", [])
-            repair_ids = {row["doc_id"] for row in audit_rows if row.get("classification") == "repairable_local_extraction"}
+            repair_ids = {
+                row["doc_id"]
+                for row in audit_rows
+                if row.get("classification") == "repairable_local_extraction"
+            }
 
         if "baseline" in selected_stages:
             outputs["baseline"] = _run_benchmark_passes(

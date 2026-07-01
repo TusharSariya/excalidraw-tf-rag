@@ -29,7 +29,9 @@ def test_search_openalex_paginates_with_cursor():
     original = openalex.OPENALEX.request_openalex
     openalex.OPENALEX.request_openalex = fake_request
     try:
-        results = _search_openalex("dense passage retrieval", per_page=1, max_results=3, oa_only=True)
+        results = _search_openalex(
+            "dense passage retrieval", per_page=1, max_results=3, oa_only=True
+        )
     finally:
         openalex.OPENALEX.request_openalex = original
 
@@ -61,7 +63,9 @@ def test_topic_kept_when_work_supports_it():
 def test_topic_supported_for_rag_keywords():
     assert _topic_supported("agentic", "Agentic retrieval augmented generation loop", None)
     assert not _topic_supported("agentic", "A study of protein folding kinetics", None)
-    assert _topic_supported("hybrid-retrieval", "Hybrid dense sparse retrieval reciprocal rank fusion", None)
+    assert _topic_supported(
+        "hybrid-retrieval", "Hybrid dense sparse retrieval reciprocal rank fusion", None
+    )
 
 
 def test_topic_query_keys_match_taxonomy():

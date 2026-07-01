@@ -15,12 +15,13 @@ The curated gold relevant docs are also folded into the pool (tagged
 ``curated``) so the judge grades them too; comparing the judge's grade on those
 known-relevant docs is a free check on judge quality.
 """
+
 from __future__ import annotations
 
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -84,11 +85,12 @@ def classify_system(name: str) -> str:
     """
     return "lexical" if name in LEXICAL_SEED_SYSTEMS else "dense"
 
+
 POOL_DIR = DATA_DIR / "eval" / "pool"
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _manifest_lookup() -> dict[str, Any]:
@@ -136,7 +138,10 @@ def build_pool(
             canonical = row.get("canonical_doc_id") or row.get("doc_id") or ""
             if not canonical:
                 return
-            entry = pooled.setdefault(
+            # _record is defined and invoked within this same loop iteration, so
+            # closing over the per-iteration `pooled` is safe (no late-binding
+            # hazard — B023 is a false positive here).
+            entry = pooled.setdefault(  # noqa: B023
                 canonical,
                 {
                     "canonical_doc_id": canonical,
@@ -290,16 +295,12 @@ def merge_pools(paths: list[str]) -> dict[str, Any]:
             dest = merged_cases[case_id]["pooled"]
             for doc_id, entry in case_data.get("pooled", {}).items():
                 if doc_id not in dest:
-                    dest[doc_id] = {
-                        k: v for k, v in entry.items() if k != "systems"
-                    }
+                    dest[doc_id] = {k: v for k, v in entry.items() if k != "systems"}
                     dest[doc_id]["systems"] = {}
                 # Union the systems provenance: keep best (lowest) rank per system.
                 for sys_name, rank in entry.get("systems", {}).items():
                     prev = dest[doc_id]["systems"].get(sys_name)
-                    dest[doc_id]["systems"][sys_name] = (
-                        rank if prev is None else min(prev, rank)
-                    )
+                    dest[doc_id]["systems"][sys_name] = rank if prev is None else min(prev, rank)
                 # Propagate curated flag if set in any pool.
                 if entry.get("curated"):
                     dest[doc_id]["curated"] = True
@@ -377,9 +378,7 @@ def seed_attribution(
             entry = qrels_cases.get(case_id, {}).get(seed_doc_id)
             if isinstance(entry, dict) and entry.get("grade") is not None:
                 seed_grade = int(entry["grade"])
-        seed_corroborated = (
-            seed_grade is not None and seed_grade >= relevance_threshold
-        )
+        seed_corroborated = seed_grade is not None and seed_grade >= relevance_threshold
 
         out[case_id] = {
             "seed_doc_id": seed_doc_id,

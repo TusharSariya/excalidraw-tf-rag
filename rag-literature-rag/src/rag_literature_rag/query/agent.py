@@ -14,6 +14,7 @@ benchmarked on the gold set and used at the CLI. LLM model is pinned via
 ``RAG_LIT_AGENT_LLM_MODEL`` (default 3.1-pro-preview in .env) and runs on the
 ``RAG_LLM_LOCATION`` endpoint.
 """
+
 from __future__ import annotations
 
 import logging

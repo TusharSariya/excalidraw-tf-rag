@@ -20,6 +20,7 @@ __all__ = [
     "get_profile",
     "list_profile_names",
     "load_profiles",
+    "local_config",
     "probe_gemini",
     "probe_openai",
     "resolve_embed_config",

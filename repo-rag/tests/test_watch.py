@@ -1,6 +1,5 @@
-from click.testing import CliRunner
-
 import repo_rag.ingest.run as run_mod
+from click.testing import CliRunner
 from repo_rag.harvest.manifest import RepoManifest
 from repo_rag.ingest.embed import EmbedConfig
 from repo_rag.ingest.run import run_index
@@ -42,10 +41,14 @@ def _stub_run_index_io(monkeypatch, calls):
         lambda profile=None: EmbedConfig(backend="local", model="stub", dimensions=8),
     )
     monkeypatch.setattr(
-        run_mod, "build_graph", lambda manifest: calls.__setitem__("build_graph", True) or {"nodes": 1, "edges": 2}
+        run_mod,
+        "build_graph",
+        lambda manifest: calls.__setitem__("build_graph", True) or {"nodes": 1, "edges": 2},
     )
     monkeypatch.setattr(
-        run_mod, "graph_counts", lambda: calls.__setitem__("graph_counts", True) or {"nodes": 7, "edges": 11}
+        run_mod,
+        "graph_counts",
+        lambda: calls.__setitem__("graph_counts", True) or {"nodes": 7, "edges": 11},
     )
 
 

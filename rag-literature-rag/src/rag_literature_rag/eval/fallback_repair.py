@@ -5,7 +5,7 @@ import hashlib
 import json
 import re
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -13,13 +13,25 @@ import click
 
 from rag_literature_rag.eval.corpus_health import _load_qrel_doc_weights, _scan_extraction_log
 from rag_literature_rag.ingest.chunk import chunking_fingerprint
-from rag_literature_rag.ingest.extract import PDF_BACKENDS, extraction_cache_options, extract_pdf_result
+from rag_literature_rag.ingest.extract import (
+    PDF_BACKENDS,
+    extract_pdf_result,
+    extraction_cache_options,
+)
 from rag_literature_rag.manifest import ManifestItem, load_manifest, manifest_by_id
-from rag_literature_rag.paths import CHUNKS_TABLE, DATA_DIR, INGEST_LOG_PATH, PKG_ROOT, profile_index_paths
+from rag_literature_rag.paths import (
+    CHUNKS_TABLE,
+    DATA_DIR,
+    INGEST_LOG_PATH,
+    PKG_ROOT,
+    profile_index_paths,
+)
 
 LOCAL_BACKENDS = ("pymupdf", "docling")
 TRACKS = ("catalog", "pdf-deep-read")
-REFERENCE_HEADING_RE = re.compile(r"^\s*(references|bibliography)\s*$", re.IGNORECASE | re.MULTILINE)
+REFERENCE_HEADING_RE = re.compile(
+    r"^\s*(references|bibliography)\s*$", re.IGNORECASE | re.MULTILINE
+)
 
 
 @dataclass
@@ -72,7 +84,7 @@ def text_quality_metrics(texts: list[str]) -> dict[str, Any]:
     reference_chars = 0
     match = REFERENCE_HEADING_RE.search(joined)
     if match:
-        reference_chars = len(joined[match.start():])
+        reference_chars = len(joined[match.start() :])
     reference_ratio = round(reference_chars / chars, 4) if chars else 0.0
     ascii_chars = sum(1 for ch in joined if ord(ch) < 128)
     ascii_ratio = round(ascii_chars / chars, 4) if chars else 0.0
@@ -127,7 +139,9 @@ def reproduce_extractors(
     out: list[BackendReproduction] = []
     for backend in selected:
         if backend not in PDF_BACKENDS:
-            out.append(BackendReproduction(backend=backend, available=False, error="unknown backend"))
+            out.append(
+                BackendReproduction(backend=backend, available=False, error="unknown backend")
+            )
             continue
         try:
             result = extract_pdf_result(item, clean=True, backend=backend)
@@ -152,7 +166,9 @@ def reproduce_extractors(
     return out
 
 
-def classify_fallback(item: ManifestItem | None, file_exists: bool, reproductions: list[BackendReproduction]) -> str:
+def classify_fallback(
+    item: ManifestItem | None, file_exists: bool, reproductions: list[BackendReproduction]
+) -> str:
     if item is None or not item.localPath or not file_exists:
         return "missing_pdf"
     if any(row.extracts_text for row in reproductions):
@@ -172,15 +188,26 @@ def index_doc_stats(doc_ids: list[str], *, embed_profile: str) -> dict[str, dict
         return {doc_id: {"error": "lancedb unavailable"} for doc_id in doc_ids}
     paths = profile_index_paths(embed_profile)
     if not paths.lance_dir.exists():
-        return {doc_id: {"chunk_count": 0, "text_chars": 0, "index_missing": True} for doc_id in doc_ids}
+        return {
+            doc_id: {"chunk_count": 0, "text_chars": 0, "index_missing": True} for doc_id in doc_ids
+        }
     try:
         db = lancedb.connect(str(paths.lance_dir))
         names = db.list_tables()
         names = names if isinstance(names, list) else list(getattr(names, "tables", names))
         if CHUNKS_TABLE not in names:
-            return {doc_id: {"chunk_count": 0, "text_chars": 0, "table_missing": True} for doc_id in doc_ids}
+            return {
+                doc_id: {"chunk_count": 0, "text_chars": 0, "table_missing": True}
+                for doc_id in doc_ids
+            }
         table = db.open_table(CHUNKS_TABLE)
-        rows = table.search().select(["doc_id", "text"]).limit(table.count_rows()).to_arrow().to_pylist()
+        rows = (
+            table.search()
+            .select(["doc_id", "text"])
+            .limit(table.count_rows())
+            .to_arrow()
+            .to_pylist()
+        )
     except Exception as exc:  # noqa: BLE001
         return {doc_id: {"error": str(exc)} for doc_id in doc_ids}
 
@@ -213,7 +240,9 @@ def enrich_rows(
         item = manifest.get(row["doc_id"])
         path = _resolve_local_path(item)
         file_exists = bool(path and path.is_file())
-        reproductions = reproduce_extractors(item, include_gemini=include_gemini) if item and reproduce else []
+        reproductions = (
+            reproduce_extractors(item, include_gemini=include_gemini) if item and reproduce else []
+        )
         file_size = path.stat().st_size if file_exists and path else None
         sha256 = item.sha256 if item else None
         if item and not sha256 and path:
@@ -230,7 +259,9 @@ def enrich_rows(
                 "file_size": file_size,
                 "sha256": sha256,
                 "classification": classify_fallback(item, file_exists, reproductions),
-                "extractors": [asdict(rep) | {"extracts_text": rep.extracts_text} for rep in reproductions],
+                "extractors": [
+                    asdict(rep) | {"extracts_text": rep.extracts_text} for rep in reproductions
+                ],
             }
         )
     return enriched
@@ -251,7 +282,7 @@ def run_fallback_audit(
     return {
         "log_path": str(log_path),
         "tracks": list(TRACKS),
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "fallback_docs": len(rows),
         "classifications": dict(classifications),
         "rows": enriched,
@@ -259,7 +290,7 @@ def run_fallback_audit(
 
 
 def _timestamp() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
 
 
 def write_report(payload: dict[str, Any], run_dir: Path) -> tuple[Path, Path]:
@@ -282,9 +313,7 @@ def write_report(payload: dict[str, Any], run_dir: Path) -> tuple[Path, Path]:
         file_note = "yes" if row["file_exists"] else "no"
         best = max(row.get("extractors", []), key=lambda rep: rep.get("text_chars", 0), default={})
         best_note = (
-            f"{best.get('backend')}:{best.get('text_chars', 0)} chars"
-            if best
-            else "not reproduced"
+            f"{best.get('backend')}:{best.get('text_chars', 0)} chars" if best else "not reproduced"
         )
         lines.append(
             f"| {idx} | `{row['doc_id']}` | {row['qrel_placements']} | "
@@ -308,7 +337,9 @@ def write_report(payload: dict[str, Any], run_dir: Path) -> tuple[Path, Path]:
     return json_path, md_path
 
 
-def invalidate_repair_caches(rows: list[dict[str, Any]], *, pdf_backend: str, embed_profile: str) -> dict[str, Any]:
+def invalidate_repair_caches(
+    rows: list[dict[str, Any]], *, pdf_backend: str, embed_profile: str
+) -> dict[str, Any]:
     from rag_literature_rag.ingest.extract_cache import invalidate
 
     options = extraction_cache_options(pdf_backend)
@@ -326,12 +357,20 @@ def invalidate_repair_caches(rows: list[dict[str, Any]], *, pdf_backend: str, em
 
 @click.command("fallback-audit")
 @click.option("--log-path", type=click.Path(path_type=Path, exists=True), default=INGEST_LOG_PATH)
-@click.option("--top", default=0, show_default=True, type=click.IntRange(min=0), help="Limit rows; 0 = all.")
-@click.option("--include-gemini", is_flag=True, help="Also try Gemini vision extraction; can incur cloud cost.")
+@click.option(
+    "--top", default=0, show_default=True, type=click.IntRange(min=0), help="Limit rows; 0 = all."
+)
+@click.option(
+    "--include-gemini",
+    is_flag=True,
+    help="Also try Gemini vision extraction; can incur cloud cost.",
+)
 @click.option("--no-reproduce", is_flag=True, help="Skip extractor reproduction.")
 @click.option("--repair", is_flag=True, help="Re-ingest locally repairable docs only.")
 @click.option("--embed-profile", default="cuda-qwen0.6b-1024", show_default=True)
-@click.option("--pdf-backend", type=click.Choice(["pymupdf", "docling"]), default="docling", show_default=True)
+@click.option(
+    "--pdf-backend", type=click.Choice(["pymupdf", "docling"]), default="docling", show_default=True
+)
 @click.option("--json", "as_json", is_flag=True, help="Print JSON to stdout.")
 def fallback_audit_cmd(
     log_path: Path,
@@ -354,9 +393,7 @@ def fallback_audit_cmd(
     json_path, md_path = write_report(payload, run_dir)
     if repair:
         repair_rows = [
-            row
-            for row in payload["rows"]
-            if row["classification"] == "repairable_local_extraction"
+            row for row in payload["rows"] if row["classification"] == "repairable_local_extraction"
         ]
         repair_ids = [row["doc_id"] for row in repair_rows]
         before_index = index_doc_stats(repair_ids, embed_profile=embed_profile)
@@ -386,7 +423,9 @@ def fallback_audit_cmd(
                 pdf_backend=pdf_backend,
                 doc_ids=tuple(repair_ids),
             )
-            payload["repair"]["after_index"] = index_doc_stats(repair_ids, embed_profile=embed_profile)
+            payload["repair"]["after_index"] = index_doc_stats(
+                repair_ids, embed_profile=embed_profile
+            )
             payload["repair"]["after_audit"] = run_fallback_audit(
                 log_path=Path(run_dir / "repair-ingest.log"),
                 top=0,

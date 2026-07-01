@@ -50,9 +50,7 @@ class LLMDeployment:
         }
         url = f"{self._ollama_url}/api/chat"
         body = json.dumps(ollama_payload).encode()
-        req = urllib.request.Request(
-            url, data=body, headers={"Content-Type": "application/json"}
-        )
+        req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(req, timeout=90) as resp:
                 data = json.loads(resp.read())
@@ -75,9 +73,17 @@ class LLMDeployment:
             "id": f"chatcmpl-gateway-{int(time.time() * 1000)}",
             "object": "chat.completion",
             "created": int(time.time()),
-            "choices": [{"index": 0, "message": {"role": "assistant", "content": content},
-                         "finish_reason": finish_reason}],
+            "choices": [
+                {
+                    "index": 0,
+                    "message": {"role": "assistant", "content": content},
+                    "finish_reason": finish_reason,
+                }
+            ],
             "model": model,
-            "usage": {"prompt_tokens": prompt_tokens, "completion_tokens": completion_tokens,
-                      "total_tokens": prompt_tokens + completion_tokens},
+            "usage": {
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": prompt_tokens + completion_tokens,
+            },
         }

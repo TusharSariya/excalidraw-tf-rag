@@ -16,10 +16,9 @@ Variants compared (each produces a ranked doc_id list, scored with the shared
 
 from __future__ import annotations
 
-import json
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -33,8 +32,13 @@ from graph_layout_rag.query.citation_rank import CitationGraph, load_graph, rank
 # and cover candidates co-citation can't reach; embedding is a light topical tiebreak.
 # (Directional PPR is dropped — it underperformed undirected on this corpus/task.)
 _FUSED_WEIGHTS = {
-    "w_ppr": 0.6, "w_ppr_fwd": 0.0, "w_ppr_bwd": 0.0,
-    "w_coupling": 0.3, "w_cocitation": 1.5, "w_prior": 0.02, "w_embedding": 0.15,
+    "w_ppr": 0.6,
+    "w_ppr_fwd": 0.0,
+    "w_ppr_bwd": 0.0,
+    "w_coupling": 0.3,
+    "w_cocitation": 1.5,
+    "w_prior": 0.02,
+    "w_embedding": 0.15,
 }
 
 GRAPH_VARIANTS: dict[str, dict[str, float]] = {
@@ -42,14 +46,23 @@ GRAPH_VARIANTS: dict[str, dict[str, float]] = {
     "cocitation_only": {"w_ppr": 0.0, "w_coupling": 0.0, "w_cocitation": 1.0, "w_prior": 0.0},
     "ppr_undirected": {"w_ppr": 1.0, "w_coupling": 0.0, "w_cocitation": 0.0, "w_prior": 0.0},
     "ppr_directional": {
-        "w_ppr": 0.0, "w_ppr_fwd": 1.0, "w_ppr_bwd": 1.0,
-        "w_coupling": 0.0, "w_cocitation": 0.0, "w_prior": 0.0,
+        "w_ppr": 0.0,
+        "w_ppr_fwd": 1.0,
+        "w_ppr_bwd": 1.0,
+        "w_coupling": 0.0,
+        "w_cocitation": 0.0,
+        "w_prior": 0.0,
     },
 }
 EMBED_VARIANTS = {"scincl": "scincl", "specter2": "specter2"}
 DEFAULT_VARIANTS = (
-    "coupling_only", "cocitation_only", "ppr_undirected", "ppr_directional",
-    "scincl", "specter2", "related_v2",
+    "coupling_only",
+    "cocitation_only",
+    "ppr_undirected",
+    "ppr_directional",
+    "scincl",
+    "specter2",
+    "related_v2",
 )
 
 
@@ -70,8 +83,7 @@ def build_loo_cases(g: CitationGraph, *, max_cases: int = 150, min_refs: int = 1
     for seed_doc in sorted(g.doc_to_oa):
         seed_oa = g.doc_to_oa[seed_doc]
         corpus_refs = sorted(
-            r for r in g.out_adj.get(seed_oa, ())
-            if r in g.oa_to_doc and g.oa_to_doc[r] != seed_doc
+            r for r in g.out_adj.get(seed_oa, ()) if r in g.oa_to_doc and g.oa_to_doc[r] != seed_doc
         )
         if len(corpus_refs) < min_refs:
             continue
@@ -83,7 +95,10 @@ def build_loo_cases(g: CitationGraph, *, max_cases: int = 150, min_refs: int = 1
 
 
 def _rank_graph(
-    g: CitationGraph, fold: LooFold, candidates: set[str], weights: dict[str, float],
+    g: CitationGraph,
+    fold: LooFold,
+    candidates: set[str],
+    weights: dict[str, float],
     embed_scores: dict[str, float] | None = None,
 ) -> list[dict[str, Any]]:
     """Rank with the held-out edge removed, then restored (leave-one-out)."""
@@ -92,8 +107,12 @@ def _rank_graph(
         w = dict(weights)
         w_embed = w.pop("w_embedding", 0.0)
         ranked = rank_related(
-            g, {fold.seed_oa}, candidates,
-            embed_scores=embed_scores, w_embedding=w_embed, **w,
+            g,
+            {fold.seed_oa},
+            candidates,
+            embed_scores=embed_scores,
+            w_embedding=w_embed,
+            **w,
         )
     finally:
         if existed:
@@ -107,7 +126,9 @@ def _rank_embedding(model: str, fold: LooFold, corpus_docs: list[str]) -> list[d
     return [{"doc_id": d} for d, _ in ranked]
 
 
-def _oa_embed_scores(g: CitationGraph, model: str, seed_doc: str, corpus_docs: list[str]) -> dict[str, float]:
+def _oa_embed_scores(
+    g: CitationGraph, model: str, seed_doc: str, corpus_docs: list[str]
+) -> dict[str, float]:
     by_doc = embedding_scores(model, [seed_doc], corpus_docs)
     return {g.doc_to_oa[d]: s for d, s in by_doc.items() if d in g.doc_to_oa}
 
@@ -138,11 +159,13 @@ def run_variant(
         metrics = case_metrics(results, relevant)
         case_rows.append({"id": f"{fold.seed_doc}->{fold.held_doc}", "category": None, **metrics})
         if metrics["hit_rate@10"] < 1.0:
-            failures.append({
-                "id": f"{fold.seed_doc}->{fold.held_doc}",
-                "relevant_doc_ids": [fold.held_doc],
-                "top_doc_ids": [r["doc_id"] for r in results[:5]],
-            })
+            failures.append(
+                {
+                    "id": f"{fold.seed_doc}->{fold.held_doc}",
+                    "relevant_doc_ids": [fold.held_doc],
+                    "top_doc_ids": [r["doc_id"] for r in results[:5]],
+                }
+            )
 
     agg = aggregate_metrics(case_rows) if case_rows else {}
     latencies.sort()
@@ -158,7 +181,10 @@ def run_variant(
 
 
 def run_related_eval(
-    *, variants: list[str] | None = None, max_cases: int = 150, min_refs: int = 1,
+    *,
+    variants: list[str] | None = None,
+    max_cases: int = 150,
+    min_refs: int = 1,
     embed_model: str = "scincl",
 ) -> dict[str, Any]:
     db = cs.connect()
@@ -180,14 +206,16 @@ def run_related_eval(
     results: list[dict[str, Any]] = []
     skipped: list[str] = []
     for variant in requested:
-        needs_model = EMBED_VARIANTS.get(variant) or (embed_model if variant == "related_v2" else None)
+        needs_model = EMBED_VARIANTS.get(variant) or (
+            embed_model if variant == "related_v2" else None
+        )
         if needs_model and not has_doc_vectors(needs_model):
             skipped.append(variant)
             continue
         results.append(run_variant(g, variant, folds, embed_model=embed_model))
 
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "eval": "leave_one_out_citation_prediction",
         "fold_count": len(folds),
         "corpus_docs": len(g.oa_to_doc),
@@ -222,7 +250,9 @@ def render_related_report(payload: dict[str, Any]) -> str:
             f"{r.get('hit_rate@10', 0):.3f} | {r.get('latency_ms_p95', 0):.0f} |\n"
         )
     best = rows[0]["variant"] if rows else "n/a"
-    lines.append(f"\n**Best by MRR:** `{best}`. Use this to set `cite related --signal` defaults.\n")
+    lines.append(
+        f"\n**Best by MRR:** `{best}`. Use this to set `cite related --signal` defaults.\n"
+    )
     return "".join(lines)
 
 
