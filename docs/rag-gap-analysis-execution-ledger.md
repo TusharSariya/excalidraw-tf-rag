@@ -67,4 +67,24 @@ Built `audit_fulltext_stratification(profile)` in `graph-layout-rag/.../eval/cor
 - **Reframing (important):** 57% of *documents* are abstract-only, yet they're only 8% of *retrievable text*. The metadata-only set is a **thin discoverable long tail**, not a bulk-quality problem. This lowers the expected ROI of blanket full-text acquisition (Phase 2A) and argues for **targeting acquisition at metadata-only docs that actually appear in gold/recall gaps**, not all 3,298.
 - **0 unkeyed** ⇒ manifest↔index keying is clean (distinct from the *citation-graph* keying gap at 2.5%, which is a different key space — OpenAlex/S2 IDs).
 
+## 2026-07-01 ~04:20 NDT — Phase 0.1 SHIPPED: `eval coverage` (recall-ceiling decomposition) + a plan-reshaping result
+
+Built `eval coverage` (`eval/coverage.py`, wired in `cli.py`, 2 hermetic unit tests, ruff clean). For every gold-relevant doc it reports the stratum (full_text / metadata_only / indexed_unkeyed / **not_indexed**) and computes the **recall ceiling** = fraction of relevant docs recoverable at all. No retrieval, no gateway — pure corpus/manifest read. Reuses `cases_for_track` + the `corpus_health` manifest seam.
+
+**Live result (`cuda-qwen0.6b-1024`):**
+| Track | cases | rel docs | full_text | metadata_only | not_indexed | **recall ceiling** |
+|---|---|---|---|---|---|---|
+| catalog | 49 | 176 | 68% | 27% | **8 (5%)** | **0.955** |
+| pdf-deep-read | 47 | 128 | 94% | — | **8 (6%)** | **0.938** |
+
+### This partially FALSIFIES the plan's Phase 2A ROI (important — the kind of thing "don't assume" is for)
+- The corpus already covers **~94–96%** of every gold-relevant doc. Only **8 relevant docs per track are missing from the index.** So **full-text acquisition (Phase 2A) can lift measured recall by at most ~4–6%**, and most of that headroom is *acquiring 8 specific missing docs*, not the 3,298 metadata-only stubs (those are already indexed on their abstracts, i.e. `metadata_only`, not `not_indexed`).
+- **Corollary:** the metadata-only 57% (Phase 0.2) is a *depth* limit (abstract vs full text for docs already present), not a *coverage* gap. Converting stubs→full-text helps ranking *precision* on those docs, but won't add new recall for the current gold set.
+- **Where the headroom actually is:** the gap between *actual* recall@k and the 0.955 ceiling is entirely **ranking-improvable**. And the one measured non-NULL ranking lever is the **4B embedder (Phase 1)**. So the evidence now points even harder at Phase 1 as top priority, and demotes Phase 2A for near-term benchmark movement.
+
+### Honest caveat (D6) — the 0.955 ceiling is an upper bound, likely inflated by gold-construction bias
+Gold relevant-doc sets were curated partly *from* the corpus, so "relevant docs are in-corpus" is close to tautological; the 8 not-indexed docs are the human-knowledge leak-in. Therefore:
+- The **true corpus-completeness** question ("what relevant literature are we missing entirely?") is **NOT** answered by gold recall ceiling. It needs **reference-coverage** (% of a paper's *cited* DOIs present in corpus), which is gold-independent and reads `citations.sqlite`. That's the honest version of Phase-0.1's "reference coverage" and is deferred to a `coverage --references` mode (needs the citation graph; overlaps Phase 3A keying).
+- Net: `eval coverage` correctly says *acquisition won't move the current benchmark*; it does **not** say *the corpus is complete*. To make acquisition measurable we must either **expand the gold set** to include currently-missing topics or **measure reference-coverage**. Logged as a required follow-up before investing in Phase 2A.
+
 <!-- New entries appended below, newest-last, always timestamped. -->
