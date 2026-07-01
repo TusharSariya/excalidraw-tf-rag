@@ -63,7 +63,7 @@ Built `audit_fulltext_stratification(profile)` in `graph-layout-rag/.../eval/cor
 
 **Validated on the live index** (`cuda-qwen0.6b-1024`, 41,083 chunks / 5,811 indexed docs):
 - **2,513 full-text / 3,298 metadata-only / 0 unkeyed docs → 57% metadata-only docs.** (Higher than the plan's 54% estimate; 5,811 indexed < 6,071 manifest ⇒ ~260 failed/unindexed.)
-- **But only 8% of *chunks* are metadata-only** (stubs ≈1 chunk each vs 7.1 mean for full-text). 
+- **But only 8% of *chunks* are metadata-only** (stubs ≈1 chunk each vs 7.1 mean for full-text).
 - **Reframing (important):** 57% of *documents* are abstract-only, yet they're only 8% of *retrievable text*. The metadata-only set is a **thin discoverable long tail**, not a bulk-quality problem. This lowers the expected ROI of blanket full-text acquisition (Phase 2A) and argues for **targeting acquisition at metadata-only docs that actually appear in gold/recall gaps**, not all 3,298.
 - **0 unkeyed** ⇒ manifest↔index keying is clean (distinct from the *citation-graph* keying gap at 2.5%, which is a different key space — OpenAlex/S2 IDs).
 
