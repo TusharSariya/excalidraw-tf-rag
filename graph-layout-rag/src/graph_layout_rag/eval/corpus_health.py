@@ -55,6 +55,17 @@ def _pdfs_on_disk() -> set[str]:
     return {p.stem for p in pdf_dir.glob("*.pdf")}
 
 
+def _manifest_by_id() -> dict[str, Any]:
+    """Manifest items keyed by id (``{doc_id: ManifestItem}``).
+
+    Isolated behind a module-level helper so tests can monkeypatch it without a
+    real manifest on disk, mirroring the ``_load_chunks``/``_pdfs_on_disk`` seams.
+    """
+    from graph_layout_rag.manifest import load_manifest, manifest_by_id
+
+    return manifest_by_id(load_manifest())
+
+
 def audit_chunk_distribution(profile: str, *, min_mean: float = 4.0) -> list[Finding]:
     rows = _load_chunks(profile)
     if not rows:
@@ -181,6 +192,74 @@ def audit_credentials() -> list[Finding]:
     ]
 
 
+def audit_fulltext_stratification(profile: str) -> list[Finding]:
+    """Split the indexed corpus into full-text vs metadata-only strata.
+
+    Retrieval quality is capped by how much of the corpus can only be matched on
+    its abstract: a ``metadata_only`` doc has no body text in the index, so no
+    ranker can lift it past that ceiling. This audit quantifies the ceiling from
+    the manifest ``status`` field (composition only — it runs no retrieval; the
+    nDCG-per-stratum split lives in ``eval recall``, which already loads the
+    index). See gold_validation.py:21,33 for the same status/localPath predicate.
+    """
+    rows = _load_chunks(profile)
+    if not rows:
+        return []  # audit_chunk_distribution already emits the no_index critical.
+    try:
+        by_id = _manifest_by_id()
+    except Exception as exc:  # noqa: BLE001 — manifest optional; degrade to info, don't crash the audit.
+        return [Finding("info", "no_manifest", f"Manifest unavailable for stratification: {exc}")]
+
+    def stratum(doc_id: str) -> str:
+        item = by_id.get(doc_id)
+        if item is None:
+            return "unkeyed"  # chunk doc_id not present in the manifest at all
+        if getattr(item, "status", None) == "ok" and getattr(item, "localPath", None):
+            return "full_text"
+        if getattr(item, "status", None) == "metadata_only":
+            return "metadata_only"
+        return getattr(item, "status", None) or "unknown"  # "failed" / ok-without-path
+
+    chunk_strata: collections.Counter[str] = collections.Counter(stratum(r["doc_id"]) for r in rows)
+    doc_strata: collections.Counter[str] = collections.Counter()
+    for doc_id in {r["doc_id"] for r in rows}:
+        doc_strata[stratum(doc_id)] += 1
+
+    n_docs = sum(doc_strata.values())
+    n_chunks = sum(chunk_strata.values())
+    meta_doc_frac = doc_strata["metadata_only"] / n_docs if n_docs else 0.0
+    meta_chunk_frac = chunk_strata["metadata_only"] / n_chunks if n_chunks else 0.0
+
+    findings: list[Finding] = [
+        Finding(
+            "info",
+            "fulltext_stratification",
+            f"Indexed docs: {doc_strata['full_text']} full-text / "
+            f"{doc_strata['metadata_only']} metadata-only / {doc_strata['unkeyed']} unkeyed "
+            f"({meta_doc_frac:.0%} metadata-only docs, {meta_chunk_frac:.0%} of chunks).",
+            detail={
+                "docs_by_stratum": dict(doc_strata),
+                "chunks_by_stratum": dict(chunk_strata),
+                "metadata_only_doc_fraction": round(meta_doc_frac, 3),
+                "metadata_only_chunk_fraction": round(meta_chunk_frac, 3),
+            },
+        )
+    ]
+    if meta_doc_frac >= 0.4:
+        findings.append(
+            Finding(
+                "warning",
+                "metadata_only_ceiling",
+                f"{meta_doc_frac:.0%} of indexed docs are metadata-only (abstract/title text "
+                "only) — a hard retrieval ceiling no ranker can breach for those docs.",
+                detail={"metadata_only_doc_fraction": round(meta_doc_frac, 3)},
+                remedy="Acquire full-text PDFs for metadata_only stubs with DOIs (Unpaywall / "
+                "OpenAlex OA-locations / CORE / venue-targeted Crossref), then re-ingest.",
+            )
+        )
+    return findings
+
+
 def audit_pool_holes(track: str = "catalog") -> list[Finding]:
     from graph_layout_rag.paths import DATA_DIR
 
@@ -207,6 +286,7 @@ def audit_pool_holes(track: str = "catalog") -> list[Finding]:
 def run_audit(profile: str, *, track: str = "catalog") -> dict[str, Any]:
     findings: list[Finding] = []
     findings += audit_chunk_distribution(profile)
+    findings += audit_fulltext_stratification(profile)
     findings += audit_extraction_fallback()
     findings += audit_credentials()
     findings += audit_pool_holes(track)
