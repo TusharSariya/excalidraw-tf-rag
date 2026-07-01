@@ -50,7 +50,7 @@ def _embed_one_batch(
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
+        with urllib.request.urlopen(req, timeout=180) as resp:
             data = json.loads(resp.read())
         return [item["embedding"] for item in data["data"]]
     except urllib.error.HTTPError as exc:

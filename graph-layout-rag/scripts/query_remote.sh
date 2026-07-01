@@ -6,6 +6,11 @@
 # so the NL/4B path runs entirely on the desktop and streams JSON/text back.
 # See docs/qwen-ladder-campaign-audit-log.md (M10-M16).
 #
+# The 4B embed is routed through the desktop gateway's VRAMCoordinator (see the
+# Dispatch block below), NOT loaded directly in this SSH process — a direct load
+# OOMs when the gateway already has models resident. Retrieval still runs against
+# the local 4B LanceDB; only the model load goes through the coordinator.
+#
 # Fails LOUD (never silently falls back to the 0.6B keyword path):
 #   - desktop unreachable                 → exit 3
 #   - 4B index not the validated state    → exit 4  (parity: chunks/model/dims)
@@ -138,6 +143,16 @@ export PATH="$HOME/.local/bin:$PATH"
 cd "$HOME/$ROOT/tools/graph-layout-rag"
 # shellcheck disable=SC1091
 source ../rag-common/scripts/gpu_env.sh 2>/dev/null || true
-export RAG_LOCAL_EMBED_DEVICE=cuda
+# Route the 4B embed through the gateway's VRAMCoordinator (LRU eviction) rather
+# than loading the model directly in this SSH process. A direct load OOMs when the
+# gateway already has models resident (4B needs 5,800 MB; under concurrent load
+# there is no headroom for a third process to load it). With RAG_GPU_GATEWAY_URL
+# set, embed.py routes model_id=cuda-qwen4b-1024 to DenseEmbed4B through the
+# coordinator instead (embed.py:84). Retrieval still runs here against the local
+# 4B LanceDB; only the model load moves under coordinator protection. We unset
+# GRAPH_RAG_GATEWAY_SEARCH so the query runs locally and does NOT re-delegate to
+# /v1/search (which would double-hop and skip the parity preflight above).
+unset GRAPH_RAG_GATEWAY_SEARCH
+export RAG_GPU_GATEWAY_URL="http://localhost:8765"
 uv run graph-layout-rag query --embed-profile "$PROFILE" --hybrid --sparse-weight "$SW" "$@"
 REMOTE

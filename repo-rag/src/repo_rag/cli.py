@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import time
 
@@ -114,6 +115,62 @@ def query_cmd(
     as_json: bool,
 ) -> None:
     """Hybrid semantic + BM25 search over the indexed repo."""
+    # Gateway delegation: when REPO_RAG_GATEWAY_SEARCH=1, run on desktop via HTTP.
+    # The gateway runs the full search (embed + LanceDB) and streams JSON back.
+    # No local index required on the Mac.
+    _gw_url = os.environ.get("RAG_GPU_GATEWAY_URL", "")
+    if os.environ.get("REPO_RAG_GATEWAY_SEARCH") and _gw_url:
+        import urllib.error
+        import urllib.request
+
+        _profile = embed_profile or "cuda-qwen0.6b-1024"
+        _flags: list[str] = []
+        if source_type:
+            _flags += ["--source-type", source_type]
+        if package:
+            _flags += ["--package", package]
+        if path_contains:
+            _flags += ["--path-contains", path_contains]
+        if rerank is True:
+            _flags.append("--rerank")
+        elif rerank is False:
+            _flags.append("--no-rerank")
+
+        _body = json.dumps({
+            "tool": "repo-rag",
+            "query": text,
+            "profile": _profile,
+            "top": top,
+            "flags": _flags,
+        }).encode()
+        _req = urllib.request.Request(
+            f"{_gw_url.rstrip('/')}/v1/search",
+            data=_body,
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(_req, timeout=120) as _resp:
+                _data = json.loads(_resp.read())
+        except urllib.error.URLError as _exc:
+            click.echo(f"Gateway search failed: {_exc}", err=True)
+            sys.exit(1)
+
+        _results = _data.get("results", [])
+        if as_json:
+            click.echo(json.dumps(_data, indent=2))
+            return
+        if not _results:
+            click.echo("No results.")
+            sys.exit(1)
+        for _i, _r in enumerate(_results, 1):
+            _line = f":{_r['start_line']}" if _r.get("start_line") else ""
+            click.echo(f"{_i}. [{_r['score']}] {_r['file_path']}{_line}")
+            if _r.get("symbol"):
+                click.echo(f"   {_r['symbol']}")
+            click.echo(f"   {_r['excerpt'][:200]}...")
+            click.echo()
+        return
+
     log = get_logger("query")
     started = time.monotonic()
     log.info(

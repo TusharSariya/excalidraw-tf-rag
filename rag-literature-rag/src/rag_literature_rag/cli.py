@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 
 import click
@@ -440,6 +441,78 @@ def query_cmd(
             err=True,
         )
         sys.exit(1)
+
+    # Gateway delegation: when RAG_LIT_GATEWAY_SEARCH=1, run on desktop via HTTP.
+    # The gateway runs the full search (embed + LanceDB) and streams JSON back.
+    # No local index required on the Mac.
+    _gw_url = os.environ.get("RAG_GPU_GATEWAY_URL", "")
+    if os.environ.get("RAG_LIT_GATEWAY_SEARCH") and _gw_url:
+        import urllib.error
+        import urllib.request
+
+        _profile = embed_profile or "cuda-qwen0.6b-1024"
+        _flags: list[str] = []
+        if tag:
+            _flags += ["--tag", tag]
+        if category:
+            _flags += ["--category", category]
+        if pdf_only:
+            _flags.append("--pdf-only")
+        if source:
+            _flags += ["--source", source]
+        if year_min is not None:
+            _flags += ["--year-min", str(year_min)]
+        if rerank is True:
+            _flags.append("--rerank")
+        elif rerank is False:
+            _flags.append("--no-rerank")
+        if not hybrid:
+            _flags.append("--no-hybrid")
+        if small_to_big:
+            _flags.append("--small-to-big")
+        if raptor:
+            _flags.append("--raptor")
+            if raptor_mode != "hybrid":
+                _flags += ["--raptor-mode", raptor_mode]
+        if expand != "off":
+            _flags += ["--expand", expand]
+        if max_per_doc != 2:
+            _flags += ["--max-per-doc", str(max_per_doc)]
+
+        _body = json.dumps({
+            "tool": "rag-literature-rag",
+            "query": text,
+            "profile": _profile,
+            "top": top,
+            "flags": _flags,
+        }).encode()
+        _req = urllib.request.Request(
+            f"{_gw_url.rstrip('/')}/v1/search",
+            data=_body,
+            headers={"Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(_req, timeout=120) as _resp:
+                _data = json.loads(_resp.read())
+        except urllib.error.URLError as _exc:
+            click.echo(f"Gateway search failed: {_exc}", err=True)
+            sys.exit(1)
+
+        _results = _data.get("results", [])
+        if as_json:
+            click.echo(json.dumps(_data, indent=2))
+            return
+        if not _results:
+            click.echo("No results.")
+            sys.exit(1)
+        for _i, _r in enumerate(_results, 1):
+            _page = f" p.{_r['page']}" if _r.get("page") else ""
+            click.echo(f"{_i}. [{_r['score']}] {_r['title']}{_page}")
+            click.echo(f"   {_r['source_url']}")
+            click.echo(f"   {_r['excerpt'][:200]}...")
+            click.echo()
+        return
+
     try:
         results = search(
             text,
