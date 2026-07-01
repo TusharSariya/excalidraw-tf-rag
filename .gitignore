@@ -1,0 +1,12 @@
+# Repo-wide safety nets. Each package also has its own .gitignore for the big
+# stuff (data/, indexes, .env); this catches the cross-cutting transient junk
+# so a stray log or venv can never show up as "untracked" noise or get staged.
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.venv/
+# Transient debug/scratch logs anywhere in the tree (package data/*.log rules
+# only cover data/; these appear at package roots too, e.g. err.log, rem.log).
+*.log

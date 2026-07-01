@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref (mirrors the parent monorepo's ci.yml).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---- Lint & format: standalone ruff, no package install needed ----------
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: ruff check
+        run: uvx ruff check --output-format=github .
+      - name: ruff format --check
+        run: uvx ruff format --check .
+
+  # ---- Lockfile consistency: pyproject <-> uv.lock cannot drift -----------
+  # gpu-gateway is excluded: it ships no uv.lock (torch is installed out-of-band).
+  lock-check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [rag-common, repo-rag, graph-layout-rag, rag-literature-rag]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: uv lock --check
+        working-directory: ${{ matrix.package }}
+        run: uv lock --check
+
+  # ---- Unit tests per package (hosted runner: no GPU, no keys, no network) -
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # gpu-gateway: the scheduler suite is pure stdlib — no ray/torch sync,
+          # just pytest, exactly as gpu-gateway/pyproject.toml documents.
+          - package: gpu-gateway
+            run: >
+              uv run --no-project --with pytest --with pytest-asyncio
+              pytest tests/test_scheduler.py -q
+          # RAG packages: base sync (no GPU extras) then the offline unit subset.
+          # --disable-socket makes any test that reaches the network fail loudly
+          # (it should be marked @pytest.mark.integration instead).
+          - package: rag-common
+            run: >
+              uv sync --frozen &&
+              uv run --with pytest-socket
+              pytest -m "not integration" --disable-socket --allow-unix-socket -q
+          - package: repo-rag
+            run: >
+              uv sync --frozen &&
+              uv run --with pytest-socket
+              pytest -m "not integration" --disable-socket --allow-unix-socket -q
+          - package: graph-layout-rag
+            run: >
+              uv sync --frozen &&
+              uv run --with pytest-socket
+              pytest -m "not integration" --disable-socket --allow-unix-socket -q
+          - package: rag-literature-rag
+            run: >
+              uv sync --frozen &&
+              uv run --with pytest-socket
+              pytest -m "not integration" --disable-socket --allow-unix-socket -q
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.11"
+      - name: ${{ matrix.package }} tests
+        working-directory: ${{ matrix.package }}
+        run: ${{ matrix.run }}
