@@ -8,12 +8,13 @@ import signal
 import sys
 import threading
 import time
+from collections.abc import Iterable, Iterator
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from dataclasses import dataclass
-from typing import Iterable, Iterator, Literal
+from typing import Literal
 
 import click
-
+from rag_common.config import local_embed_quant, mlx_q4_model_id, use_mlx_q4_embed
 from rag_common.process_pool import shutdown_process_pool
 
 from graph_layout_rag.catalog.classify import classify_item
@@ -25,13 +26,13 @@ from graph_layout_rag.ingest.chunk import (
     chunking_fingerprint,
 )
 from graph_layout_rag.ingest.embed import EmbedStats, prepare_embed_config, resolve_workers
-from rag_common.config import local_embed_quant, mlx_q4_model_id, use_mlx_q4_embed
 from graph_layout_rag.ingest.extract import (
     default_pdf_backend,
     extract_metadata_text,
     extract_pdf_pages,
 )
 from graph_layout_rag.ingest.index import (
+    IndexPhaseStats,
     chunk_count,
     chunking_fingerprint_mismatch,
     clear_doc_entries,
@@ -42,11 +43,8 @@ from graph_layout_rag.ingest.index import (
     save_ingest_state,
     update_ingest_metadata,
     upsert_chunks,
-    IndexPhaseStats,
 )
 from graph_layout_rag.ingest.log import setup_ingest_logging
-from graph_layout_rag.manifest import ManifestItem, load_manifest
-from graph_layout_rag.paths import PKG_ROOT, profile_index_paths
 from graph_layout_rag.ingest.status import (
     format_duration,
     ingest_status_cmd,
@@ -57,6 +55,8 @@ from graph_layout_rag.ingest.status import (
     refresh_progress_estimate,
     write_status,
 )
+from graph_layout_rag.manifest import ManifestItem, load_manifest
+from graph_layout_rag.paths import PKG_ROOT, profile_index_paths
 
 
 def _ingest_doc_batch() -> int:
@@ -196,7 +196,7 @@ def _classify_ingest_item(
     *,
     force: bool,
     state: dict,
-    seen_sha256: "set[str] | None" = None,
+    seen_sha256: set[str] | None = None,
 ) -> ItemDecision:
     """Classify manifest work on the parent process with an explicit skip reason."""
     pipeline_cats, _ = classify_item(item)
@@ -261,7 +261,8 @@ def _apply_filter_fields(chunks: list, item) -> list:
 
 def _extract_pdf_task(task: ExtractionTask) -> ExtractionOutcome:
     """Extract and chunk one PDF. This top-level worker is process-pool picklable."""
-    from graph_layout_rag.ingest.extract_cache import get as cache_get, put as cache_put
+    from graph_layout_rag.ingest.extract_cache import get as cache_get
+    from graph_layout_rag.ingest.extract_cache import put as cache_put
 
     started = time.monotonic()
     aliases = task.aliases or []
@@ -356,9 +357,15 @@ def _iter_extraction_outcomes(
         for raw_document in items:
             if stop_event is not None and stop_event.is_set():
                 return
-            document = raw_document if isinstance(raw_document, IngestDocument) else IngestDocument(raw_document)
+            document = (
+                raw_document
+                if isinstance(raw_document, IngestDocument)
+                else IngestDocument(raw_document)
+            )
             item = document.item
-            decision = _classify_ingest_item(item, force=force, state=state, seen_sha256=seen_sha256)
+            decision = _classify_ingest_item(
+                item, force=force, state=state, seen_sha256=seen_sha256
+            )
             if decision.kind == "skip":
                 yield ExtractionOutcome(item, [], reason=decision.reason)
             elif decision.kind == "metadata":
@@ -392,9 +399,15 @@ def _iter_extraction_outcomes(
         for raw_document in items:
             if stop_event is not None and stop_event.is_set():
                 break
-            document = raw_document if isinstance(raw_document, IngestDocument) else IngestDocument(raw_document)
+            document = (
+                raw_document
+                if isinstance(raw_document, IngestDocument)
+                else IngestDocument(raw_document)
+            )
             item = document.item
-            decision = _classify_ingest_item(item, force=force, state=state, seen_sha256=seen_sha256)
+            decision = _classify_ingest_item(
+                item, force=force, state=state, seen_sha256=seen_sha256
+            )
             if decision.kind == "skip":
                 yield ExtractionOutcome(item, [], reason=decision.reason)
             elif decision.kind == "metadata":
@@ -462,9 +475,7 @@ def _iter_queued_extraction_outcomes(
                 if blocked_started is not None:
                     telemetry.backpressure_seconds += time.monotonic() - blocked_started
                 telemetry.backpressure_blocked = False
-                telemetry.max_queue_depth = max(
-                    telemetry.max_queue_depth, outcome_queue.qsize()
-                )
+                telemetry.max_queue_depth = max(telemetry.max_queue_depth, outcome_queue.qsize())
                 return True
             except queue.Full:
                 if blocked_started is None:
@@ -544,7 +555,6 @@ def _iter_queued_extraction_outcomes(
             producer.join(timeout=5)
             if producer.is_alive():
                 log.warning("extraction producer still alive after forced pool shutdown")
-
 
 
 def _mark_item_ingested(item: ManifestItem, state: dict) -> None:
@@ -636,15 +646,18 @@ def _execute_ingest(
         force = True
 
     if chunking_fingerprint_mismatch(state, fingerprint) and not rebuild:
-        log.warning("chunking fingerprint changed for profile %s; auto-enabling rebuild", index_slug)
-        click.echo(f"Chunking fingerprint changed for profile {index_slug!r}; auto-enabling --rebuild.", err=True)
+        log.warning(
+            "chunking fingerprint changed for profile %s; auto-enabling rebuild", index_slug
+        )
+        click.echo(
+            f"Chunking fingerprint changed for profile {index_slug!r}; auto-enabling --rebuild.",
+            err=True,
+        )
         clear_doc_entries(state)
         rebuild = True
         force = True
 
-    default_workers = (
-        "48" if cfg.backend == "gemini" else ("2" if cfg.backend == "openai" else "4")
-    )
+    default_workers = "48" if cfg.backend == "gemini" else ("2" if cfg.backend == "openai" else "4")
     workers = resolve_workers(
         int(os.getenv("GRAPH_RAG_WORKERS", default_workers)),
         prefix="GRAPH_RAG_",
@@ -760,9 +773,7 @@ def _execute_ingest(
         run_status["indexing_seconds"] = round(
             index_phase_stats.lancedb_seconds + index_phase_stats.bm25_seconds, 2
         )
-        run_status["total_throughput_documents_per_second"] = run_status[
-            "documents_per_second"
-        ]
+        run_status["total_throughput_documents_per_second"] = run_status["documents_per_second"]
         if pipeline_telemetry.extraction_seconds:
             run_status["extraction_throughput_documents_per_second"] = round(
                 pipeline_telemetry.documents_extracted / pipeline_telemetry.extraction_seconds,
@@ -832,9 +843,7 @@ def _execute_ingest(
             and pipeline_telemetry.documents_queued <= scanned
             and not pipeline_telemetry.producer_done
         ):
-            log.warning(
-                "Gemini embedding workers may be starved by extraction: queue depth=0"
-            )
+            log.warning("Gemini embedding workers may be starved by extraction: queue depth=0")
         report_progress(phase="embedding_and_indexing", force_log=True)
         log.info(
             "batch start documents=%d chunks=%d indexed_documents=%d chunks_written=%d",
@@ -863,7 +872,9 @@ def _execute_ingest(
             run_status,
             chunks_written=len(batch_chunks),
             checkpoint_count=1,
-            estimated_embedding_tokens=max(0, stats.tokens - int(run_status["estimated_embedding_tokens"])),
+            estimated_embedding_tokens=max(
+                0, stats.tokens - int(run_status["estimated_embedding_tokens"])
+            ),
             documents_indexed=docs_in_batch,
             documents_checkpointed=docs_in_batch,
         )
@@ -1069,7 +1080,9 @@ def _execute_ingest(
 
 
 def ingest_options(f):
-    f = click.option("--force", is_flag=True, help="Re-ingest all documents regardless of sha256.")(f)
+    f = click.option("--force", is_flag=True, help="Re-ingest all documents regardless of sha256.")(
+        f
+    )
     f = click.option("--rebuild", is_flag=True, help="Drop and recreate the LanceDB table.")(f)
     f = click.option(
         "--embed-profile",
@@ -1123,7 +1136,9 @@ def ingest_group(
                 if isinstance(exc, KeyboardInterrupt) and status.get("phase") == "paused":
                     status["status"] = "paused"
                 else:
-                    status["status"] = "interrupted" if isinstance(exc, KeyboardInterrupt) else "failed"
+                    status["status"] = (
+                        "interrupted" if isinstance(exc, KeyboardInterrupt) else "failed"
+                    )
                 status["finished_at"] = now_iso()
                 write_status(status, embed_profile)
             raise

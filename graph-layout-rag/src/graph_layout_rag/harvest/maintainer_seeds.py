@@ -85,7 +85,14 @@ MAINTAINER_METADATA: list[dict] = [
         "url": "https://doi.org/10.1007/978-3-540-31843-9_25",
         "doi": "10.1007/978-3-540-31843-9_25",
         "source": "springer",
-        "tags": ["stress", "majorization", "force-directed", "neato", "graphviz", "maintainer-seed"],
+        "tags": [
+            "stress",
+            "majorization",
+            "force-directed",
+            "neato",
+            "graphviz",
+            "maintainer-seed",
+        ],
         "abstract": (
             "Reformulates graph layout as a stress minimization problem and solves it via "
             "stress majorization, converging faster than gradient descent. Used in Graphviz "
@@ -184,7 +191,9 @@ MAINTAINER_METADATA: list[dict] = [
 ]
 
 
-def harvest_maintainer_seeds(*, dry_run: bool = False, workers: int | None = None) -> list[ManifestItem]:
+def harvest_maintainer_seeds(
+    *, dry_run: bool = False, workers: int | None = None
+) -> list[ManifestItem]:
     """Return curated seeds from maintainer/founder social mining."""
     results: list[ManifestItem] = []
 

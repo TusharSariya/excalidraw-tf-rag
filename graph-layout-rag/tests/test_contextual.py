@@ -52,7 +52,9 @@ def test_contextual_cache_persists_success(tmp_path, monkeypatch):
 def test_contextual_cache_key_scopes_backend_and_model():
     chunk = _chunk()
 
-    assert contextual._cache_key(chunk, backend="ollama", model="gemma4:e4b") != contextual._cache_key(
+    assert contextual._cache_key(
+        chunk, backend="ollama", model="gemma4:e4b"
+    ) != contextual._cache_key(
         chunk,
         backend="gemini",
         model="gemini-2.5-flash",

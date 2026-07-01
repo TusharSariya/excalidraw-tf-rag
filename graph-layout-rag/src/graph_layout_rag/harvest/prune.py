@@ -117,7 +117,9 @@ def signal_stats(items: list[ManifestItem]) -> dict[str, object]:
     """Summary: counts, OK PDFs, strong-signal ratio, per-source."""
     ok = [i for i in items if i.status == "ok"]
     strong = sum(
-        1 for i in ok if is_layout_relevant(i.title, i.abstract, strict=True) or i.source in CURATED_SOURCES
+        1
+        for i in ok
+        if is_layout_relevant(i.title, i.abstract, strict=True) or i.source in CURATED_SOURCES
     )
     by_source: Counter[str] = Counter(i.source for i in items)
     return {

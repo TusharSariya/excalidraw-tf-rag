@@ -61,9 +61,7 @@ def test_harvest_s2orc_shape_and_gating(monkeypatch):
         return RequestOutcome(OutcomeKind.SUCCESS, data={"data": []}, status_code=200)
 
     monkeypatch.setattr(s2orc.SEMANTIC_SCHOLAR, "request", fake_request)
-    monkeypatch.setattr(
-        s2orc, "download_to_file", lambda *a, **k: {"ok": False, "sha256": None}
-    )
+    monkeypatch.setattr(s2orc, "download_to_file", lambda *a, **k: {"ok": False, "sha256": None})
 
     items = harvest_s2orc(max_works=50, workers=1)
 
@@ -80,14 +78,14 @@ def test_harvest_s2orc_respects_existing_ids(monkeypatch):
     def fake_request(method, url, **kwargs):
         if "token" not in kwargs["params"]:
             return RequestOutcome(
-                OutcomeKind.SUCCESS, data={"data": [_relevant_paper()], "token": None}, status_code=200
+                OutcomeKind.SUCCESS,
+                data={"data": [_relevant_paper()], "token": None},
+                status_code=200,
             )
         return RequestOutcome(OutcomeKind.SUCCESS, data={"data": []}, status_code=200)
 
     monkeypatch.setattr(s2orc.SEMANTIC_SCHOLAR, "request", fake_request)
-    monkeypatch.setattr(
-        s2orc, "download_to_file", lambda *a, **k: {"ok": False, "sha256": None}
-    )
+    monkeypatch.setattr(s2orc, "download_to_file", lambda *a, **k: {"ok": False, "sha256": None})
 
     from rag_literature_rag.manifest import slug_id
 
@@ -103,7 +101,9 @@ def test_harvest_s2orc_download_ok(monkeypatch, tmp_path):
     def fake_request(method, url, **kwargs):
         if "token" not in kwargs["params"]:
             return RequestOutcome(
-                OutcomeKind.SUCCESS, data={"data": [_relevant_paper()], "token": None}, status_code=200
+                OutcomeKind.SUCCESS,
+                data={"data": [_relevant_paper()], "token": None},
+                status_code=200,
             )
         return RequestOutcome(OutcomeKind.SUCCESS, data={"data": []}, status_code=200)
 

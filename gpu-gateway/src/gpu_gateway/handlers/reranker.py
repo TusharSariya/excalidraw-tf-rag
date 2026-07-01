@@ -31,6 +31,7 @@ class RerankerDeployment(_EvictableModel):
 
     def _load_from_disk(self) -> None:
         from sentence_transformers import CrossEncoder
+
         log.info("lazy-loading reranker %s", self._model_path)
         self._model = CrossEncoder(self._model_path, device="cuda")
         log.info("loaded %s", self._model_path)

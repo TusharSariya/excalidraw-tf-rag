@@ -18,7 +18,10 @@ def _relevant_item():
         "metadata": [
             {"key": "dc.contributor.author", "value": "Ada Lovelace"},
             {"key": "dc.date.issued", "value": "2024-03-01"},
-            {"key": "dc.description.abstract", "value": "A book on retrieval augmented generation."},
+            {
+                "key": "dc.description.abstract",
+                "value": "A book on retrieval augmented generation.",
+            },
             {"key": "dc.identifier", "value": "10.1/doab-rag"},
         ],
         "bitstreams": [
@@ -40,7 +43,10 @@ def _offtopic_item():
         "metadata": [
             {"key": "dc.contributor.author", "value": "Someone"},
             {"key": "dc.date.issued", "value": "2019"},
-            {"key": "dc.description.abstract", "value": "Drilling operations and reservoir simulation."},
+            {
+                "key": "dc.description.abstract",
+                "value": "Drilling operations and reservoir simulation.",
+            },
         ],
         "bitstreams": [
             {
@@ -82,7 +88,9 @@ def test_bitstream_prefers_oapen_download_url():
                 "bundleName": "ORIGINAL",
                 "mimeType": "application/pdf",
                 "retrieveLink": "/x",
-                "metadata": [{"key": "oapen.identifier.downloadUrl", "value": "https://oapen/x.pdf"}],
+                "metadata": [
+                    {"key": "oapen.identifier.downloadUrl", "value": "https://oapen/x.pdf"}
+                ],
             }
         ]
     }

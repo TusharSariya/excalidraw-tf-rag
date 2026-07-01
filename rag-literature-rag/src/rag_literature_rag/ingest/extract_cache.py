@@ -13,6 +13,7 @@ Caches live at data/extract_cache/ (one file per unique PDF content+backend).
 Files are written atomically; concurrent writers for the same key are safe —
 last writer wins, and all produce identical content for the same key.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -32,6 +33,7 @@ _CACHE_VERSION = 1
 _PAGE_CACHE_VERSION = 1
 _CACHE_DIR = PKG_ROOT / "data" / "extract_cache"
 _PAGE_CACHE_DIR = _CACHE_DIR / "pages"
+
 
 def _cache_key(sha256: str, backend: str, chunk_profile: str | None = None) -> str:
     fingerprint = json.dumps(
@@ -175,9 +177,7 @@ def get_pages(
     """Return cached extracted pages or None on miss."""
     if not sha256:
         return None
-    path = _page_cache_path(
-        _page_cache_key(sha256, backend, clean=clean, options=options)
-    )
+    path = _page_cache_path(_page_cache_key(sha256, backend, clean=clean, options=options))
     if not path.exists():
         return None
     try:
@@ -203,9 +203,7 @@ def put_pages(
     """Write extracted pages to cache. No-op for empty results."""
     if not sha256 or not pages:
         return
-    path = _page_cache_path(
-        _page_cache_key(sha256, backend, clean=clean, options=options)
-    )
+    path = _page_cache_path(_page_cache_key(sha256, backend, clean=clean, options=options))
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(
         {
@@ -261,10 +259,11 @@ def invalidate(
     if not sha256:
         return {"removed": 0, "paths": removed}
 
-    page_path = _page_cache_path(
-        _page_cache_key(sha256, backend, clean=clean, options=options)
-    )
-    for path in [page_path, *[_cache_path(_cache_key(sha256, backend, profile)) for profile in chunk_profiles]]:
+    page_path = _page_cache_path(_page_cache_key(sha256, backend, clean=clean, options=options))
+    for path in [
+        page_path,
+        *[_cache_path(_cache_key(sha256, backend, profile)) for profile in chunk_profiles],
+    ]:
         try:
             if path.exists():
                 path.unlink()

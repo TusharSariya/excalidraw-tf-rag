@@ -7,7 +7,9 @@ from rag_literature_rag.manifest import Manifest, ManifestItem
 from rag_literature_rag.pdf_text import PdfExtractResult
 
 
-def _item(doc_id: str, *, local_path: str | None = "data/raw/pdf/doc.pdf", status: str = "ok") -> ManifestItem:
+def _item(
+    doc_id: str, *, local_path: str | None = "data/raw/pdf/doc.pdf", status: str = "ok"
+) -> ManifestItem:
     return ManifestItem(
         id=doc_id,
         title=f"Title {doc_id}",
@@ -61,16 +63,38 @@ def test_enrich_rows_classifies_existing_missing_and_metadata(tmp_path: Path, mo
         fr,
         "reproduce_extractors",
         lambda item, include_gemini=False: [
-            fr.BackendReproduction(backend="pymupdf", available=True, pages=1, nonempty_pages=1, text_chars=10)
+            fr.BackendReproduction(
+                backend="pymupdf", available=True, pages=1, nonempty_pages=1, text_chars=10
+            )
         ],
     )
 
     rows = fr.enrich_rows(
         [
-            {"doc_id": "existing", "fallback_reason": "empty_pdf_metadata_fallback", "qrels_by_track": {}, "qrel_placements": 0},
-            {"doc_id": "missing-path", "fallback_reason": "empty_pdf_metadata_fallback", "qrels_by_track": {}, "qrel_placements": 0},
-            {"doc_id": "missing-file", "fallback_reason": "empty_pdf_metadata_fallback", "qrels_by_track": {}, "qrel_placements": 0},
-            {"doc_id": "metadata", "fallback_reason": "empty_pdf_metadata_fallback", "qrels_by_track": {}, "qrel_placements": 0},
+            {
+                "doc_id": "existing",
+                "fallback_reason": "empty_pdf_metadata_fallback",
+                "qrels_by_track": {},
+                "qrel_placements": 0,
+            },
+            {
+                "doc_id": "missing-path",
+                "fallback_reason": "empty_pdf_metadata_fallback",
+                "qrels_by_track": {},
+                "qrel_placements": 0,
+            },
+            {
+                "doc_id": "missing-file",
+                "fallback_reason": "empty_pdf_metadata_fallback",
+                "qrels_by_track": {},
+                "qrel_placements": 0,
+            },
+            {
+                "doc_id": "metadata",
+                "fallback_reason": "empty_pdf_metadata_fallback",
+                "qrels_by_track": {},
+                "qrel_placements": 0,
+            },
         ]
     )
 

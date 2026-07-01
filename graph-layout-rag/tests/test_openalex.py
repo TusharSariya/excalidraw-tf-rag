@@ -13,12 +13,14 @@ def test_search_openalex_paginates_with_cursor():
     }
 
     calls = []
+
     def fake_request(method, url, **kwargs):
         calls.append(kwargs)
         payload = page1 if len(calls) == 1 else page2
         return RequestOutcome(OutcomeKind.SUCCESS, data=payload, status_code=200)
 
     from graph_layout_rag.harvest import openalex
+
     original = openalex.OPENALEX.request_openalex
     openalex.OPENALEX.request_openalex = fake_request
     try:

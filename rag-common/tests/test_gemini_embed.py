@@ -1,7 +1,6 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
-
 from rag_common.config import gemini_config
 from rag_common.gemini_embed import (
     GeminiEmbedError,
@@ -36,8 +35,7 @@ def test_missing_model_is_fatal_configuration_error():
 def test_format_gemini2_text():
     assert format_gemini2_text("hello", mode="query") == "task: code retrieval | query: hello"
     assert (
-        format_gemini2_text("body", mode="document", title="Paper")
-        == "title: Paper | text: body"
+        format_gemini2_text("body", mode="document", title="Paper") == "title: Paper | text: body"
     )
 
 
@@ -245,9 +243,7 @@ def test_auth_error_raises_fatal(mock_client_fn, mock_types):
 @patch("rag_common.gemini_embed.MAX_RATE_LIMIT_RETRIES", 2)
 @patch("rag_common.gemini_embed.genai_types")
 @patch("rag_common.gemini_embed._client")
-def test_rate_limit_exhaustion_raises_embed_error_not_fatal(
-    mock_client_fn, mock_types, mock_sleep
-):
+def test_rate_limit_exhaustion_raises_embed_error_not_fatal(mock_client_fn, mock_types, mock_sleep):
     mock_types.EmbedContentConfig = MagicMock()
     mock_client = MagicMock()
     mock_client_fn.return_value = mock_client

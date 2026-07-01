@@ -14,6 +14,7 @@ This re-tests the prior NULL prefix-embedding results (section-v1, contextual-v1
 gate-FAILED on this BM25-dominant corpus) with a *document-level summary* prefix instead
 of a section path or an LLM context line.
 """
+
 from __future__ import annotations
 
 import logging
@@ -56,7 +57,9 @@ def augment_texts_for_tldr(chunks: list[TextChunk], texts: list[str]) -> list[st
     """
     tldrs = _tldr_by_doc({c.doc_id for c in chunks})
     if not tldrs:
-        log.warning("tldr augmentation: no TLDRs found for %d chunk(s); texts unchanged", len(chunks))
+        log.warning(
+            "tldr augmentation: no TLDRs found for %d chunk(s); texts unchanged", len(chunks)
+        )
         return texts
     augmented: list[str] = []
     hits = 0
@@ -69,6 +72,8 @@ def augment_texts_for_tldr(chunks: list[TextChunk], texts: list[str]) -> list[st
             augmented.append(text)
     log.info(
         "tldr augmentation: prefixed %d/%d chunk(s) across %d doc(s) with TLDRs",
-        hits, len(chunks), len(tldrs),
+        hits,
+        len(chunks),
+        len(tldrs),
     )
     return augmented

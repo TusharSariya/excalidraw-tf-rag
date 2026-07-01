@@ -3,14 +3,14 @@ from __future__ import annotations
 import json
 import signal
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable
+from typing import Any
 
 import click
 
 from graph_layout_rag.harvest.arxiv import harvest_arxiv
 from graph_layout_rag.harvest.arxiv_bulk import harvest_arxiv_category
-from graph_layout_rag.harvest.citations import harvest_forward_citations
 from graph_layout_rag.harvest.bibliography import (
     download_bibliography_pdfs,
     filter_relevant_dois_resumable,
@@ -28,16 +28,24 @@ from graph_layout_rag.harvest.checkpoint import (
     load_checkpoint,
     save_checkpoint,
 )
+from graph_layout_rag.harvest.citations import harvest_forward_citations
 from graph_layout_rag.harvest.crossref import harvest_crossref
 from graph_layout_rag.harvest.curated import harvest_curated
-from graph_layout_rag.harvest.deferred_retry import run_deferred_retries
 from graph_layout_rag.harvest.dblp import harvest_dblp
+from graph_layout_rag.harvest.deferred_retry import run_deferred_retries
+from graph_layout_rag.harvest.download import set_download_limit
 from graph_layout_rag.harvest.elk_references import harvest_elk_references
 from graph_layout_rag.harvest.graphviz_theory import harvest_graphviz_theory
-from graph_layout_rag.harvest.maintainer_seeds import harvest_maintainer_seeds
 from graph_layout_rag.harvest.handbook import harvest_handbook
-from graph_layout_rag.harvest.ledger import init_db, query_attempts, set_harvest_run, set_harvest_stage, summary
+from graph_layout_rag.harvest.ledger import (
+    init_db,
+    query_attempts,
+    set_harvest_run,
+    set_harvest_stage,
+    summary,
+)
 from graph_layout_rag.harvest.log import setup_harvest_logging
+from graph_layout_rag.harvest.maintainer_seeds import harvest_maintainer_seeds
 from graph_layout_rag.harvest.openalex import harvest_openalex
 from graph_layout_rag.harvest.parallel import (
     DEFAULT_WORKERS,
@@ -46,7 +54,6 @@ from graph_layout_rag.harvest.parallel import (
     request_stop,
     set_workers,
 )
-from graph_layout_rag.harvest.download import set_download_limit
 from graph_layout_rag.harvest.providers import log_provider_summaries
 from graph_layout_rag.harvest.retry import retry_unresolved_multi_pass
 from graph_layout_rag.harvest.semantic_scholar import harvest_semantic_scholar
@@ -89,7 +96,9 @@ def _save_progress(
         "ok": ok,
         "metadata_only": meta,
         "failed": failed,
-        "discovery_pass": discovery_pass if discovery_pass is not None else prior.get("discovery_pass", 1),
+        "discovery_pass": discovery_pass
+        if discovery_pass is not None
+        else prior.get("discovery_pass", 1),
         "bib_pass": bib_pass if bib_pass is not None else prior.get("bib_pass", 1),
     }
     if bibliography is not None:
@@ -121,8 +130,12 @@ def _existing_ids(manifest) -> set[str]:
     return {i.id for i in manifest.items}
 
 
-def _run_early_stages(manifest, log, *, kw, skip_topic_seeds: bool, skip_elk_bibliography: bool, dry_run: bool) -> None:
-    _run_stage("Graphviz theory PDFs", log, lambda: _merge_items(manifest, harvest_graphviz_theory(**kw)))
+def _run_early_stages(
+    manifest, log, *, kw, skip_topic_seeds: bool, skip_elk_bibliography: bool, dry_run: bool
+) -> None:
+    _run_stage(
+        "Graphviz theory PDFs", log, lambda: _merge_items(manifest, harvest_graphviz_theory(**kw))
+    )
     if not dry_run:
         _save_progress(manifest, "graphviz", log)
 
@@ -133,6 +146,7 @@ def _run_early_stages(manifest, log, *, kw, skip_topic_seeds: bool, skip_elk_bib
     _merge_items(manifest, book_metadata_stubs())
 
     if not skip_topic_seeds:
+
         def _harvest_topic_seeds() -> None:
             def _on_doi_batch(items) -> None:
                 _merge_items(manifest, items)
@@ -202,7 +216,12 @@ def _run_concurrent_discovery(
         except Exception as exc:  # match _run_stage: log and continue
             log.exception("discovery source failed: %s — %s", label, exc)
             return []
-        log.info("=== discovery source done: %s (%.1fs, %d items) ===", label, time.monotonic() - t0, len(items))
+        log.info(
+            "=== discovery source done: %s (%.1fs, %d items) ===",
+            label,
+            time.monotonic() - t0,
+            len(items),
+        )
         return items
 
     click.echo(f"Discovering from {len(sources)} sources concurrently...")
@@ -254,9 +273,7 @@ def _run_discovery_pass(
             (
                 "crossref",
                 f"Crossref venues (JGAA/CGTA/GD, max {max_crossref})",
-                lambda: harvest_crossref(
-                    max_works=max_crossref, existing_ids=existing_ids, **kw
-                ),
+                lambda: harvest_crossref(max_works=max_crossref, existing_ids=existing_ids, **kw),
             )
         )
 
@@ -331,7 +348,7 @@ def _run_discovery_pass(
         )
 
     # Concurrent network fetch; sequential merge + checkpoint (single-threaded).
-    for stage, label, items in _run_concurrent_discovery(sources, log):
+    for stage, _label, items in _run_concurrent_discovery(sources, log):
         added = _merge_items(manifest, items)
         log.info("merged %s: +%d new (%d fetched)", stage, added, len(items))
         if not dry_run:
@@ -484,7 +501,11 @@ def _run_bibliography_pass(
             )
 
         if pending:
-            log.info("bibliography: resolving %d pending DOI(s) (%d already done)", len(pending), len(resolved))
+            log.info(
+                "bibliography: resolving %d pending DOI(s) (%d already done)",
+                len(pending),
+                len(resolved),
+            )
             resolve_bibliography_dois(pending, workers=workers, on_batch=_on_resolve_batch)
 
         download_bibliography_pdfs(manifest, dry_run=dry_run, workers=workers)
@@ -821,7 +842,9 @@ def _execute_harvest(
     click.echo(summary)
     if target_pdfs and ok < target_pdfs:
         log.warning("below target_pdfs: have %d, wanted %d", ok, target_pdfs)
-        click.echo(f"  Warning: below target_pdfs ({ok} < {target_pdfs}) — run again or add sources.")
+        click.echo(
+            f"  Warning: below target_pdfs ({ok} < {target_pdfs}) — run again or add sources."
+        )
     if target and total < target:
         log.warning("below target: have %d, wanted %d", total, target)
         click.echo(f"  Warning: below target ({total} < {target}) — run again or add sources.")
@@ -836,9 +859,15 @@ def harvest_options(f):
         show_default=True,
         help=f"Parallel download threads (default {DEFAULT_WORKERS}; max {MAX_WORKERS}).",
     )(f)
-    f = click.option("--target", default=None, type=int, help="Grow manifest to at least this many items.")(f)
-    f = click.option("--target-pdfs", default=None, type=int, help="Stop when this many ok PDFs are downloaded.")(f)
-    f = click.option("--max-openalex", default=None, type=int, help="Max OpenAlex works per pass.")(f)
+    f = click.option(
+        "--target", default=None, type=int, help="Grow manifest to at least this many items."
+    )(f)
+    f = click.option(
+        "--target-pdfs", default=None, type=int, help="Stop when this many ok PDFs are downloaded."
+    )(f)
+    f = click.option("--max-openalex", default=None, type=int, help="Max OpenAlex works per pass.")(
+        f
+    )
     f = click.option("--max-openalex-per-topic", default=None, type=int)(f)
     f = click.option("--max-dblp", default=None, type=int)(f)
     f = click.option("--max-semantic-scholar", default=None, type=int)(f)
@@ -857,21 +886,31 @@ def harvest_options(f):
         type=int,
         help="Max forward-citation works per pass (papers citing high-signal seeds).",
     )(f)
-    f = click.option("--max-bib-dois", default=None, type=int, help="Max bibliography DOIs per pass.")(f)
+    f = click.option(
+        "--max-bib-dois", default=None, type=int, help="Max bibliography DOIs per pass."
+    )(f)
     f = click.option("--bib-passes", default=1, show_default=True)(f)
     f = click.option("--retry-passes", default=1, show_default=True)(f)
-    f = click.option("--max-passes", default=5, show_default=True, help="Max discovery loop iterations.")(f)
+    f = click.option(
+        "--max-passes", default=5, show_default=True, help="Max discovery loop iterations."
+    )(f)
     f = click.option("--skip-openalex", is_flag=True)(f)
     f = click.option("--skip-dblp", is_flag=True)(f)
     f = click.option("--skip-arxiv", is_flag=True)(f)
-    f = click.option("--skip-crossref", is_flag=True, help="Skip Crossref venue-targeted discovery.")(f)
-    f = click.option("--skip-forward-citations", is_flag=True, help="Skip forward-citation discovery.")(f)
+    f = click.option(
+        "--skip-crossref", is_flag=True, help="Skip Crossref venue-targeted discovery."
+    )(f)
+    f = click.option(
+        "--skip-forward-citations", is_flag=True, help="Skip forward-citation discovery."
+    )(f)
     f = click.option("--skip-bibliography", is_flag=True)(f)
     f = click.option("--skip-topic-seeds", is_flag=True)(f)
     f = click.option("--skip-elk-bibliography", is_flag=True)(f)
     f = click.option("--skip-semantic-scholar", is_flag=True)(f)
     f = click.option("--skip-retry", is_flag=True, help="Skip DOI retry pass.")(f)
-    f = click.option("--resume", is_flag=True, help="Skip one-time early stages if already harvested.")(f)
+    f = click.option(
+        "--resume", is_flag=True, help="Skip one-time early stages if already harvested."
+    )(f)
     f = click.option("--deep-harvest", is_flag=True, help="Higher caps for 2k PDF harvest.")(f)
     f = click.option(
         "--pipeline-harvest",
@@ -1084,7 +1123,9 @@ def harvest_run_cmd(
 
 
 @harvest_group.command("verify")
-@click.option("--no-downgrade", is_flag=True, help="Report only; do not downgrade invalid ok items.")
+@click.option(
+    "--no-downgrade", is_flag=True, help="Report only; do not downgrade invalid ok items."
+)
 def harvest_verify_cmd(no_downgrade: bool) -> None:
     """Verify ok manifest items have valid PDFs on disk."""
     manifest = load_manifest()
@@ -1150,7 +1191,9 @@ def harvest_report_cmd(
 
 
 @harvest_group.command("prune")
-@click.option("--apply", "apply_", is_flag=True, help="Actually delete; default is a dry-run preview.")
+@click.option(
+    "--apply", "apply_", is_flag=True, help="Actually delete; default is a dry-run preview."
+)
 @click.option("--yes", is_flag=True, help="Required with --apply to confirm destructive deletion.")
 @click.option("--sample", default=20, show_default=True, type=int, help="Pruned titles to preview.")
 def harvest_prune_cmd(apply_: bool, yes: bool, sample: int) -> None:
@@ -1176,8 +1219,7 @@ def harvest_prune_cmd(apply_: bool, yes: bool, sample: int) -> None:
 
     after = signal_stats(plan.keep)
     click.echo(
-        f"After:  total={after['total']} ok={after['ok']} "
-        f"strong_ratio={after['strong_ratio']:.0%}"
+        f"After:  total={after['total']} ok={after['ok']} strong_ratio={after['strong_ratio']:.0%}"
     )
 
     if not apply_:
@@ -1234,7 +1276,9 @@ def harvest_enrich_cmd(dry_run: bool, workers: int) -> None:
 )
 @click.option("--force", is_flag=True, help="Re-enrich items that already have a papers_meta row.")
 @click.option("--limit", default=None, type=int, help="Cap items processed (for testing).")
-def harvest_enrich_metadata_cmd(dry_run: bool, workers: int, force: bool, limit: int | None) -> None:
+def harvest_enrich_metadata_cmd(
+    dry_run: bool, workers: int, force: bool, limit: int | None
+) -> None:
     """Backfill rich provider metadata (OpenAlex + Semantic Scholar + arXiv).
 
     Fills new manifest fields (venue, genre, arxiv_category, retraction, ...) and the
@@ -1256,13 +1300,21 @@ def harvest_enrich_metadata_cmd(dry_run: bool, workers: int, force: bool, limit:
 
 
 @harvest_group.command("add-local")
-@click.option("--pdf", "pdf_path", required=True, type=click.Path(exists=True, dir_okay=False), help="Path to local PDF.")
+@click.option(
+    "--pdf",
+    "pdf_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False),
+    help="Path to local PDF.",
+)
 @click.option("--title", required=True, help="Paper title.")
 @click.option("--doi", default=None, help="DOI (optional).")
 @click.option("--authors", default="", help="Comma-separated author list.")
 @click.option("--year", default=None, type=int, help="Publication year.")
 @click.option("--tags", default="", help="Comma-separated tags.")
-def harvest_add_local_cmd(pdf_path: str, title: str, doi: str | None, authors: str, year: int | None, tags: str) -> None:
+def harvest_add_local_cmd(
+    pdf_path: str, title: str, doi: str | None, authors: str, year: int | None, tags: str
+) -> None:
     """Add a locally-acquired PDF (book chapter, paywalled paper) to the manifest.
 
     Copies the PDF into data/raw/pdf/, computes its sha256, and appends a
@@ -1272,7 +1324,13 @@ def harvest_add_local_cmd(pdf_path: str, title: str, doi: str | None, authors: s
     import shutil
     from pathlib import Path
 
-    from graph_layout_rag.manifest import ManifestItem, load_manifest, save_manifest, slug_id, upsert_item
+    from graph_layout_rag.manifest import (
+        ManifestItem,
+        load_manifest,
+        save_manifest,
+        slug_id,
+        upsert_item,
+    )
     from graph_layout_rag.paths import PDF_DIR
 
     src = Path(pdf_path)
@@ -1307,15 +1365,21 @@ def harvest_add_local_cmd(pdf_path: str, title: str, doi: str | None, authors: s
     save_manifest(manifest)
     click.echo(f"Added: {item_id} ({dest})")
     click.echo(f"  sha256={sha256}")
-    click.echo("  Run: RAG_EMBED_PROFILE=cuda-qwen0.6b-1024 uv run graph-layout-rag ingest --rebuild")
+    click.echo(
+        "  Run: RAG_EMBED_PROFILE=cuda-qwen0.6b-1024 uv run graph-layout-rag ingest --rebuild"
+    )
 
 
 @harvest_group.command("shadow-fetch")
 @click.option("--dry-run", is_flag=True, help="Report candidate count without downloading.")
 @click.option("--limit", default=None, type=int, help="Max papers to attempt (default: all).")
 @click.option("--show-browser", is_flag=True, help="Run Chromium with a visible window (debug).")
-@click.option("--workers", default=1, type=int, show_default=True, help="Parallel browser contexts.")
-def harvest_shadow_fetch_cmd(dry_run: bool, limit: int | None, show_browser: bool, workers: int) -> None:
+@click.option(
+    "--workers", default=1, type=int, show_default=True, help="Parallel browser contexts."
+)
+def harvest_shadow_fetch_cmd(
+    dry_run: bool, limit: int | None, show_browser: bool, workers: int
+) -> None:
     """Fetch paywalled PDFs via sci-hub / Anna's Archive using Patchright.
 
     Targets manifest items that have a DOI but no local PDF (status != ok).

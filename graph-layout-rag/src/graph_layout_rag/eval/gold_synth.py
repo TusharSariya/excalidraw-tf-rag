@@ -27,6 +27,7 @@ filter, de-dup vs curated, and enforced stratum balance (reported in the manifes
 Multi-hop is intentionally NOT used: the graph-layout corpus is too small for
 reliable multi-hop; only single-hop NL paraphrases are generated.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -38,10 +39,9 @@ import re
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any
 
-from graph_layout_rag.eval.gold_cases import GOLD_CASES, EvalCase
+from graph_layout_rag.eval.gold_cases import GOLD_CASES
 from graph_layout_rag.eval.gold_validation import EvalTrack
 from graph_layout_rag.manifest import ManifestItem, load_manifest
 from graph_layout_rag.paths import CHUNKS_TABLE, DATA_DIR, profile_index_paths
@@ -157,14 +157,7 @@ def _fulltext_chunks(profile: str) -> dict[str, str]:
     if CHUNKS_TABLE not in names:
         return {}
     tbl = db.open_table(CHUNKS_TABLE)
-    rows = (
-        tbl
-        .search()
-        .select(["doc_id", "text"])
-        .limit(tbl.count_rows())
-        .to_arrow()
-        .to_pylist()
-    )
+    rows = tbl.search().select(["doc_id", "text"]).limit(tbl.count_rows()).to_arrow().to_pylist()
     best: dict[str, str] = {}
     for r in rows:
         doc_id, text = r.get("doc_id"), r.get("text") or ""
@@ -287,8 +280,7 @@ def _build_prompt(seed: Seed, mode: str) -> str:
     )
     if mode == "hard":
         return (
-            common
-            + "Phrase it indirectly: an applied, problem-first question whose solution "
+            common + "Phrase it indirectly: an applied, problem-first question whose solution "
             "is this paper's method, using everyday wording rather than the paper's terms.\n"
             f"PAPER: {seed.title}\n{body}\n"
         )
@@ -341,7 +333,7 @@ def _generate_one(seed: Seed, mode: str, model: str) -> str:
             last_exc = exc
             if _is_fatal(exc) or not _is_rate_limit(exc):
                 raise
-            wait = _parse_retry_after(exc) or (2 ** attempt)
+            wait = _parse_retry_after(exc) or (2**attempt)
             time.sleep(min(wait, 30))
     raise last_exc if last_exc else RuntimeError("generation failed")
 
@@ -462,9 +454,7 @@ def build_synth_cases(
         if n <= 0:
             continue
         track_t: EvalTrack = track  # type: ignore[assignment]
-        seeds = sample_seed_docs(
-            profile, track_t, n, rng=rng, exclude_ids=set(curated_ids)
-        )
+        seeds = sample_seed_docs(profile, track_t, n, rng=rng, exclude_ids=set(curated_ids))
         n_hard = int(round(len(seeds) * hard_frac))
         modes = ["hard"] * n_hard + ["single"] * (len(seeds) - n_hard)
         rng.shuffle(modes)

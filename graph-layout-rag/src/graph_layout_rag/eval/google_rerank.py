@@ -61,18 +61,14 @@ def _access_token() -> str:
     import google.auth
     from google.auth.transport.requests import Request
 
-    credentials, _ = google.auth.default(
-        scopes=["https://www.googleapis.com/auth/cloud-platform"]
-    )
+    credentials, _ = google.auth.default(scopes=["https://www.googleapis.com/auth/cloud-platform"])
     credentials.refresh(Request())
     return str(credentials.token)
 
 
 def _consume_unit() -> None:
     global _units_used
-    limit = int(
-        os.getenv("GRAPH_RAG_MAX_CLOUD_RANKING_UNITS", str(DEFAULT_MAX_RANKING_UNITS))
-    )
+    limit = int(os.getenv("GRAPH_RAG_MAX_CLOUD_RANKING_UNITS", str(DEFAULT_MAX_RANKING_UNITS)))
     with _lock:
         if _units_used >= limit:
             raise RuntimeError(f"Google Ranking API unit cap reached ({limit})")
@@ -114,7 +110,12 @@ def rerank_google(
         response = httpx.post(
             url,
             headers={"Authorization": f"Bearer {_access_token()}"},
-            json={"model": model, "query": query, "records": records, "topN": min(top, len(records))},
+            json={
+                "model": model,
+                "query": query,
+                "records": records,
+                "topN": min(top, len(records)),
+            },
             timeout=60,
         )
         response.raise_for_status()

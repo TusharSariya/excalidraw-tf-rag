@@ -46,7 +46,8 @@ def test_run_related_eval_skips_embed_variants_without_vectors(monkeypatch):
     g = _toy()
 
     class _DummyDB:
-        def close(self): pass
+        def close(self):
+            pass
 
     monkeypatch.setattr(related_eval.cs, "connect", lambda: _DummyDB())
     monkeypatch.setattr(related_eval, "load_graph", lambda db: g)

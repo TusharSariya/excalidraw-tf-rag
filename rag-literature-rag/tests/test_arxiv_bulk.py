@@ -21,7 +21,9 @@ def _entry(arxiv_id: str, title: str, summary: str) -> str:
 
 
 def test_parse_entries():
-    papers = _parse_entries(_feed(_entry("2105.00001", "Layered graph drawing", "crossing minimization")))
+    papers = _parse_entries(
+        _feed(_entry("2105.00001", "Layered graph drawing", "crossing minimization"))
+    )
     assert papers[0]["arxiv_id"] == "2105.00001"
     assert papers[0]["doi"] == "10.48550/arXiv.2105.00001"
     assert papers[0]["authors"] == ["A. Author"]
@@ -33,8 +35,10 @@ def test_harvest_category_strict_filters_and_stops_on_empty():
         _entry("2105.2", "Smoothed analysis of the simplex method for LP", "optimization"),
     )
     empty = _feed()
-    with patch("rag_literature_rag.harvest.arxiv_bulk.httpx.Client") as cc, \
-         patch("rag_literature_rag.harvest.arxiv_bulk.time.sleep"):
+    with (
+        patch("rag_literature_rag.harvest.arxiv_bulk.httpx.Client") as cc,
+        patch("rag_literature_rag.harvest.arxiv_bulk.time.sleep"),
+    ):
         client = MagicMock()
         client.__enter__ = MagicMock(return_value=client)
         client.__exit__ = MagicMock(return_value=False)

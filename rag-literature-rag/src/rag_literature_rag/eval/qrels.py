@@ -29,11 +29,12 @@ Grades follow the UMBRELA 0-3 scale: 0 irrelevant, 1 related, 2 highly relevant,
 3 perfectly relevant. The default binary threshold (grade >= 2) keeps the
 existing binary metrics in `metrics.py` meaningful.
 """
+
 from __future__ import annotations
 
 import json
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -48,10 +49,7 @@ def graded_labels(qrels: dict[str, Any]) -> dict[str, dict[str, int]]:
     """case_id -> {doc_id: grade} from a loaded qrels payload."""
     out: dict[str, dict[str, int]] = {}
     for case_id, docs in (qrels.get("cases") or {}).items():
-        out[case_id] = {
-            doc_id: int(entry.get("grade", 0))
-            for doc_id, entry in docs.items()
-        }
+        out[case_id] = {doc_id: int(entry.get("grade", 0)) for doc_id, entry in docs.items()}
     return out
 
 
@@ -108,7 +106,7 @@ def write_qrels(
 ) -> None:
     payload: dict[str, Any] = {
         "version": 1,
-        "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "judge_model": judge_model,
         "relevance_threshold": relevance_threshold,
         "cases": cases,

@@ -5,14 +5,18 @@ import json
 import os
 import platform
 import time
+from datetime import UTC, datetime
 from functools import lru_cache
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
 import click
 
-from graph_layout_rag.eval.encode_device import EncodeDevice, fastembed_kwargs, resolve_encode_device
+from graph_layout_rag.eval.encode_device import (
+    EncodeDevice,
+    fastembed_kwargs,
+    resolve_encode_device,
+)
 from graph_layout_rag.eval.hardware import assert_memory_start_safe, memory_snapshot
 from graph_layout_rag.eval.splade_v3_encoder import SpladeV3Encoder, is_pytorch_sparse_model
 from graph_layout_rag.paths import CHUNKS_TABLE, RETRIEVAL_INDEXES_DIR, profile_index_paths
@@ -26,7 +30,7 @@ DEFAULT_MODELS = {
 
 
 def _now_id() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _slug(value: str) -> str:
@@ -64,8 +68,8 @@ def _clean_payload(row: dict[str, Any]) -> dict[str, Any]:
 
 def _qdrant():
     try:
-        from qdrant_client import QdrantClient, models
         from fastembed import LateInteractionTextEmbedding, SparseTextEmbedding
+        from qdrant_client import QdrantClient, models
     except ImportError as exc:
         raise click.ClickException(
             "Retrieval experiment dependencies are missing. "
@@ -92,8 +96,7 @@ def _fastembed_supports_colbert(model_name: str) -> bool:
     from fastembed import LateInteractionTextEmbedding
 
     return any(
-        m.get("model") == model_name
-        for m in LateInteractionTextEmbedding.list_supported_models()
+        m.get("model") == model_name for m in LateInteractionTextEmbedding.list_supported_models()
     )
 
 
@@ -142,7 +145,9 @@ def _colbert_encoder(model_name: str, *, encode_device: EncodeDevice | None):
     if _fastembed_supports_colbert(model_name):
         from fastembed import LateInteractionTextEmbedding
 
-        return LateInteractionTextEmbedding(model_name=model_name, **fastembed_kwargs(encode_device))
+        return LateInteractionTextEmbedding(
+            model_name=model_name, **fastembed_kwargs(encode_device)
+        )
     return _PylateColbertEncoder(model_name, encode_device=encode_device)
 
 
@@ -200,9 +205,7 @@ def build_experimental_index(
             collection_name=collection,
             vectors_config={},
             sparse_vectors_config={
-                "splade": models.SparseVectorParams(
-                    index=models.SparseIndexParams(on_disk=True)
-                )
+                "splade": models.SparseVectorParams(index=models.SparseIndexParams(on_disk=True))
             },
         )
         embedded = model.embed(texts, batch_size=batch_size)
@@ -237,11 +240,15 @@ def build_experimental_index(
         )
         vectors = model.embed(texts, batch_size=batch_size)
         points = (
-            models.PointStruct(id=idx, payload=_clean_payload(row), vector={"colbert": vector.tolist()})
+            models.PointStruct(
+                id=idx, payload=_clean_payload(row), vector={"colbert": vector.tolist()}
+            )
             for idx, (row, vector) in enumerate(zip(rows, vectors))
         )
 
-    client.upload_points(collection_name=collection, points=points, batch_size=batch_size, wait=True)
+    client.upload_points(
+        collection_name=collection, points=points, batch_size=batch_size, wait=True
+    )
     meta = {
         "index_id": index_id,
         "kind": kind,
@@ -254,7 +261,7 @@ def build_experimental_index(
         "corpus_fingerprint": fingerprint,
         "chunks": len(rows),
         "batch_size": batch_size,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
         "build_seconds": round(time.monotonic() - started, 2),
         "memory_start": start_memory.to_dict(),
         "memory_end": memory_snapshot().to_dict(),
@@ -307,8 +314,12 @@ def search_experimental(
         query_vector = (
             "splade",
             _models.SparseVector(
-                indices=vector.indices.tolist() if hasattr(vector.indices, "tolist") else list(vector.indices),
-                values=vector.values.tolist() if hasattr(vector.values, "tolist") else list(vector.values),
+                indices=vector.indices.tolist()
+                if hasattr(vector.indices, "tolist")
+                else list(vector.indices),
+                values=vector.values.tolist()
+                if hasattr(vector.values, "tolist")
+                else list(vector.values),
             ),
         )
     else:
@@ -323,7 +334,11 @@ def search_experimental(
         with_payload=True,
     )
     return [
-        {**(point.payload or {}), "score": float(point.score), "experimental_index": meta["index_id"]}
+        {
+            **(point.payload or {}),
+            "score": float(point.score),
+            "experimental_index": meta["index_id"],
+        }
         for point in response.points
     ]
 

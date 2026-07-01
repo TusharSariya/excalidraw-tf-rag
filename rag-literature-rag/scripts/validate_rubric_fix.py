@@ -5,6 +5,7 @@ A correct fix should RAISE the curated grade>=2 rate (the judge stops penalizing
 genuinely-relevant RAG papers it was mis-framing as graph-drawing off-topic).
 Cheap: only curated pairs (~45), not the full 5k pool.
 """
+
 from __future__ import annotations
 
 import json
@@ -45,8 +46,10 @@ def main() -> None:
     print(f"curated pairs judged: {len(curated)}")
     print(f"OLD (graph rubric) grade>=2 rate: {rate(old_grades)}")
     print(f"NEW (RAG rubric)   grade>=2 rate: {rate(new_grades)}")
-    print(f"OLD mean: {round(sum(g for g in old_grades if g is not None)/max(1,len([g for g in old_grades if g is not None])),3)}")
-    print(f"NEW mean: {round(sum(new_grades)/len(new_grades),3)}")
+    print(
+        f"OLD mean: {round(sum(g for g in old_grades if g is not None) / max(1, len([g for g in old_grades if g is not None])), 3)}"
+    )
+    print(f"NEW mean: {round(sum(new_grades) / len(new_grades), 3)}")
     flips = sum(1 for o, n in zip(old_grades, new_grades) if o is not None and o < 2 <= n)
     print(f"flipped <2 -> >=2 (recovered relevant): {flips}")
 

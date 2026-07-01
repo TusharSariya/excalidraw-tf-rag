@@ -25,7 +25,7 @@ from graph_layout_rag import citation_store as cs
 @dataclass
 class CitationGraph:
     out_adj: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))  # references
-    in_adj: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))   # cited-by
+    in_adj: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))  # cited-by
     undirected: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set))
     cbc: dict[str, int] = field(default_factory=dict)
     oa_to_doc: dict[str, str] = field(default_factory=dict)
@@ -237,9 +237,7 @@ def citation_prior(g: CitationGraph, oa: str) -> float:
     return math.log1p(g.cbc.get(oa, 0))
 
 
-def in_corpus_citation_stats(
-    doc_id: str, graph: CitationGraph | None = None
-) -> dict:
+def in_corpus_citation_stats(doc_id: str, graph: CitationGraph | None = None) -> dict:
     """Citation counts for a doc, split global vs. in-corpus.
 
     Returns ``{}`` only when there is no citation store at all. When the store
@@ -257,16 +255,8 @@ def in_corpus_citation_stats(
             "in_corpus_cited_by_count": 0,
             "in_corpus_references_count": 0,
         }
-    in_corpus_citers = sum(
-        1
-        for src in g.in_adj.get(oa, set())
-        if src != oa and src in g.oa_to_doc
-    )
-    in_corpus_refs = sum(
-        1
-        for dst in g.out_adj.get(oa, set())
-        if dst != oa and dst in g.oa_to_doc
-    )
+    in_corpus_citers = sum(1 for src in g.in_adj.get(oa, set()) if src != oa and src in g.oa_to_doc)
+    in_corpus_refs = sum(1 for dst in g.out_adj.get(oa, set()) if dst != oa and dst in g.oa_to_doc)
     return {
         "cited_by_count": g.cbc.get(oa),
         "in_corpus_cited_by_count": in_corpus_citers,
@@ -392,14 +382,22 @@ def rank_related(
         )
         if score <= 0.0:
             continue
-        results.append(RelatedResult(
-            doc_id=g.oa_to_doc.get(cand, ""),
-            oa_id=cand,
-            score=score, ppr=pr, coupling=coup, cocitation=coci, prior=prior,
-            ppr_fwd=prf, ppr_bwd=prb, embedding=emb,
-            shared_refs=len(seed_refs & g.out_adj.get(cand, set())),
-            shared_citations=len(seed_citers & g.in_adj.get(cand, set())),
-        ))
+        results.append(
+            RelatedResult(
+                doc_id=g.oa_to_doc.get(cand, ""),
+                oa_id=cand,
+                score=score,
+                ppr=pr,
+                coupling=coup,
+                cocitation=coci,
+                prior=prior,
+                ppr_fwd=prf,
+                ppr_bwd=prb,
+                embedding=emb,
+                shared_refs=len(seed_refs & g.out_adj.get(cand, set())),
+                shared_citations=len(seed_citers & g.in_adj.get(cand, set())),
+            )
+        )
     results.sort(key=lambda r: r.score, reverse=True)
     return results
 
@@ -424,9 +422,7 @@ def related_to_docs(
     g = graph or load_graph(db)
     identities = canonical_identity_map()
     seed_candidates = {
-        candidate
-        for doc_id in seed_doc_ids
-        for candidate in identities.component_doc_ids(doc_id)
+        candidate for doc_id in seed_doc_ids for candidate in identities.component_doc_ids(doc_id)
     }
     seed_oas = {g.doc_to_oa[d] for d in seed_candidates if d in g.doc_to_oa}
     if not seed_oas:
@@ -444,10 +440,7 @@ def related_to_docs(
     if corpus_only:
         ranked = [r for r in ranked if r.doc_id]
 
-    canonical_seed_ids = {
-        identities.canonicalize_doc_id(doc_id)
-        for doc_id in seed_doc_ids
-    }
+    canonical_seed_ids = {identities.canonicalize_doc_id(doc_id) for doc_id in seed_doc_ids}
     deduplicated: list[RelatedResult] = []
     seen: set[str] = set()
     for result in ranked:

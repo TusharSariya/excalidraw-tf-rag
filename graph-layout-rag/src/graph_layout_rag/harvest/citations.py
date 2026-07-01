@@ -116,7 +116,12 @@ def harvest_forward_citations(
             doc_id = slug_id(f"forward-{citing_doi}")
             if doc_id in skip_ids:
                 continue
-            by_doi[citing_doi] = {"doi": citing_doi, "id": doc_id, "title": title, "abstract": abstract}
+            by_doi[citing_doi] = {
+                "doi": citing_doi,
+                "id": doc_id,
+                "title": title,
+                "abstract": abstract,
+            }
 
     log.info("forward-citation: %d strict-relevant citing works", len(by_doi))
 

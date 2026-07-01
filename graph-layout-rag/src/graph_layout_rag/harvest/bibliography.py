@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import os
-import re
 import hashlib
 import json
+import os
+import re
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -11,14 +11,17 @@ from typing import Any
 
 from graph_layout_rag.harvest.checkpoint import RELEVANCE_CHECKPOINT_EVERY, RESOLVE_BATCH_SIZE
 from graph_layout_rag.harvest.doi_resolver import _openalex_by_doi, resolve_dois
-from graph_layout_rag.harvest.doi_validate import filter_plausible_bibliography_dois, is_plausible_bibliography_doi
+from graph_layout_rag.harvest.doi_validate import (
+    filter_plausible_bibliography_dois,
+    is_plausible_bibliography_doi,
+)
 from graph_layout_rag.harvest.download import download_to_file
 from graph_layout_rag.harvest.log import get_logger
 from graph_layout_rag.harvest.parallel import parallel_map
 from graph_layout_rag.harvest.relevance import is_known_offtopic_doi, is_layout_relevant
 from graph_layout_rag.harvest.tags_inference import infer_harvest_tags
 from graph_layout_rag.manifest import ManifestItem, load_manifest, relative_local_path
-from graph_layout_rag.paths import BIBLIOGRAPHY_SCAN_CACHE_DIR, PKG_ROOT, PDF_DIR
+from graph_layout_rag.paths import BIBLIOGRAPHY_SCAN_CACHE_DIR, PDF_DIR, PKG_ROOT
 
 DOI_RE = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Z0-9]+", re.IGNORECASE)
 
@@ -260,9 +263,7 @@ def scan_bibliography_candidates(
     seeds = [
         item
         for item in manifest.items
-        if item.status == "ok"
-        and item.localPath
-        and any(t in SEED_TAGS for t in item.tags)
+        if item.status == "ok" and item.localPath and any(t in SEED_TAGS for t in item.tags)
     ]
     log.info("bibliography: scanning %d seed PDF(s) for DOIs (max_dois=%d)", len(seeds), max_dois)
 
@@ -392,7 +393,9 @@ def _download_bib_item(item: ManifestItem, *, dry_run: bool) -> ManifestItem:
     if not item.localPath or ".pdf" not in (item.url or "").lower():
         return item
     dest = PDF_DIR / f"{item.id}.pdf"
-    dl = download_to_file(dest, item.url, dry_run=dry_run, doc_id=item.id, doi=item.doi, stage="bibliography")
+    dl = download_to_file(
+        dest, item.url, dry_run=dry_run, doc_id=item.id, doi=item.doi, stage="bibliography"
+    )
     if dl.get("ok"):
         item.status = "ok"
         item.sha256 = dl.get("sha256")

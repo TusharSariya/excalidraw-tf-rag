@@ -31,7 +31,11 @@ def _parse_entries(xml_text: str) -> list[dict]:
         arxiv_id = _arxiv_id_from_entry(entry)
         if not arxiv_id:
             continue
-        title = re.sub(r"\s+", " ", (entry.findtext("atom:title", default="", namespaces=ATOM_NS) or "").strip())
+        title = re.sub(
+            r"\s+",
+            " ",
+            (entry.findtext("atom:title", default="", namespaces=ATOM_NS) or "").strip(),
+        )
         abstract = (entry.findtext("atom:summary", default="", namespaces=ATOM_NS) or "").strip()
         authors = [
             a.findtext("atom:name", default="", namespaces=ATOM_NS)

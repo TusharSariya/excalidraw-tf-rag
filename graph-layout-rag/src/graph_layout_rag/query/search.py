@@ -5,15 +5,15 @@ from typing import Any
 
 from graph_layout_rag.catalog.taxonomy import PIPELINE_CATEGORIES
 from graph_layout_rag.query.hybrid import DENSE_WEIGHT, SPARSE_WEIGHT
+from graph_layout_rag.query.identity import canonical_identity_map, split_values
 from graph_layout_rag.query.retrieve import (
-    RetrieveFilters,
     DEFAULT_HYBRID,
+    RetrieveFilters,
     catalog_maps,
     diversify_candidates,
     retrieve_candidates,
     retrieve_multi_query,
 )
-from graph_layout_rag.query.identity import canonical_identity_map, split_values
 from rag_common.rerank import rerank as rerank_candidates
 
 
@@ -84,9 +84,7 @@ def format_results(
         evidence = [_evidence(candidate) for candidate in evidence_rows]
 
         pipeline_categories = [
-            c.strip()
-            for c in (row.get("pipeline_categories") or "").split(",")
-            if c.strip()
+            c.strip() for c in (row.get("pipeline_categories") or "").split(",") if c.strip()
         ]
         if not pipeline_categories and doc_id in category_map:
             pipeline_categories = sorted(category_map[doc_id])

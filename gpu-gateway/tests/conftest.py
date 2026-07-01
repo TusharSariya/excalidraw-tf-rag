@@ -29,9 +29,7 @@ def pytest_addoption(parser) -> None:
 
 
 def pytest_configure(config) -> None:
-    config.addinivalue_line(
-        "markers", "integration: requires a live gateway (pass --gateway-url)."
-    )
+    config.addinivalue_line("markers", "integration: requires a live gateway (pass --gateway-url).")
 
 
 def pytest_collection_modifyitems(config, items) -> None:

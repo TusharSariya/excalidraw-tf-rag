@@ -1,8 +1,4 @@
-import json
-from pathlib import Path
-
 import pytest
-
 from graph_layout_rag.ingest.index import (
     chunk_count,
     chunking_fingerprint_mismatch,

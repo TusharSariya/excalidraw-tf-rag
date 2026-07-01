@@ -40,9 +40,42 @@ def test_case_metrics_matches_result_aliases():
 
 def test_aggregate_and_category_metrics():
     rows = [
-        {"category": "compound", "mrr": 1.0, "map@10": 1.0, "ndcg@10": 1.0, "hit_rate@5": 1.0, "hit_rate@10": 1.0, "hit_rate@20": 1.0, "recall@5": 1.0, "recall@10": 1.0, "recall@20": 1.0},
-        {"category": "compound", "mrr": 0.5, "map@10": 0.5, "ndcg@10": 0.5, "hit_rate@5": 1.0, "hit_rate@10": 1.0, "hit_rate@20": 1.0, "recall@5": 1.0, "recall@10": 1.0, "recall@20": 1.0},
-        {"category": "routing", "mrr": 0.0, "map@10": 0.0, "ndcg@10": 0.0, "hit_rate@5": 0.0, "hit_rate@10": 0.0, "hit_rate@20": 0.0, "recall@5": 0.0, "recall@10": 0.0, "recall@20": 0.0},
+        {
+            "category": "compound",
+            "mrr": 1.0,
+            "map@10": 1.0,
+            "ndcg@10": 1.0,
+            "hit_rate@5": 1.0,
+            "hit_rate@10": 1.0,
+            "hit_rate@20": 1.0,
+            "recall@5": 1.0,
+            "recall@10": 1.0,
+            "recall@20": 1.0,
+        },
+        {
+            "category": "compound",
+            "mrr": 0.5,
+            "map@10": 0.5,
+            "ndcg@10": 0.5,
+            "hit_rate@5": 1.0,
+            "hit_rate@10": 1.0,
+            "hit_rate@20": 1.0,
+            "recall@5": 1.0,
+            "recall@10": 1.0,
+            "recall@20": 1.0,
+        },
+        {
+            "category": "routing",
+            "mrr": 0.0,
+            "map@10": 0.0,
+            "ndcg@10": 0.0,
+            "hit_rate@5": 0.0,
+            "hit_rate@10": 0.0,
+            "hit_rate@20": 0.0,
+            "recall@5": 0.0,
+            "recall@10": 0.0,
+            "recall@20": 0.0,
+        },
     ]
     agg = aggregate_metrics(rows)
     assert agg["mrr"] == 0.5

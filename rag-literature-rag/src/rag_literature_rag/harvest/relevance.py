@@ -138,7 +138,9 @@ OFF_TOPIC_KEYWORDS = frozenset(
 )
 
 _OFF_TOPIC_RE = re.compile(
-    r"\b(?:" + "|".join(re.escape(k) for k in sorted(OFF_TOPIC_KEYWORDS, key=len, reverse=True)) + r")"
+    r"\b(?:"
+    + "|".join(re.escape(k) for k in sorted(OFF_TOPIC_KEYWORDS, key=len, reverse=True))
+    + r")"
 )
 
 

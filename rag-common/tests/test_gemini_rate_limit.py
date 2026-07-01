@@ -1,7 +1,6 @@
 from unittest.mock import patch
 
 import pytest
-
 from rag_common.gemini_rate_limit import (
     GeminiRateLimiter,
     estimate_tokens,

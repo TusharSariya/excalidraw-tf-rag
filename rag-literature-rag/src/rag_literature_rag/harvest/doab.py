@@ -192,7 +192,11 @@ def harvest_doab(
             year=spec.get("year"),
             source="doab",
             url=spec["pdf_url"]
-            or (f"https://doi.org/{spec['doi']}" if spec["doi"] else (f"{DOAB_BASE}/handle/{spec['handle']}" if spec["handle"] else "")),
+            or (
+                f"https://doi.org/{spec['doi']}"
+                if spec["doi"]
+                else (f"{DOAB_BASE}/handle/{spec['handle']}" if spec["handle"] else "")
+            ),
             localPath=None,
             contentType="text/metadata",
             status="metadata_only" if spec["title"] else "failed",

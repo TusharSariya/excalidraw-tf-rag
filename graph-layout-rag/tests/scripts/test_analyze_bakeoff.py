@@ -1,4 +1,5 @@
 """Unit tests for scripts/analyze_bakeoff.py."""
+
 from __future__ import annotations
 
 import json
@@ -19,10 +20,10 @@ from analyze_bakeoff import (
     rank_strategies,
 )
 
-
 # ---------------------------------------------------------------------------
 # 1. paired_bootstrap_ci — seeded numpy fixture
 # ---------------------------------------------------------------------------
+
 
 class TestPairedBootstrapCI:
     """Tests for paired_bootstrap_ci."""
@@ -43,9 +44,7 @@ class TestPairedBootstrapCI:
             n_resamples=2000,
         )
 
-        expected_delta = np.mean(
-            [scores_a[c] - scores_b[c] for c in case_ids]
-        )
+        expected_delta = np.mean([scores_a[c] - scores_b[c] for c in case_ids])
         assert abs(result["delta_mean"] - expected_delta) < 0.01, (
             f"delta_mean {result['delta_mean']} far from expected {expected_delta}"
         )
@@ -79,6 +78,7 @@ class TestPairedBootstrapCI:
         assert result["contains_zero"] is True
         assert "indistinguishable" in result["label"]
         import math
+
         assert math.isnan(result["delta_mean"])
 
     def test_ci_width_scales_with_variance(self) -> None:
@@ -108,6 +108,7 @@ class TestPairedBootstrapCI:
 # ---------------------------------------------------------------------------
 # 2. rank_strategies — ordering
 # ---------------------------------------------------------------------------
+
 
 class TestRankStrategies:
     """Tests for rank_strategies."""
@@ -190,6 +191,7 @@ class TestRankStrategies:
 # ---------------------------------------------------------------------------
 # 3 & 4. judge_audit — PASS and WARN
 # ---------------------------------------------------------------------------
+
 
 class TestJudgeAudit:
     """Tests for judge_audit using mocked pool + qrels JSON files."""

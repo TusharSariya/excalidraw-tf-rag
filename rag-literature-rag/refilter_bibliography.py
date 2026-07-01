@@ -19,6 +19,7 @@ Flags:
     --dry-run   Print what would be removed without touching manifest or files.
     --workers N Parallel OpenAlex workers (default: 4).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -50,7 +51,8 @@ def main() -> None:
 
     # --- ok items: need OpenAlex re-check (quota may have been exhausted when accepted)
     ok_candidates = [
-        i for i in items
+        i
+        for i in items
         if i.get("source") == "bibliography"
         and i.get("status") == "ok"
         and i.get("doi")
@@ -59,15 +61,24 @@ def main() -> None:
 
     # --- metadata_only items: can be purged immediately by prefix alone (no PDF to check)
     meta_remove = [
-        i for i in items
+        i
+        for i in items
         if i.get("source") == "bibliography"
         and i.get("status") == "metadata_only"
         and i.get("doi")
         and is_known_offtopic_doi(i["doi"])
     ]
 
-    bib_ok = sum(1 for i in items if i.get("source") == "bibliography" and i.get("status") == "ok" and i.get("doi"))
-    bib_meta = sum(1 for i in items if i.get("source") == "bibliography" and i.get("status") == "metadata_only" and i.get("doi"))
+    bib_ok = sum(
+        1
+        for i in items
+        if i.get("source") == "bibliography" and i.get("status") == "ok" and i.get("doi")
+    )
+    bib_meta = sum(
+        1
+        for i in items
+        if i.get("source") == "bibliography" and i.get("status") == "metadata_only" and i.get("doi")
+    )
 
     print(f"Manifest items total:             {len(items)}")
     print(f"Bibliography ok with DOI:         {bib_ok}")
@@ -121,10 +132,18 @@ def main() -> None:
         print(f"  ... and {len(meta_remove) - 10} more metadata_only stubs")
 
     if args.dry_run:
-        print(f"\n--dry-run: would remove {len(all_remove)} items ({len(ok_remove)} PDFs deleted, {len(meta_remove)} stubs dropped).")
+        print(
+            f"\n--dry-run: would remove {len(all_remove)} items ({len(ok_remove)} PDFs deleted, {len(meta_remove)} stubs dropped)."
+        )
         return
 
-    answer = input(f"\nRemove {len(all_remove)} items from manifest and delete {len(ok_remove)} PDFs? [y/N] ").strip().lower()
+    answer = (
+        input(
+            f"\nRemove {len(all_remove)} items from manifest and delete {len(ok_remove)} PDFs? [y/N] "
+        )
+        .strip()
+        .lower()
+    )
     if answer != "y":
         print("Aborted.")
         return
@@ -150,7 +169,9 @@ def main() -> None:
     tmp.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     tmp.replace(manifest_path)
 
-    print(f"\nDone. Removed {len(all_remove)} items ({len(ok_remove)} PDFs, {len(meta_remove)} stubs), freed {deleted_bytes // 1024 // 1024} MB.")
+    print(
+        f"\nDone. Removed {len(all_remove)} items ({len(ok_remove)} PDFs, {len(meta_remove)} stubs), freed {deleted_bytes // 1024 // 1024} MB."
+    )
     print("Manifest updated. Run ingest normally — the index will not include removed items.")
 
 

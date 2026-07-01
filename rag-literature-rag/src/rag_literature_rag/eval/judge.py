@@ -12,6 +12,7 @@ system-ranking correlation.
 Concurrency + on-disk checkpointing mirror `ingest/contextual.py` so a full pool
 (a few thousand judgments) is feasible and re-runs are cheap.
 """
+
 from __future__ import annotations
 
 import json
@@ -91,7 +92,9 @@ def _opencode_key() -> str:
     if key:
         return key
     try:
-        auth = json.loads((Path.home() / ".local/share/opencode/auth.json").read_text(encoding="utf-8"))
+        auth = json.loads(
+            (Path.home() / ".local/share/opencode/auth.json").read_text(encoding="utf-8")
+        )
         return str((auth.get("opencode-go") or {}).get("key", "")).strip()
     except (OSError, json.JSONDecodeError, AttributeError):
         return ""
@@ -137,14 +140,18 @@ def _judge_one_opencode(query: str, doc: dict[str, Any], model: str) -> tuple[in
             last_exc = exc
             if exc.code in _OPENCODE_RETRYABLE_HTTP and attempt < 4:
                 retry_after = exc.headers.get("Retry-After") if exc.headers else None
-                base = float(retry_after) if (retry_after and str(retry_after).isdigit()) else min(30.0, 2 ** attempt)
+                base = (
+                    float(retry_after)
+                    if (retry_after and str(retry_after).isdigit())
+                    else min(30.0, 2**attempt)
+                )
                 time.sleep(base + random.uniform(0, max(0.5, base * 0.25)))
                 continue
             raise
         except Exception as exc:  # noqa: BLE001 — timeout / empty / decode → retry then raise
             last_exc = exc
             if attempt < 4:
-                delay = min(30.0, 1.5 * (2 ** attempt))
+                delay = min(30.0, 1.5 * (2**attempt))
                 time.sleep(delay + random.uniform(0, 1.0))
                 continue
             raise
@@ -238,7 +245,9 @@ def _judge_one(query: str, doc: dict[str, Any], model: str) -> tuple[int, str]:
     for attempt in range(4):
         try:
             if config is not None:
-                response = client.models.generate_content(model=model, contents=prompt, config=config)
+                response = client.models.generate_content(
+                    model=model, contents=prompt, config=config
+                )
             else:
                 response = client.models.generate_content(model=model, contents=prompt)
             return _parse_grade(getattr(response, "text", None) or "")
@@ -246,7 +255,7 @@ def _judge_one(query: str, doc: dict[str, Any], model: str) -> tuple[int, str]:
             last_exc = exc
             if _is_fatal(exc) or not _is_rate_limit(exc):
                 raise
-            time.sleep(min(_parse_retry_after(exc) or (2 ** attempt), 30))
+            time.sleep(min(_parse_retry_after(exc) or (2**attempt), 30))
     raise last_exc if last_exc else RuntimeError("judge failed")
 
 

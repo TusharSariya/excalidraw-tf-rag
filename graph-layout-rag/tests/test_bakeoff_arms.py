@@ -3,6 +3,7 @@
 Covers the pure decision logic added for query expansion (A1) and the listwise
 reranker parsing + graceful-degradation paths (A3).
 """
+
 from __future__ import annotations
 
 from graph_layout_rag.eval.strategies import ALL_STRATEGIES, strategy_registry

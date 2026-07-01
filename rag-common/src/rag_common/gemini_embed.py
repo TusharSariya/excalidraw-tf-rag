@@ -60,8 +60,7 @@ def _is_auth_error(exc: BaseException) -> bool:
 def _is_fatal(exc: BaseException) -> bool:
     msg = str(exc).lower()
     return _is_auth_error(exc) or (
-        ("404" in msg or "not_found" in msg)
-        and ("model" in msg or "publisher model" in msg)
+        ("404" in msg or "not_found" in msg) and ("model" in msg or "publisher model" in msg)
     )
 
 
@@ -89,9 +88,7 @@ def _vertex_project() -> str:
 
 def _vertex_location() -> str:
     return (
-        os.getenv("GOOGLE_CLOUD_LOCATION")
-        or os.getenv("VERTEX_LOCATION")
-        or "us-central1"
+        os.getenv("GOOGLE_CLOUD_LOCATION") or os.getenv("VERTEX_LOCATION") or "us-central1"
     ).strip()
 
 
@@ -197,9 +194,7 @@ def _embed_one_raw(
     if not embeddings:
         raise GeminiEmbedError("embed_content returned no embeddings")
     if len(embeddings) != 1:
-        raise GeminiEmbedError(
-            f"expected 1 embedding for single input, got {len(embeddings)}"
-        )
+        raise GeminiEmbedError(f"expected 1 embedding for single input, got {len(embeddings)}")
     batch_tokens = estimate_tokens(text)
     if stats is not None:
         stats.add(tokens=batch_tokens, requests=1)
@@ -284,9 +279,7 @@ def _embed_batch_v1(
             )
             embeddings = response.embeddings or []
             if len(embeddings) != len(batch):
-                raise GeminiEmbedError(
-                    f"expected {len(batch)} embeddings, got {len(embeddings)}"
-                )
+                raise GeminiEmbedError(f"expected {len(batch)} embeddings, got {len(embeddings)}")
             if stats is not None:
                 stats.add(tokens=batch_tokens, requests=1)
             limiter.note_success()
@@ -370,12 +363,8 @@ def _embed_v2_concurrent(
         return vectors
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        vectors = list(
-            pool.map(lambda t: _embed_one(client, t, cfg=cfg, stats=stats), prepared)
-        )
-    log.info(
-        "gemini-2 embedded %d text(s) (mode=%s, workers=%d)", total, mode, workers
-    )
+        vectors = list(pool.map(lambda t: _embed_one(client, t, cfg=cfg, stats=stats), prepared))
+    log.info("gemini-2 embedded %d text(s) (mode=%s, workers=%d)", total, mode, workers)
     return vectors
 
 

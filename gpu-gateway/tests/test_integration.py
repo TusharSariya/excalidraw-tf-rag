@@ -32,14 +32,15 @@ NONCE = os.urandom(4).hex()
 def _salt(s: str) -> str:
     return f"{NONCE}-{s}"
 
+
 # --- Pinned thresholds -----------------------------------------------------
-CARD_CEILING_MB = 7500          # any /health sample above this = a real breach (V1/V5)
+CARD_CEILING_MB = 7500  # any /health sample above this = a real breach (V1/V5)
 EMBED_0_6B = "cuda-qwen0.6b-1024"
 EMBED_4B = "cuda-qwen4b-1024"
 RERANKER = "bge-reranker-v2-m3"
-CHAT_MODEL = "gemma4:e2b"        # must exist in Ollama (`ollama list`)
-LLM_CLEARED_CEILING_MB = 4500   # 0.6B (~1800) + CUDA ctx; well below a lingering LLM (V9)
-STARVE_SLACK_S = 45.0           # generous ceiling for "not starved" under real load (V4)
+CHAT_MODEL = "gemma4:e2b"  # must exist in Ollama (`ollama list`)
+LLM_CLEARED_CEILING_MB = 4500  # 0.6B (~1800) + CUDA ctx; well below a lingering LLM (V9)
+STARVE_SLACK_S = 45.0  # generous ceiling for "not starved" under real load (V4)
 
 
 def _text(n: int) -> str:
@@ -57,7 +58,7 @@ class _PeakSampler(threading.Thread):
         self.peak_mb = 0
         self.both_resident = False
         self.samples = 0
-        self._halt = threading.Event()   # NOT _stop: that shadows Thread._stop(), which join() calls
+        self._halt = threading.Event()  # NOT _stop: that shadows Thread._stop(), which join() calls
 
     def run(self) -> None:
         while not self._halt.is_set():
@@ -79,6 +80,7 @@ class _PeakSampler(threading.Thread):
 # --------------------------------------------------------------------------
 # V1 — atomic eviction / no VRAM breach
 # --------------------------------------------------------------------------
+
 
 def test_v1_no_vram_breach(gw):
     """~20 interleaved 4B/0.6B embeds at concurrency 8. VRAM must never exceed the
@@ -111,17 +113,22 @@ def test_v1_no_vram_breach(gw):
 # V2 — co-residency, no embed→rerank thrash
 # --------------------------------------------------------------------------
 
+
 def test_v2_coresidency_no_thrash(gw):
     """Warm 0.6B + reranker, then loop embed→rerank. Both must stay co-resident and
     the evicts counter must not advance across the loop (3000 MB fits under 7200)."""
     gw.post("/v1/embeddings", {"model": EMBED_0_6B, "input": [_salt("warm")]})
-    gw.post("/v1/rerank", {"model": RERANKER, "query": _salt("q"), "passages": [_salt("a"), _salt("b")]})
+    gw.post(
+        "/v1/rerank", {"model": RERANKER, "query": _salt("q"), "passages": [_salt("a"), _salt("b")]}
+    )
 
     before = gw.counter("gpu_gateway_evicts")
     both_seen = False
     for i in range(8):
         gw.post("/v1/embeddings", {"model": EMBED_0_6B, "input": [_salt(f"e{i}")]})
-        gw.post("/v1/rerank", {"model": RERANKER, "query": _salt("q"), "passages": [_salt(f"p{i}")]})
+        gw.post(
+            "/v1/rerank", {"model": RERANKER, "query": _salt("q"), "passages": [_salt(f"p{i}")]}
+        )
         if {EMBED_0_6B, RERANKER} <= gw.loaded():
             both_seen = True
     after = gw.counter("gpu_gateway_evicts")
@@ -135,6 +142,7 @@ def test_v2_coresidency_no_thrash(gw):
 # --------------------------------------------------------------------------
 # V4 — queue-depth scheduling, no starvation
 # --------------------------------------------------------------------------
+
 
 def test_v4_no_starvation_under_mixed_load(gw):
     """Fire a deep 0.6B burst + a shallow reranker burst concurrently. The shallow
@@ -163,8 +171,14 @@ def test_v4_no_starvation_under_mixed_load(gw):
         return gw.post("/v1/embeddings", {"model": EMBED_0_6B, "input": [_text(i)]})[1] is not None
 
     def shallow(i: int):
-        _, _, dt = gw.post("/v1/rerank", {"model": RERANKER, "query": _salt(f"q{i}"),
-                                          "passages": [_salt(f"p{i}-{j}") for j in range(6)]})
+        _, _, dt = gw.post(
+            "/v1/rerank",
+            {
+                "model": RERANKER,
+                "query": _salt(f"q{i}"),
+                "passages": [_salt(f"p{i}-{j}") for j in range(6)],
+            },
+        )
         shallow_lat.append(dt)
         return True
 
@@ -194,13 +208,16 @@ def test_v4_no_starvation_under_mixed_load(gw):
 # V5 — sequential load under pressure keeps peak under the card
 # --------------------------------------------------------------------------
 
+
 def test_v5_sequential_load_no_overbudget_spike(gw):
     """Clear the card with a chat request, then concurrently admit two different
     embedders from cold. Sequential loading (single dispatcher) must keep every peak
     sample under the card — no overlapping from-disk load spike breaches the budget."""
     # Chat evicts everything → the card is (near) cold.
-    gw.post("/v1/chat/completions",
-            {"model": CHAT_MODEL, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 8})
+    gw.post(
+        "/v1/chat/completions",
+        {"model": CHAT_MODEL, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 8},
+    )
 
     sampler = _PeakSampler(gw, interval=0.03)
     sampler.start()
@@ -212,8 +229,10 @@ def test_v5_sequential_load_no_overbudget_spike(gw):
         return gw.post("/v1/embeddings", {"model": EMBED_0_6B, "input": [_salt("cold-e")]})[0]
 
     def load_rerank():
-        return gw.post("/v1/rerank",
-                       {"model": RERANKER, "query": _salt("cold-q"), "passages": [_salt("cold-p")]})[0]
+        return gw.post(
+            "/v1/rerank",
+            {"model": RERANKER, "query": _salt("cold-q"), "passages": [_salt("cold-p")]},
+        )[0]
 
     with ThreadPoolExecutor(max_workers=2) as pool:
         futs = [pool.submit(load_embed), pool.submit(load_rerank)]
@@ -232,6 +251,7 @@ def test_v5_sequential_load_no_overbudget_spike(gw):
 # V9 — LLM residency actually clears before the next embed
 # --------------------------------------------------------------------------
 
+
 def test_v9_llm_residency_cleared_before_embed(gw):
     """A chat request then an immediate embed. The embed must succeed and, once it
     admits, VRAM must reflect only the embedder — proving Ollama's residency cleared
@@ -242,7 +262,9 @@ def test_v9_llm_residency_cleared_before_embed(gw):
     )
     assert status_chat == 200, "chat request failed"
 
-    status_embed, _, _ = gw.post("/v1/embeddings", {"model": EMBED_0_6B, "input": [_salt("after llm")]})
+    status_embed, _, _ = gw.post(
+        "/v1/embeddings", {"model": EMBED_0_6B, "input": [_salt("after llm")]}
+    )
     assert status_embed == 200, "embed after chat failed (LLM may still hold the card)"
 
     # Give the trace a beat to settle, then confirm the card holds only the embedder.

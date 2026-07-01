@@ -10,6 +10,7 @@ Usage:
     python scripts/analyze_bakeoff.py [--runs-dir PATH] [--keyword-qrels STR]
         [--nl-qrels STR] [--pool PATH] [--seeds PATH]
 """
+
 from __future__ import annotations
 
 import argparse
@@ -21,10 +22,10 @@ from typing import Any
 import numpy as np
 from scipy import stats
 
-
 # ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
+
 
 def load_runs(runs_dir: str = "data/eval/runs") -> list[dict]:
     """Load all JSON run files from a runs directory.
@@ -112,6 +113,7 @@ def load_runs(runs_dir: str = "data/eval/runs") -> list[dict]:
 # Strategy ranking
 # ---------------------------------------------------------------------------
 
+
 def load_leave_dense_out_ids(path: str) -> set[str]:
     """Load the leave-dense-out gold case-id allowlist.
 
@@ -138,9 +140,7 @@ def restrict_runs_to_cases(runs: list[dict], keep_ids: set[str]) -> list[dict]:
     """
     restricted: list[dict] = []
     for run in runs:
-        kept = {
-            cid: v for cid, v in run.get("per_case_ndcg", {}).items() if cid in keep_ids
-        }
+        kept = {cid: v for cid, v in run.get("per_case_ndcg", {}).items() if cid in keep_ids}
         if not kept:
             continue
         new_run = dict(run)
@@ -162,10 +162,7 @@ def rank_strategies(runs: list[dict], qrels_path_filter: str) -> list[dict]:
         List of ``{strategy, mean_ndcg10, mean_recall10, n_cases}`` sorted
         descending by *mean_ndcg10*.
     """
-    filtered = [
-        r for r in runs
-        if qrels_path_filter in r.get("qrels_path", "")
-    ]
+    filtered = [r for r in runs if qrels_path_filter in r.get("qrels_path", "")]
 
     by_strategy: dict[str, list[dict]] = {}
     for run in filtered:
@@ -194,6 +191,7 @@ def rank_strategies(runs: list[dict], qrels_path_filter: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Paired bootstrap CI
 # ---------------------------------------------------------------------------
+
 
 def paired_bootstrap_ci(
     run_a: dict,
@@ -227,9 +225,7 @@ def paired_bootstrap_ci(
             "label": "indistinguishable (no common cases)",
         }
 
-    deltas = np.array(
-        [cases_a[cid] - cases_b[cid] for cid in common_ids], dtype=float
-    )
+    deltas = np.array([cases_a[cid] - cases_b[cid] for cid in common_ids], dtype=float)
     delta_mean = float(np.mean(deltas))
 
     rng = np.random.default_rng(42)
@@ -250,7 +246,9 @@ def paired_bootstrap_ci(
         "ci_low": round(ci_low, 6),
         "ci_high": round(ci_high, 6),
         "contains_zero": contains_zero,
-        "label": "indistinguishable" if contains_zero else (
+        "label": "indistinguishable"
+        if contains_zero
+        else (
             f"{'A wins' if delta_mean > 0 else 'B wins'} "
             f"(Δ={delta_mean:+.4f}, CI=[{ci_low:.4f}, {ci_high:.4f}])"
         ),
@@ -260,6 +258,7 @@ def paired_bootstrap_ci(
 # ---------------------------------------------------------------------------
 # Judge audit
 # ---------------------------------------------------------------------------
+
 
 def judge_audit(
     pool_path: str,
@@ -330,7 +329,7 @@ def judge_audit(
         docs = qrels_cases.get(case_id, {})
         if not isinstance(docs, dict):
             continue
-        for doc_id, info in docs.items():
+        for _doc_id, info in docs.items():
             if not isinstance(info, dict):
                 continue
             grade = info.get("grade")
@@ -462,6 +461,7 @@ def _cohens_kappa(y_true: list[int], y_pred: list[int]) -> float:
 # Reporting helpers
 # ---------------------------------------------------------------------------
 
+
 def _print_ranking_table(label: str, ranked: list[dict]) -> None:
     if not ranked:
         print(f"  (no runs match filter '{label}')")
@@ -481,10 +481,9 @@ def _print_ranking_table(label: str, ranked: list[dict]) -> None:
 # Main entry point
 # ---------------------------------------------------------------------------
 
+
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Analyze graph-layout-rag benchmark runs."
-    )
+    parser = argparse.ArgumentParser(description="Analyze graph-layout-rag benchmark runs.")
     parser.add_argument(
         "--runs-dir",
         default="data/eval/runs",
@@ -534,12 +533,12 @@ def main() -> None:
             return
 
     # --- Keyword / catalog ranking ---
-    print("=== Strategy Ranking (keyword qrels filter: '{}') ===".format(args.keyword_qrels))
+    print(f"=== Strategy Ranking (keyword qrels filter: '{args.keyword_qrels}') ===")
     kw_ranked = rank_strategies(runs, args.keyword_qrels)
     _print_ranking_table(args.keyword_qrels, kw_ranked)
 
     # --- NL / pdf-deep-read ranking ---
-    print("\n=== Strategy Ranking (NL qrels filter: '{}') ===".format(args.nl_qrels))
+    print(f"\n=== Strategy Ranking (NL qrels filter: '{args.nl_qrels}') ===")
     nl_ranked = rank_strategies(runs, args.nl_qrels)
     _print_ranking_table(args.nl_qrels, nl_ranked)
 
@@ -561,8 +560,7 @@ def main() -> None:
             print(f"  A: {top_a_name}  vs  B: {top_b_name}")
             print(f"  {ci['label']}")
             print(
-                f"  Δmean={ci['delta_mean']:+.4f}  "
-                f"95% CI=[{ci['ci_low']:.4f}, {ci['ci_high']:.4f}]"
+                f"  Δmean={ci['delta_mean']:+.4f}  95% CI=[{ci['ci_low']:.4f}, {ci['ci_high']:.4f}]"
             )
 
     # --- Judge audit (optional) ---

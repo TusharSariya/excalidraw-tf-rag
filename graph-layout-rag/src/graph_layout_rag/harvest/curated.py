@@ -208,8 +208,14 @@ LIBRARY_DOCS = [
         "url": "https://ogdf.github.io/",
         "source": "ogdf",
         "tags": [
-            "ogdf", "source-code-docs", "layered", "planar",
-            "orthogonal", "compaction", "packing", "routing",
+            "ogdf",
+            "source-code-docs",
+            "layered",
+            "planar",
+            "orthogonal",
+            "compaction",
+            "packing",
+            "routing",
         ],
         "content_url": "https://ogdf.github.io/doc/ogdf/",
     },
@@ -221,8 +227,13 @@ LIBRARY_DOCS = [
         "url": "https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-layered.html",
         "source": "elk",
         "tags": [
-            "elk", "source-code-docs", "layered", "sugiyama",
-            "coordinate-assignment", "crossing", "ports",
+            "elk",
+            "source-code-docs",
+            "layered",
+            "sugiyama",
+            "coordinate-assignment",
+            "crossing",
+            "ports",
         ],
         "content_url": "https://eclipse.dev/elk/reference/algorithms/org-eclipse-elk-layered.html",
     },
@@ -244,8 +255,12 @@ LIBRARY_DOCS = [
         "url": "https://github.com/dagrejs/dagre/wiki",
         "source": "dagre",
         "tags": [
-            "dagre", "source-code-docs", "layered", "sugiyama",
-            "layer-assignment", "coordinate-assignment",
+            "dagre",
+            "source-code-docs",
+            "layered",
+            "sugiyama",
+            "layer-assignment",
+            "coordinate-assignment",
         ],
         "content_url": "https://github.com/dagrejs/dagre/wiki",
     },
@@ -342,8 +357,7 @@ def _harvest_curated_pdf(spec: dict, *, dry_run: bool) -> ManifestItem:
 
     dest = PDF_DIR / f"{spec['id']}.pdf"
     insecure = any(
-        host in spec["url"]
-        for host in ("infotech.monash.edu", "it.monash.edu", "marvl.")
+        host in spec["url"] for host in ("infotech.monash.edu", "it.monash.edu", "marvl.")
     )
     try:
         dl = download_to_file(dest, spec["url"], dry_run=dry_run, verify=not insecure)

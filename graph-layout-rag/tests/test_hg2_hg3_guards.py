@@ -5,10 +5,7 @@ still written; a truncated rsync can leave the desktop BM25 index divergent from
 Mac's. Both are silent-and-unguarded without these checks.
 """
 
-import hashlib
-
 import pytest
-
 from graph_layout_rag.ingest import guards
 
 
@@ -41,8 +38,18 @@ def test_compare_fingerprints_identical():
 
 
 def test_compare_fingerprints_detects_truncated_sync():
-    local = {"chunk_count": 41083, "bm25_doc_count": 41083, "bm25_tree_hash": "abc", "bm25_n_files": 19890}
-    remote = {"chunk_count": 41083, "bm25_doc_count": 40000, "bm25_tree_hash": "xyz", "bm25_n_files": 19000}
+    local = {
+        "chunk_count": 41083,
+        "bm25_doc_count": 41083,
+        "bm25_tree_hash": "abc",
+        "bm25_n_files": 19890,
+    }
+    remote = {
+        "chunk_count": 41083,
+        "bm25_doc_count": 40000,
+        "bm25_tree_hash": "xyz",
+        "bm25_n_files": 19000,
+    }
     problems = guards.compare_fingerprints(local, remote)
     assert any("bm25_doc_count" in p for p in problems)
     assert any("bm25_tree_hash" in p for p in problems)

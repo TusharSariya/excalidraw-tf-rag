@@ -5,18 +5,29 @@ from rag_literature_rag.manifest import Manifest, ManifestItem
 
 def _item(id_, source, doi):
     return ManifestItem(
-        id=id_, title=id_, authors=[], year=2020, source=source,
-        url=f"https://example.org/{id_}", status="ok", tags=[], doi=doi,
+        id=id_,
+        title=id_,
+        authors=[],
+        year=2020,
+        source=source,
+        url=f"https://example.org/{id_}",
+        status="ok",
+        tags=[],
+        doi=doi,
     )
 
 
 def test_seed_dois_picks_high_signal_with_doi(monkeypatch):
-    man = Manifest(version=1, updatedAt="x", items=[
-        _item("a", "topic-seed", "10.1/a"),
-        _item("b", "forward-citation", "10.1/b"),
-        _item("c", "awesome-rag-table", None),
-        _item("d", "survey-seed", "10.1/d"),
-    ])
+    man = Manifest(
+        version=1,
+        updatedAt="x",
+        items=[
+            _item("a", "topic-seed", "10.1/a"),
+            _item("b", "forward-citation", "10.1/b"),
+            _item("c", "awesome-rag-table", None),
+            _item("d", "survey-seed", "10.1/d"),
+        ],
+    )
     monkeypatch.setattr(cit, "load_manifest", lambda: man)
     assert cit._seed_dois(max_seeds=10) == ["10.1/a", "10.1/d"]
 
@@ -42,15 +53,28 @@ def test_harvest_strict_filters_and_dedups(monkeypatch):
     monkeypatch.setattr(cit, "load_manifest", lambda: man)
     monkeypatch.setattr(cit, "_openalex_id_from_doi", lambda doi: "W999")
     citing = [
-        {"doi": "https://doi.org/10.1/good", "display_name": "Self-RAG retrieval augmented generation reflection"},
-        {"doi": "https://doi.org/10.1/bad", "display_name": "Boreal tree root architecture ecology"},
+        {
+            "doi": "https://doi.org/10.1/good",
+            "display_name": "Self-RAG retrieval augmented generation reflection",
+        },
+        {
+            "doi": "https://doi.org/10.1/bad",
+            "display_name": "Boreal tree root architecture ecology",
+        },
     ]
     monkeypatch.setattr(cit, "_search_cites", lambda oa_id, max_results: citing)
 
     def _fake_resolve(doi, **kw):
         return ManifestItem(
-            id="x", title=doi, authors=[], year=2021, source="forward-citation",
-            url="u", status="metadata_only", tags=["forward-citation"], doi=doi,
+            id="x",
+            title=doi,
+            authors=[],
+            year=2021,
+            source="forward-citation",
+            url="u",
+            status="metadata_only",
+            tags=["forward-citation"],
+            doi=doi,
         )
 
     monkeypatch.setattr(cit, "resolve_doi_with_fallbacks", _fake_resolve)

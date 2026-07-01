@@ -20,10 +20,9 @@ def test_degrades_to_hybrid_without_store(monkeypatch):
         "graph_layout_rag.query.retrieve.retrieve_candidates",
         lambda *a, **k: [dict(r) for r in sentinel],
     )
-    monkeypatch.setattr(
-        "graph_layout_rag.query.citation_rank.load_graph_cached", lambda: None
+    monkeypatch.setattr("graph_layout_rag.query.citation_rank.load_graph_cached", lambda: None)
+    case = EvalCase(
+        id="t", query="q", relevant_doc_ids=frozenset({"a"}), category=None, pdf_only=False
     )
-    case = EvalCase(id="t", query="q", relevant_doc_ids=frozenset({"a"}),
-                    category=None, pdf_only=False)
     out = CitationGraphStrategy().run(case, embed_profile="p", top=5)
     assert [r["doc_id"] for r in out] == ["a", "b"]

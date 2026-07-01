@@ -1,16 +1,23 @@
-from pathlib import Path
-
 from repo_rag.graph import build_graph, find_entities, neighbors
 from repo_rag.harvest.manifest import FileEntry, RepoManifest
 
 
 def _entry(path: str, is_test: bool = False) -> FileEntry:
-    return FileEntry(path=path, sha256="x", source_type="test" if is_test else "code", package="pkg", is_test=is_test)
+    return FileEntry(
+        path=path,
+        sha256="x",
+        source_type="test" if is_test else "code",
+        package="pkg",
+        is_test=is_test,
+    )
 
 
 def test_graph_finds_importers_and_callers(tmp_path, monkeypatch):
     (tmp_path / "lib.ts").write_text("export function target() { return 1; }\n", encoding="utf-8")
-    (tmp_path / "use.ts").write_text('import { target } from "./lib";\nexport function use() { return target(); }\n', encoding="utf-8")
+    (tmp_path / "use.ts").write_text(
+        'import { target } from "./lib";\nexport function use() { return target(); }\n',
+        encoding="utf-8",
+    )
     manifest = RepoManifest(files=[_entry("lib.ts"), _entry("use.ts")])
     db_path = tmp_path / "graph.sqlite"
     monkeypatch.setattr("repo_rag.graph.REPO_ROOT", tmp_path)

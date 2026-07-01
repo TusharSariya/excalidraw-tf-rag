@@ -18,8 +18,7 @@ from rag_literature_rag.harvest.rate_limit import (
 )
 
 USER_AGENT = (
-    "excalidraw-tf-rag-literature-rag/0.1 "
-    "(research; +https://github.com/excalidraw/excalidraw)"
+    "excalidraw-tf-rag-literature-rag/0.1 (research; +https://github.com/excalidraw/excalidraw)"
 )
 
 DEFAULT_MIN_PDF_BYTES = 10_000
@@ -84,9 +83,7 @@ def _finish(
     stage: str | None = None,
     **extra,
 ) -> dict:
-    outcome, transient = classify_outcome(
-        status=status, ok=ok, reason=reason, error=error
-    )
+    outcome, transient = classify_outcome(status=status, ok=ok, reason=reason, error=error)
     log_attempt(
         url=url,
         outcome=outcome,
@@ -144,8 +141,15 @@ def download_to_file(
     assert _download_semaphore is not None
     with _download_semaphore:
         return _download_to_file_unbounded(
-            dest, url, verify=verify, min_bytes=min_bytes, require_pdf=require_pdf,
-            expected_sha256=expected_sha256, doc_id=doc_id, doi=doi, stage=stage,
+            dest,
+            url,
+            verify=verify,
+            min_bytes=min_bytes,
+            require_pdf=require_pdf,
+            expected_sha256=expected_sha256,
+            doc_id=doc_id,
+            doi=doi,
+            stage=stage,
         )
 
 
@@ -225,8 +229,10 @@ def _download_to_file_unbounded(
         if res.status_code in _RETRYABLE_STATUSES:
             if res.status_code == 429:
                 note_rate_limit(domain, retry_after=last_retry_after)
-            wait = last_retry_after if last_retry_after else 2 ** (attempt - 1) * (
-                3 if res.status_code == 429 else 1
+            wait = (
+                last_retry_after
+                if last_retry_after
+                else 2 ** (attempt - 1) * (3 if res.status_code == 429 else 1)
             )
             log.debug(
                 "download HTTP %s for %s — retry in %ds (attempt %d)",

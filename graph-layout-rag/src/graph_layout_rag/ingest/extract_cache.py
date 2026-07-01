@@ -8,6 +8,7 @@ Cache lives at data/extract_cache/ (one file per unique PDF content+backend).
 Files are written atomically; concurrent writers for the same key are safe —
 last writer wins, and all produce identical content for the same key.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -24,6 +25,7 @@ log = logging.getLogger(__name__)
 
 _CACHE_VERSION = 1
 _CACHE_DIR = PKG_ROOT / "data" / "extract_cache"
+
 
 def _cache_key(sha256: str, backend: str, chunk_profile: str | None = None) -> str:
     fingerprint = json.dumps(

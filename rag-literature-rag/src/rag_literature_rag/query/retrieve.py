@@ -1,25 +1,39 @@
 from __future__ import annotations
 
+import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
-import math
-from typing import Any, Sequence
+from typing import Any
 
 import lancedb
-
 from rag_literature_rag.catalog.classify import build_catalog
 from rag_literature_rag.catalog.taxonomy import PIPELINE_CATEGORIES
 from rag_literature_rag.ingest import bm25
-from rag_literature_rag.ingest.embed import ENV_PREFIX, EmbedConfig, embed_config_from_env, embed_query
+from rag_literature_rag.ingest.embed import (
+    ENV_PREFIX,
+    EmbedConfig,
+    embed_config_from_env,
+    embed_query,
+)
 from rag_literature_rag.ingest.index import (
     _table_names,
     embed_config_from_state,
     load_ingest_state,
 )
 from rag_literature_rag.manifest import load_manifest
-from rag_literature_rag.paths import CHUNKS_TABLE, PARENTS_TABLE, SUMMARIES_TABLE, profile_index_paths
+from rag_literature_rag.paths import (
+    CHUNKS_TABLE,
+    PARENTS_TABLE,
+    SUMMARIES_TABLE,
+    profile_index_paths,
+)
 from rag_literature_rag.query.hybrid import merge_rankings, reciprocal_rank_fusion
-from rag_literature_rag.query.identity import canonical_identity_map, clear_identity_cache, split_values
+from rag_literature_rag.query.identity import (
+    canonical_identity_map,
+    clear_identity_cache,
+    split_values,
+)
 
 DEFAULT_HYBRID = True
 
@@ -41,9 +55,7 @@ def catalog_maps() -> tuple[dict[str, frozenset[str]], frozenset[str]]:
 @lru_cache(maxsize=1)
 def manifest_pdf_ids() -> frozenset[str]:
     return frozenset(
-        item.id
-        for item in load_manifest().items
-        if item.status == "ok" and item.localPath
+        item.id for item in load_manifest().items if item.status == "ok" and item.localPath
     )
 
 
@@ -80,7 +92,11 @@ def clear_retrieve_caches() -> None:
 
 
 def resolve_retrieve_context(*, embed_profile: str | None = None) -> RetrieveContext:
-    slug = profile_index_paths(embed_profile).profile if embed_profile else profile_index_paths().profile
+    slug = (
+        profile_index_paths(embed_profile).profile
+        if embed_profile
+        else profile_index_paths().profile
+    )
     cached = _CONTEXT_CACHE.get(slug)
     if cached is not None:
         return cached
@@ -181,7 +197,11 @@ def _dense_search(
 
 def _require_parent_indexes(ctx: RetrieveContext) -> None:
     parent_bm25 = ctx.paths.bm25_parent_dir or (ctx.paths.root / "bm25_parent")
-    if ctx.parent_table is None or not parent_bm25.exists() or not (parent_bm25 / "meta.json").exists():
+    if (
+        ctx.parent_table is None
+        or not parent_bm25.exists()
+        or not (parent_bm25 / "meta.json").exists()
+    ):
         profile_hint = (
             ctx.paths.profile
             if "small2big-dual" in ctx.paths.profile
@@ -196,7 +216,11 @@ def _require_parent_indexes(ctx: RetrieveContext) -> None:
 
 def _require_summary_indexes(ctx: RetrieveContext) -> None:
     summary_bm25 = ctx.paths.bm25_summary_dir or (ctx.paths.root / "bm25_summary")
-    if ctx.summary_table is None or not summary_bm25.exists() or not (summary_bm25 / "meta.json").exists():
+    if (
+        ctx.summary_table is None
+        or not summary_bm25.exists()
+        or not (summary_bm25 / "meta.json").exists()
+    ):
         profile_hint = ctx.paths.profile
         if "raptor" in profile_hint:
             build_hint = (
@@ -204,9 +228,7 @@ def _require_summary_indexes(ctx: RetrieveContext) -> None:
             )
             label = "RAPTOR tree"
         else:
-            build_hint = (
-                "rag-literature-rag ingest --embed-profile cuda-qwen0.6b-docsummary-gemma4-v1 --force --rebuild"
-            )
+            build_hint = "rag-literature-rag ingest --embed-profile cuda-qwen0.6b-docsummary-gemma4-v1 --force --rebuild"
             label = "document summary"
         raise ValueError(
             f"Profile {ctx.paths.profile!r} does not have {label} indexes. "
@@ -337,9 +359,7 @@ def _apply_filters(
 
         if filters.category:
             row_cats = {
-                c.strip()
-                for c in (row.get("pipeline_categories") or "").split(",")
-                if c.strip()
+                c.strip() for c in (row.get("pipeline_categories") or "").split(",") if c.strip()
             }
             if not row_cats:
                 row_cats = set(category_map.get(doc_id, ()))

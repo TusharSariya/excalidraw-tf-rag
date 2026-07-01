@@ -33,6 +33,7 @@ class _DenseEmbedBase(_EvictableModel):
 
     def _load_from_disk(self) -> None:
         from sentence_transformers import SentenceTransformer
+
         log.info("lazy-loading dense embed model %s", self._model_path)
         self._model = SentenceTransformer(self._model_path, device="cuda")
         # Cap input sequence length — long code chunks produce O(seq²) attention
@@ -44,7 +45,9 @@ class _DenseEmbedBase(_EvictableModel):
         self._ensure_loaded()
         # batch_size=32 keeps activation memory well under 8 GB regardless of how many
         # texts the caller sends in a single HTTP request.
-        vecs = self._model.encode(texts, normalize_embeddings=True, show_progress_bar=False, batch_size=32)
+        vecs = self._model.encode(
+            texts, normalize_embeddings=True, show_progress_bar=False, batch_size=32
+        )
         return vecs.tolist()
 
 
@@ -53,6 +56,7 @@ class DenseEmbed4B(_DenseEmbedBase):
     def _load_from_disk(self) -> None:
         from sentence_transformers import SentenceTransformer
         from transformers import BitsAndBytesConfig
+
         # Qwen3-4B is ~8 GB in bf16 — OOMs on an 8 GB card.
         # BitsAndBytesConfig(load_in_8bit=True) reduces to ~4 GB.
         bnb = BitsAndBytesConfig(load_in_8bit=True)
@@ -72,6 +76,7 @@ class DenseEmbed4B(_DenseEmbedBase):
         """bitsandbytes int8 layers don't reliably survive .to('cpu')→.to('cuda').
         Run a 1-token self-test: correct shape + finite values, else fall back."""
         import math
+
         try:
             v = self._model.encode(
                 ["ok"], normalize_embeddings=True, show_progress_bar=False, batch_size=1
@@ -88,7 +93,9 @@ class DenseEmbed4B(_DenseEmbedBase):
         self._ensure_loaded()
         # batch_size=8, seq=256: FFN activation = 8 × 256 × 8192 × 2B ≈ 32 MB/layer —
         # well within the ~1.5 GB headroom left after loading 5.7 GB of int8 weights.
-        vecs = self._model.encode(texts, normalize_embeddings=True, show_progress_bar=False, batch_size=8)
+        vecs = self._model.encode(
+            texts, normalize_embeddings=True, show_progress_bar=False, batch_size=8
+        )
         return vecs.tolist()
 
 
@@ -96,6 +103,7 @@ class DenseEmbed4B(_DenseEmbedBase):
 class DenseEmbed06B(_DenseEmbedBase):
     def _load_from_disk(self) -> None:
         from sentence_transformers import SentenceTransformer
+
         log.info("lazy-loading dense embed model %s", self._model_path)
         self._model = SentenceTransformer(self._model_path, device="cuda")
         # 512 tokens: attention scales as seq², and 2048 OOMs an 8 GB card.
@@ -106,5 +114,7 @@ class DenseEmbed06B(_DenseEmbedBase):
         self._ensure_loaded()
         # batch_size=4: 0.6B FFN intermediate is large; batch_size=32 OOMs
         # (28 layers × 32 × 512 × 4096 × 2B ≈ 7 GB of activations alone).
-        vecs = self._model.encode(texts, normalize_embeddings=True, show_progress_bar=False, batch_size=4)
+        vecs = self._model.encode(
+            texts, normalize_embeddings=True, show_progress_bar=False, batch_size=4
+        )
         return vecs.tolist()

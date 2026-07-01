@@ -2,7 +2,10 @@ from rag_literature_rag.manifest import Manifest, ManifestItem, slug_id, upsert_
 
 
 def test_slug_id():
-    assert slug_id("A Technique for Drawing Directed Graphs") == "a-technique-for-drawing-directed-graphs"
+    assert (
+        slug_id("A Technique for Drawing Directed Graphs")
+        == "a-technique-for-drawing-directed-graphs"
+    )
 
 
 def test_upsert_replaces_by_id():

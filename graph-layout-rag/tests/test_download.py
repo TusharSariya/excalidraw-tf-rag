@@ -1,12 +1,11 @@
-from pathlib import Path
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-
 from graph_layout_rag.harvest import download
 from graph_layout_rag.harvest.download import close_thread_clients, download_to_file
 
@@ -67,7 +66,9 @@ def test_download_retries_on_429(tmp_path: Path):
     dest = tmp_path / "out.pdf"
     pdf_bytes = b"%PDF-1.4\n" + b"x" * 20_000
     rate_limited = MagicMock(status_code=429, headers={})
-    ok_response = MagicMock(status_code=200, content=pdf_bytes, headers={"content-type": "application/pdf"})
+    ok_response = MagicMock(
+        status_code=200, content=pdf_bytes, headers={"content-type": "application/pdf"}
+    )
 
     with patch("graph_layout_rag.harvest.download.log_attempt"):
         with patch("graph_layout_rag.harvest.download.httpx.Client") as client_cls:
@@ -105,7 +106,9 @@ def test_download_respects_retry_after(tmp_path: Path):
     dest = tmp_path / "out.pdf"
     pdf_bytes = b"%PDF-1.4\n" + b"x" * 20_000
     rate_limited = MagicMock(status_code=429, headers={"Retry-After": "5"})
-    ok_response = MagicMock(status_code=200, content=pdf_bytes, headers={"content-type": "application/pdf"})
+    ok_response = MagicMock(
+        status_code=200, content=pdf_bytes, headers={"content-type": "application/pdf"}
+    )
 
     with patch("graph_layout_rag.harvest.download.log_attempt"):
         with patch("graph_layout_rag.harvest.download.httpx.Client") as client_cls:
@@ -139,5 +142,7 @@ def test_global_download_limit_bounds_nested_pools(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(download, "_download_to_file_unbounded", fake_download)
     download.set_download_limit(3)
     with ThreadPoolExecutor(max_workers=12) as pool:
-        list(pool.map(lambda i: download_to_file(tmp_path / f"{i}.pdf", f"https://x/{i}"), range(12)))
+        list(
+            pool.map(lambda i: download_to_file(tmp_path / f"{i}.pdf", f"https://x/{i}"), range(12))
+        )
     assert peak == 3

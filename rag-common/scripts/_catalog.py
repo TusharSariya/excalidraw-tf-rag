@@ -30,6 +30,7 @@ Restore never needs DynamoDB — the run-manifest JSON written to
 `_catalog/runs/<run-id>.json` is the self-contained source of truth. This table
 is a convenience index. Requires Python >= 3.11.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -44,10 +45,23 @@ _BOOL = {"deduped"}
 # The flat record shape, in a stable order. Built from CATREC_<UPPER> env vars by
 # `make-record` so the harness never hand-assembles JSON in bash.
 _RECORD_FIELDS = (
-    "artifact", "run_id", "tool", "category", "name",
-    "s3_bucket", "s3_key", "s3_version_id",
-    "sha256", "size_bytes", "content_sig", "storage_class", "deduped",
-    "host", "tool_git_sha", "created_at", "provenance",
+    "artifact",
+    "run_id",
+    "tool",
+    "category",
+    "name",
+    "s3_bucket",
+    "s3_key",
+    "s3_version_id",
+    "sha256",
+    "size_bytes",
+    "content_sig",
+    "storage_class",
+    "deduped",
+    "host",
+    "tool_git_sha",
+    "created_at",
+    "provenance",
 )
 
 

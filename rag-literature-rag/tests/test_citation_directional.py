@@ -6,7 +6,14 @@ from rag_literature_rag.query.citation_rank import CitationGraph, personalized_p
 def _toy() -> CitationGraph:
     # Wa -> R1, R2 ; Wb -> R1 ; Wc -> R2 ; Wx -> Wa, Wb
     g = CitationGraph()
-    for s, d in [("Wa", "R1"), ("Wa", "R2"), ("Wb", "R1"), ("Wc", "R2"), ("Wx", "Wa"), ("Wx", "Wb")]:
+    for s, d in [
+        ("Wa", "R1"),
+        ("Wa", "R2"),
+        ("Wb", "R1"),
+        ("Wc", "R2"),
+        ("Wx", "Wa"),
+        ("Wx", "Wb"),
+    ]:
         g.add_edge(s, d)
     g.oa_to_doc = {"Wa": "doc-a", "Wb": "doc-b", "Wc": "doc-c"}
     g.doc_to_oa = {v: k for k, v in g.oa_to_doc.items()}

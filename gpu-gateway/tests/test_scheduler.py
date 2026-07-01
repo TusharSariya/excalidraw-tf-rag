@@ -14,7 +14,6 @@ import asyncio
 import collections
 
 import pytest
-
 from gpu_gateway.scheduler import LLM_SENTINEL, Job, Scheduler
 
 VRAM = {
@@ -41,7 +40,7 @@ def make_sched(*, free=100_000, unload_parks=False, **kw) -> tuple[Scheduler, di
     """Build a Scheduler with recording fakes. `free` may be an int or a 0-arg callable
     (to model measured VRAM that changes as models evict)."""
     rec = {"embed": [], "rerank": [], "chat": [], "unload": []}
-    embed_raise = kw.pop("embed_raise", None)   # None | "always" | callable(texts)->bool
+    embed_raise = kw.pop("embed_raise", None)  # None | "always" | callable(texts)->bool
 
     async def embed_fn(canonical, texts):
         rec["embed"].append((canonical, list(texts)))
@@ -92,11 +91,12 @@ def enqueue(sched: Scheduler, model: str, n: int, kind: str = "embed", *, at: fl
 # _select_model
 # --------------------------------------------------------------------------
 
+
 def test_select_resident_with_work_beats_deeper_nonresident():
     sched, _ = make_sched()
     sched._resident[DEVICE] = {"cuda-qwen0.6b-1024"}
     enqueue(sched, "cuda-qwen0.6b-1024", 1)
-    enqueue(sched, "cuda-qwen4b-1024", 3)   # deeper but NOT resident
+    enqueue(sched, "cuda-qwen4b-1024", 3)  # deeper but NOT resident
     assert sched._select_model() == "cuda-qwen0.6b-1024"
 
 
@@ -129,7 +129,7 @@ def test_starvation_preempts_long_served_model():
     sched._served_streak = sched._drain_max
     enqueue(sched, "cuda-qwen0.6b-1024", 1, at=clock.t)
     enqueue(sched, "cuda-qwen4b-1024", 1, at=clock.t)
-    clock.advance(sched._starve_ms / 1000.0 + 1.0)   # age the 4B waiter past the floor
+    clock.advance(sched._starve_ms / 1000.0 + 1.0)  # age the 4B waiter past the floor
     assert sched._select_model() == "cuda-qwen4b-1024"
 
 
@@ -138,7 +138,7 @@ def test_no_starvation_before_streak():
     sched, _ = make_sched(clock=clock)
     sched._resident[DEVICE] = {"cuda-qwen0.6b-1024"}
     sched._last_served = "cuda-qwen0.6b-1024"
-    sched._served_streak = sched._drain_max - 1        # streak not yet reached
+    sched._served_streak = sched._drain_max - 1  # streak not yet reached
     enqueue(sched, "cuda-qwen0.6b-1024", 1, at=clock.t)
     enqueue(sched, "cuda-qwen4b-1024", 1, at=clock.t)
     clock.advance(sched._starve_ms / 1000.0 + 1.0)
@@ -148,6 +148,7 @@ def test_no_starvation_before_streak():
 # --------------------------------------------------------------------------
 # _drain
 # --------------------------------------------------------------------------
+
 
 def test_drain_coalesces_embed_up_to_max():
     sched, _ = make_sched(drain_max=4)
@@ -161,7 +162,9 @@ def test_drain_token_budget_stops_early():
     sched, _ = make_sched(drain_max=100, drain_token_budget=10)
     q = sched._queues.setdefault("cuda-qwen0.6b-1024", collections.deque())
     for _ in range(5):
-        q.append(Job(kind="embed", canonical="cuda-qwen0.6b-1024", items=["x" * 40]))  # ~10 tokens each
+        q.append(
+            Job(kind="embed", canonical="cuda-qwen0.6b-1024", items=["x" * 40])
+        )  # ~10 tokens each
     batch = sched._drain("cuda-qwen0.6b-1024")
     # first job always taken; second would exceed the 10-token budget → stop at 1
     assert len(batch) == 1
@@ -178,11 +181,12 @@ def test_drain_rerank_one_at_a_time():
 # _pick_victim
 # --------------------------------------------------------------------------
 
+
 def test_victim_idle_before_busy():
     sched, _ = make_sched()
     sched._resident[DEVICE] = {"cuda-qwen0.6b-1024", "bge-reranker-v2-m3"}
     sched._loaded_at = {"cuda-qwen0.6b-1024": 1.0, "bge-reranker-v2-m3": 2.0}
-    enqueue(sched, "cuda-qwen0.6b-1024", 2)   # busy
+    enqueue(sched, "cuda-qwen0.6b-1024", 2)  # busy
     # reranker idle → evict reranker even though it's more recently used
     assert sched._pick_victim("cuda-qwen4b-1024") == "bge-reranker-v2-m3"
 
@@ -207,19 +211,20 @@ def test_victim_shallower_queue_tiebreak():
 # _admit
 # --------------------------------------------------------------------------
 
+
 async def test_admit_coresidence_no_evict():
     sched, rec = make_sched()
-    sched._resident[DEVICE] = {"cuda-qwen0.6b-1024"}   # 1800
-    await sched._admit("bge-reranker-v2-m3")            # +1200 = 3000 ≤ 7200
+    sched._resident[DEVICE] = {"cuda-qwen0.6b-1024"}  # 1800
+    await sched._admit("bge-reranker-v2-m3")  # +1200 = 3000 ≤ 7200
     assert sched._resident[DEVICE] == {"cuda-qwen0.6b-1024", "bge-reranker-v2-m3"}
     assert rec["unload"] == []
 
 
 async def test_admit_evicts_when_over_static_budget():
     sched, rec = make_sched()
-    sched._resident[DEVICE] = {"cuda-qwen4b-1024"}     # 5800
+    sched._resident[DEVICE] = {"cuda-qwen4b-1024"}  # 5800
     sched._loaded_at = {"cuda-qwen4b-1024": 1.0}
-    await sched._admit("cuda-qwen0.6b-1024")           # 5800+1800=7600 > 7200 → evict 4B
+    await sched._admit("cuda-qwen0.6b-1024")  # 5800+1800=7600 > 7200 → evict 4B
     assert rec["unload"] == ["cuda-qwen4b-1024"]
     assert sched._resident[DEVICE] == {"cuda-qwen0.6b-1024"}
 
@@ -244,12 +249,12 @@ async def test_admit_measured_gate_evicts_more():
 
     sched._unload_fn = unload_fn
     await sched._admit("cuda-qwen4b-1024")
-    assert rec["unload"] == ["bge-reranker-v2-m3"]     # measured gate forced the evict
+    assert rec["unload"] == ["bge-reranker-v2-m3"]  # measured gate forced the evict
     assert sched._resident[DEVICE] == {"cuda-qwen4b-1024"}
 
 
 async def test_admit_raises_when_nothing_to_evict():
-    sched, _ = make_sched(free=100)   # perpetually too low, nothing resident to evict
+    sched, _ = make_sched(free=100)  # perpetually too low, nothing resident to evict
     with pytest.raises(RuntimeError):
         await sched._admit("cuda-qwen4b-1024")
 
@@ -266,6 +271,7 @@ async def test_admit_already_resident_is_noop():
 # load-evict, no coalescing. These lock the control curve so the wedge proof's
 # comparison is trustworthy.
 # --------------------------------------------------------------------------
+
 
 def test_naive_drain_serves_one_even_for_embed():
     # Embed is coalescable, but naive must serve exactly one request per load.
@@ -298,7 +304,7 @@ async def test_naive_admit_evicts_all_other_residents():
 
 def test_affinity_drain_still_coalesces():
     # Guard the default path: affinity still coalesces embed up to drain_max.
-    sched, _ = make_sched(drain_max=64)   # mode defaults to "affinity"
+    sched, _ = make_sched(drain_max=64)  # mode defaults to "affinity"
     enqueue(sched, "cuda-qwen0.6b-1024", 10)
     assert len(sched._drain("cuda-qwen0.6b-1024")) == 10
 
@@ -306,6 +312,7 @@ def test_affinity_drain_still_coalesces():
 # --------------------------------------------------------------------------
 # _serve — coalescing + fallback
 # --------------------------------------------------------------------------
+
 
 async def test_serve_coalesces_embed_into_one_call():
     sched, rec = make_sched()
@@ -315,17 +322,17 @@ async def test_serve_coalesces_embed_into_one_call():
         j.future = asyncio.get_running_loop().create_future()
         jobs.append(j)
     await sched._serve("cuda-qwen0.6b-1024", jobs)
-    assert len(rec["embed"]) == 1                       # ONE coalesced call
-    assert len(rec["embed"][0][1]) == 6                 # all 3×2 texts
+    assert len(rec["embed"]) == 1  # ONE coalesced call
+    assert len(rec["embed"][0][1]) == 6  # all 3×2 texts
     for j in jobs:
-        assert len(j.future.result()) == 2              # each job gets its 2 vectors back
+        assert len(j.future.result()) == 2  # each job gets its 2 vectors back
 
 
 async def test_serve_per_job_fallback_on_batch_error():
     # Coalesced call fails only when the combined batch contains the poison text;
     # per-job retry should still resolve the clean jobs and fail only the bad one.
     def poison(texts):
-        return "POISON" in texts and len(texts) > 1     # fail the coalesced call
+        return "POISON" in texts and len(texts) > 1  # fail the coalesced call
 
     sched, rec = make_sched(embed_raise=poison)
     good = Job(kind="embed", canonical="cuda-qwen0.6b-1024", items=["ok"])
@@ -333,7 +340,7 @@ async def test_serve_per_job_fallback_on_batch_error():
     for j in (good, bad):
         j.future = asyncio.get_running_loop().create_future()
     await sched._serve("cuda-qwen0.6b-1024", [good, bad])
-    assert good.future.result() is not None             # clean job resolved via fallback
+    assert good.future.result() is not None  # clean job resolved via fallback
     # bad job: single-item call has len==1 so poison() is False → it also resolves
     assert bad.future.done()
     assert sched._metrics["coalesce_fallbacks"] == 1
@@ -342,6 +349,7 @@ async def test_serve_per_job_fallback_on_batch_error():
 # --------------------------------------------------------------------------
 # End-to-end dispatcher (real event loop)
 # --------------------------------------------------------------------------
+
 
 async def test_end_to_end_embed_roundtrip():
     sched, rec = make_sched()
@@ -358,10 +366,12 @@ async def test_chat_evicts_all_regression():
     sched._resident[DEVICE] = {"cuda-qwen0.6b-1024", "bge-reranker-v2-m3"}
     sched._loaded_at = {"cuda-qwen0.6b-1024": 1.0, "bge-reranker-v2-m3": 2.0}
 
-    res = await sched.submit(Job(kind="chat", canonical=LLM_SENTINEL, payload={"model": "gemma4:e4b"}))
+    res = await sched.submit(
+        Job(kind="chat", canonical=LLM_SENTINEL, payload={"model": "gemma4:e4b"})
+    )
     assert res["ok"] is True
     assert set(rec["unload"]) == {"cuda-qwen0.6b-1024", "bge-reranker-v2-m3"}
-    assert sched._resident[DEVICE] == set()             # sentinel dropped post-serve
+    assert sched._resident[DEVICE] == set()  # sentinel dropped post-serve
     assert len(rec["chat"]) == 1
 
 
@@ -371,7 +381,7 @@ async def test_error_boundary_fails_batch_and_survives():
     sched, rec = make_sched(embed_raise="always")
     with pytest.raises(RuntimeError):
         await sched.submit(Job(kind="embed", canonical="cuda-qwen0.6b-1024", items=["x"]))
-    assert sched.alive()                                # loop survived the failure
+    assert sched.alive()  # loop survived the failure
     # Now make embeds succeed and confirm the loop still serves.
     ok_calls = {"n": 0}
 

@@ -27,6 +27,7 @@ asserts relevance itself — it stays bias-honest by deferring to the pooled jud
 Bias guards live here by construction: system-blind prompts, an anti-lexical-leakage
 filter, de-dup vs curated, and enforced stratum balance (reported in the manifest).
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -37,8 +38,7 @@ import random
 import re
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Any
 
 from rag_literature_rag.eval.gold_cases import GOLD_CASES, EvalCase
@@ -166,14 +166,7 @@ def _fulltext_chunks(profile: str) -> dict[str, str]:
     if CHUNKS_TABLE not in names:
         return {}
     tbl = db.open_table(CHUNKS_TABLE)
-    rows = (
-        tbl
-        .search()
-        .select(["doc_id", "text"])
-        .limit(tbl.count_rows())
-        .to_arrow()
-        .to_pylist()
-    )
+    rows = tbl.search().select(["doc_id", "text"]).limit(tbl.count_rows()).to_arrow().to_pylist()
     best: dict[str, str] = {}
     for r in rows:
         doc_id, text = r.get("doc_id"), r.get("text") or ""
@@ -281,9 +274,7 @@ def _save_cache(cache: dict[str, str]) -> None:
 
 
 def _cache_key(seed: Seed, mode: str) -> str:
-    h = hashlib.sha256(
-        f"{seed.doc_id}|{seed.partner_id or ''}".encode()
-    ).hexdigest()[:16]
+    h = hashlib.sha256(f"{seed.doc_id}|{seed.partner_id or ''}".encode()).hexdigest()[:16]
     return f"{SYNTH_VERSION}:{mode}:{h}"
 
 
@@ -299,16 +290,14 @@ def _build_prompt(seed: Seed, mode: str) -> str:
     )
     if mode == "hard" and seed.partner_id:
         return (
-            common
-            + "Write a single question whose full answer requires BOTH of these papers "
+            common + "Write a single question whose full answer requires BOTH of these papers "
             "(a multi-hop comparison or synthesis), without naming either.\n"
             f"PAPER A: {seed.title}\n{body}\n\n"
             f"PAPER B: {seed.partner_title}\n"
         )
     if mode == "hard":
         return (
-            common
-            + "Phrase it indirectly: an applied, problem-first question whose solution "
+            common + "Phrase it indirectly: an applied, problem-first question whose solution "
             "is this paper's method, using everyday wording rather than the paper's terms.\n"
             f"PAPER: {seed.title}\n{body}\n"
         )
@@ -351,7 +340,7 @@ def _generate_one(seed: Seed, mode: str, model: str) -> str:
             last_exc = exc
             if _is_fatal(exc) or not _is_rate_limit(exc):
                 raise
-            wait = _parse_retry_after(exc) or (2 ** attempt)
+            wait = _parse_retry_after(exc) or (2**attempt)
             time.sleep(min(wait, 30))
     raise last_exc if last_exc else RuntimeError("generation failed")
 
@@ -472,9 +461,7 @@ def build_synth_cases(
         if n <= 0:
             continue
         track_t: EvalTrack = track  # type: ignore[assignment]
-        seeds = sample_seed_docs(
-            profile, track_t, n, rng=rng, exclude_ids=set(curated_ids)
-        )
+        seeds = sample_seed_docs(profile, track_t, n, rng=rng, exclude_ids=set(curated_ids))
         n_hard = int(round(len(seeds) * hard_frac))
         modes = ["hard"] * n_hard + ["single"] * (len(seeds) - n_hard)
         rng.shuffle(modes)
@@ -517,9 +504,7 @@ def build_synth_cases(
         "total_cases": len(all_cases),
         "by_track": per_track_stats,
         "by_category": dict(Counter(c.category for c in all_cases)),
-        "by_mode": dict(
-            Counter(c.notes.split("mode=")[1].split(";")[0] for c in all_cases)
-        ),
+        "by_mode": dict(Counter(c.notes.split("mode=")[1].split(";")[0] for c in all_cases)),
     }
     return all_cases, manifest
 

@@ -7,12 +7,12 @@ reconstructs TextChunk objects, and calls upsert_chunks under the
 hook (LLM context line per chunk) before embedding. Fair A/B: identical chunks,
 only the embed/BM25 text gains a context prefix.
 """
+
 from __future__ import annotations
 
 import sys
 
 import lancedb
-
 from graph_layout_rag.ingest.chunk import TextChunk
 from graph_layout_rag.ingest.embed import embed_config_from_env
 from graph_layout_rag.ingest.index import CHUNKS_TABLE, upsert_chunks
@@ -76,10 +76,16 @@ def main() -> int:
 
     chunks = [_row_to_chunk(r) for r in rows]
     cfg = embed_config_from_env(profile=DST_PROFILE)
-    print(f"embedding under {DST_PROFILE}: backend={cfg.backend} model={cfg.model} dims={cfg.dimensions}", flush=True)
+    print(
+        f"embedding under {DST_PROFILE}: backend={cfg.backend} model={cfg.model} dims={cfg.dimensions}",
+        flush=True,
+    )
 
     written = upsert_chunks(chunks, rebuild=True, config=cfg, profile=DST_PROFILE)
-    print(f"contextual index written: {written} rows -> {profile_index_paths(DST_PROFILE).root}", flush=True)
+    print(
+        f"contextual index written: {written} rows -> {profile_index_paths(DST_PROFILE).root}",
+        flush=True,
+    )
     return 0
 
 

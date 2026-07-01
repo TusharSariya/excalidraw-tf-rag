@@ -126,7 +126,9 @@ def _resolve_elk_doi(doi: str, *, dry_run: bool) -> ManifestItem:
     return item
 
 
-def harvest_elk_references(*, dry_run: bool = False, workers: int | None = None) -> list[ManifestItem]:
+def harvest_elk_references(
+    *, dry_run: bool = False, workers: int | None = None
+) -> list[ManifestItem]:
     seen_dois: list[str] = []
     seen: set[str] = set()
     for doi in ELK_REFERENCE_DOIS:
@@ -148,7 +150,7 @@ def harvest_elk_references(*, dry_run: bool = False, workers: int | None = None)
                 authors=spec.get("authors", []),
                 year=spec.get("year"),
                 source="elk-bibliography",
-                url=f"https://arxiv.org/abs/2311.00533",
+                url="https://arxiv.org/abs/2311.00533",
                 contentType="text/metadata",
                 status="metadata_only",
                 tags=[*spec.get("tags", []), "elk"],

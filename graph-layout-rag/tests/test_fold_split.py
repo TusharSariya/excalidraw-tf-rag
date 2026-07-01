@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-
 from graph_layout_rag.eval.folds import (
     FOLDS,
     compute_folds,

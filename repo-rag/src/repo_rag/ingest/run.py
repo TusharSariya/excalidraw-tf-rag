@@ -5,20 +5,26 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import click
+from rag_common.profiles import resolve_profile_name
 
-from repo_rag.chunk.ast_ts import chunk_file
-from repo_rag.chunk.ast_ts import count_tokens
+from repo_rag.chunk.ast_ts import chunk_file, count_tokens
 from repo_rag.chunk.contextualize import contextual_enabled, contextualize_chunks
 from repo_rag.chunk.types import TextChunk
+from repo_rag.graph import build_graph, graph_counts
 from repo_rag.harvest.manifest import FileEntry, save_manifest
 from repo_rag.harvest.walk import harvest_repo
-from repo_rag.graph import build_graph, graph_counts
 from repo_rag.ingest import bm25 as bm25_index
-from repo_rag.ingest.embed import ENV_PREFIX, EmbedConfig, EmbedStats, embed_config_from_env, prepare_embed_config, resolve_workers
-from rag_common.profiles import resolve_profile_name
-from repo_rag.logging_config import get_logger
+from repo_rag.ingest.embed import (
+    ENV_PREFIX,
+    EmbedConfig,
+    EmbedStats,
+    prepare_embed_config,
+    resolve_workers,
+)
 from repo_rag.ingest.index import (
     chunk_count as lance_chunk_count,
+)
+from repo_rag.ingest.index import (
     delete_chunks_for_file,
     embed_config_mismatch,
     load_ingest_state,
@@ -26,6 +32,7 @@ from repo_rag.ingest.index import (
     update_ingest_metadata,
     upsert_chunks,
 )
+from repo_rag.logging_config import get_logger
 from repo_rag.paths import REPO_ROOT, profile_index_paths
 
 log = get_logger("index")
@@ -105,7 +112,9 @@ def _chunk_entries_parallel(
             if done % PROGRESS_EVERY == 0:
                 log.info("chunk progress %d/%d files, %d chunks", done, total, len(all_chunks))
 
-    log.info("chunked %d files -> %d chunks (%d errors)", len(file_hashes), len(all_chunks), len(errors))
+    log.info(
+        "chunked %d files -> %d chunks (%d errors)", len(file_hashes), len(all_chunks), len(errors)
+    )
     return all_chunks, file_hashes, errors
 
 
@@ -157,7 +166,9 @@ def _bulk_upsert(
         )
         bm25_index.upsert_chunks(batch, rebuild=rebuild and first, profile=index_paths)
         rebuild = False
-        log.info("upsert progress %d/%d chunks", min(i + LANCE_WRITE_BATCH, len(chunks)), len(chunks))
+        log.info(
+            "upsert progress %d/%d chunks", min(i + LANCE_WRITE_BATCH, len(chunks)), len(chunks)
+        )
     return total
 
 
@@ -183,7 +194,9 @@ def run_index(
         os.getenv("ANTHROPIC_API_KEY") or os.getenv("ANTHROPIC_AUTH_TOKEN")
     )
     if contextual and not use_llm:
-        log.warning("contextual retrieval on but no ANTHROPIC_API_KEY; using deterministic heuristic")
+        log.warning(
+            "contextual retrieval on but no ANTHROPIC_API_KEY; using deterministic heuristic"
+        )
 
     manifest = harvest_repo()
     save_manifest(manifest)
@@ -252,7 +265,12 @@ def run_index(
     all_chunks, new_hashes, errors = _chunk_entries_parallel(
         to_process, n_workers, contextual=contextual, use_llm=use_llm
     )
-    log.info("chunk phase elapsed_s=%.1f contextual=%s use_llm=%s", time.monotonic() - chunk_started, contextual, use_llm)
+    log.info(
+        "chunk phase elapsed_s=%.1f contextual=%s use_llm=%s",
+        time.monotonic() - chunk_started,
+        contextual,
+        use_llm,
+    )
 
     for msg in errors:
         click.echo(f"  skip unreadable: {msg}", err=True)

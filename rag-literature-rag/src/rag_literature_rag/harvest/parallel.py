@@ -70,6 +70,7 @@ def parallel_map(
     max_in_flight = min(len(items), max(n, n * 2))
 
     with ThreadPoolExecutor(max_workers=n) as pool:
+
         def submit_available() -> None:
             while pending_items and len(in_flight) < max_in_flight and not stop_requested():
                 idx, item = pending_items.popleft()

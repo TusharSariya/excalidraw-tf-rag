@@ -42,8 +42,6 @@ import os
 import subprocess
 import sys
 import time
-import urllib.error
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 # Reuse the pinned request mix + helpers from benchmark.py (same directory).
@@ -52,19 +50,20 @@ import benchmark  # noqa: E402
 
 # --- Pinned thresholds -----------------------------------------------------
 CARD_CEILING_MB = 7500
-COALESCE_BURST = 16          # concurrent same-model embeds for the V6 coalesce check
+COALESCE_BURST = 16  # concurrent same-model embeds for the V6 coalesce check
 STRESS_REQUESTS = 120
 STRESS_CONCURRENCY = 12
 
 EMBED_0_6B = "cuda-qwen0.6b-1024"
 EMBED_4B = "cuda-qwen4b-1024"
 RERANKER = "bge-reranker-v2-m3"
-CHAT_MODEL = "gemma4:e2b"        # must exist in Ollama (`ollama list`)
+CHAT_MODEL = "gemma4:e2b"  # must exist in Ollama (`ollama list`)
 
 
 # --------------------------------------------------------------------------
 # HTTP + math helpers
 # --------------------------------------------------------------------------
+
 
 def _post(url: str, path: str, body: dict, timeout: float = 180.0):
     return benchmark._post(url, path, body, timeout)
@@ -93,14 +92,13 @@ def _row(check: str, verdict: str, message: str, evidence: dict) -> dict:
 # Probes (run first — record reality about the known-unknowns)
 # --------------------------------------------------------------------------
 
+
 def probe_replica(url: str) -> dict:
     """Record the `serve status` shape (the API the replica-guard depends on) and
     confirm the gateway is up as a single replica."""
     shape = ""
     try:
-        out = subprocess.run(
-            ["serve", "status"], capture_output=True, text=True, timeout=30
-        )
+        out = subprocess.run(["serve", "status"], capture_output=True, text=True, timeout=30)
         shape = (out.stdout or out.stderr).strip()
     except Exception as exc:  # noqa: BLE001 — CLI may be absent; record it
         shape = f"<serve status unavailable: {exc}>"
@@ -109,7 +107,8 @@ def probe_replica(url: str) -> dict:
         "PROBE replica",
         "PROBE",
         "recorded `serve status` shape; gateway reachable as single replica"
-        if healthy else "gateway not healthy",
+        if healthy
+        else "gateway not healthy",
         {"serve_status": shape[:2000], "gateway_healthy": healthy},
     )
 
@@ -128,11 +127,13 @@ def probe_4b_bnb(url: str) -> dict:
     'disabled-after-failure') and STILL returns a valid embedding — that IS the pass."""
     nonce = str(time.monotonic_ns())
     try:
-        _embed_vec(url, EMBED_4B, f"bnb-probe-a-{nonce}")   # miss → loads 4B
+        _embed_vec(url, EMBED_4B, f"bnb-probe-a-{nonce}")  # miss → loads 4B
         # Chat occupies the whole card → evicts 4B (parks it if the flag is on).
-        _post(url, "/v1/chat/completions",
-              {"model": CHAT_MODEL, "messages": [{"role": "user", "content": "hi"}],
-               "max_tokens": 8})
+        _post(
+            url,
+            "/v1/chat/completions",
+            {"model": CHAT_MODEL, "messages": [{"role": "user", "content": "hi"}], "max_tokens": 8},
+        )
         vec_after = _embed_vec(url, EMBED_4B, f"bnb-probe-b-{nonce}")  # miss → reload/unpark
     except Exception as exc:  # noqa: BLE001
         return _row("PROBE 4B bnb", "FAIL", f"round-trip raised: {exc}", {})
@@ -147,7 +148,8 @@ def probe_4b_bnb(url: str) -> dict:
         "disabled-after-failure": "bnb .to() failed → fell back to destroy/reload (correct)",
     }.get(status, "unknown ram_cache_4b state")
     return _row(
-        "PROBE 4B bnb", verdict,
+        "PROBE 4B bnb",
+        verdict,
         f"{note}; post-reload embedding {'valid' if well_formed else 'MALFORMED'} "
         f"(dims={len(vec_after)}, finite={finite})",
         {"ram_cache_4b": status, "dims": len(vec_after), "finite": finite},
@@ -158,6 +160,7 @@ def probe_4b_bnb(url: str) -> dict:
 # Measured checks
 # --------------------------------------------------------------------------
 
+
 def check_v6_coalesce(url: str) -> dict:
     """A concurrent same-model embed burst must coalesce into fewer inference calls
     than jobs served (drained same-model jobs merged into one call)."""
@@ -166,8 +169,11 @@ def check_v6_coalesce(url: str) -> dict:
 
     def one(i: int):
         # Unique text per request so none are cache hits — all reach the dispatcher.
-        return _post(url, "/v1/embeddings",
-                     {"model": EMBED_0_6B, "input": [f"coalesce-{i}-{time.monotonic_ns()}"]})[0]
+        return _post(
+            url,
+            "/v1/embeddings",
+            {"model": EMBED_0_6B, "input": [f"coalesce-{i}-{time.monotonic_ns()}"]},
+        )[0]
 
     with ThreadPoolExecutor(max_workers=COALESCE_BURST) as pool:
         statuses = list(pool.map(one, range(COALESCE_BURST)))
@@ -178,10 +184,15 @@ def check_v6_coalesce(url: str) -> dict:
     return _row(
         "V6 coalesce",
         "PASS" if ok else "FAIL",
-        f"{dj} jobs served across {dc} coalesced call(s) "
-        f"({dj / dc:.1f} jobs/call)" if dc else "no coalesced calls observed",
-        {"jobs_served_delta": dj, "coalesced_calls_delta": dc,
-         "burst": COALESCE_BURST, "errors": sum(1 for s in statuses if s != 200)},
+        f"{dj} jobs served across {dc} coalesced call(s) ({dj / dc:.1f} jobs/call)"
+        if dc
+        else "no coalesced calls observed",
+        {
+            "jobs_served_delta": dj,
+            "coalesced_calls_delta": dc,
+            "burst": COALESCE_BURST,
+            "errors": sum(1 for s in statuses if s != 200),
+        },
     )
 
 
@@ -202,9 +213,9 @@ def check_v7_ram_cache(url: str, disk_baseline_ms: float | None) -> dict:
     fragile bnb path is 4B, covered by PROBE 4B bnb with its own self-test."""
     nonce = str(time.monotonic_ns())
     try:
-        _embed_vec(url, EMBED_0_6B, f"v7-load-{nonce}")     # miss → loads 0.6B
+        _embed_vec(url, EMBED_0_6B, f"v7-load-{nonce}")  # miss → loads 0.6B
         parked_status = _get_json(url, "/health").get("ram_cache_4b", "unknown")
-        _embed_vec(url, EMBED_4B, f"v7-evict-{nonce}")      # evicts 0.6B (7600 > 7200), loads 4B
+        _embed_vec(url, EMBED_4B, f"v7-evict-{nonce}")  # evicts 0.6B (7600 > 7200), loads 4B
         t0 = time.monotonic()
         vec_after = _embed_vec(url, EMBED_0_6B, f"v7-reload-{nonce}")  # evicts 4B, reloads 0.6B
         reload_ms = (time.monotonic() - t0) * 1000.0
@@ -212,8 +223,12 @@ def check_v7_ram_cache(url: str, disk_baseline_ms: float | None) -> dict:
         return _row("V7 ram-cache", "FAIL", f"evict/reload raised: {exc}", {})
 
     finite = bool(vec_after) and all(math.isfinite(x) for x in vec_after[:32])
-    ev = {"reload_ms": round(reload_ms, 1), "dims": len(vec_after), "finite": finite,
-          "ram_cache_4b": parked_status}
+    ev = {
+        "reload_ms": round(reload_ms, 1),
+        "dims": len(vec_after),
+        "finite": finite,
+        "ram_cache_4b": parked_status,
+    }
     speedup_ok = True
     if disk_baseline_ms:
         ev["disk_baseline_ms"] = round(disk_baseline_ms, 1)
@@ -240,16 +255,21 @@ def check_v10_stress(url: str) -> dict:
         "PASS" if ok else "FAIL",
         f"{STRESS_REQUESTS} reqs @ {STRESS_CONCURRENCY} conc: "
         f"{phase['errors']} errors, peak {phase['peak_vram_mb']} MB",
-        {"errors": phase["errors"], "peak_vram_mb": phase["peak_vram_mb"],
-         "evicts": phase["evicts"], "coalesced_calls": phase["coalesced_calls"],
-         "throughput_rps": phase["throughput_rps"],
-         "embed_p95_ms": phase["latency_ms"]["embed"]["p95"]},
+        {
+            "errors": phase["errors"],
+            "peak_vram_mb": phase["peak_vram_mb"],
+            "evicts": phase["evicts"],
+            "coalesced_calls": phase["coalesced_calls"],
+            "throughput_rps": phase["throughput_rps"],
+            "embed_p95_ms": phase["latency_ms"]["embed"]["p95"],
+        },
     )
 
 
 # --------------------------------------------------------------------------
 # V11 A/B compare (offline — reads two benchmark.py outputs)
 # --------------------------------------------------------------------------
+
 
 def compare_ab(affinity_path: str, naive_path: str) -> dict:
     """Score the affinity vs naive A/B.
@@ -303,20 +323,37 @@ def compare_ab(affinity_path: str, naive_path: str) -> dict:
         f"(p50 {aff_p50} vs {naive_p50} ms = {p50_speedup}×; "
         f"rps {aff_rps} vs {naive_rps} = {rps_speedup}×; "
         f"evicts {aff_ev} vs {naive_ev}; no-OOM={no_oom})",
-        {"profile": profile,
-         "affinity": {"mode": aff.get("sched_mode"), "evicts": aff_ev, "embed_p50_ms": aff_p50,
-                      "embed_p95_ms": p95(aff), "rps": aff_rps, "peak_vram_mb": peak(aff)},
-         "naive": {"mode": naive.get("sched_mode"), "evicts": naive_ev, "embed_p50_ms": naive_p50,
-                   "embed_p95_ms": p95(naive), "rps": naive_rps, "peak_vram_mb": peak(naive)},
-         "p50_speedup": p50_speedup, "rps_speedup": rps_speedup, "evict_ratio": evict_ratio,
-         "no_oom": no_oom,
-         "gate": "no-OOM AND affinity_evicts<=naive AND max(p50,rps speedup)>=2x"},
+        {
+            "profile": profile,
+            "affinity": {
+                "mode": aff.get("sched_mode"),
+                "evicts": aff_ev,
+                "embed_p50_ms": aff_p50,
+                "embed_p95_ms": p95(aff),
+                "rps": aff_rps,
+                "peak_vram_mb": peak(aff),
+            },
+            "naive": {
+                "mode": naive.get("sched_mode"),
+                "evicts": naive_ev,
+                "embed_p50_ms": naive_p50,
+                "embed_p95_ms": p95(naive),
+                "rps": naive_rps,
+                "peak_vram_mb": peak(naive),
+            },
+            "p50_speedup": p50_speedup,
+            "rps_speedup": rps_speedup,
+            "evict_ratio": evict_ratio,
+            "no_oom": no_oom,
+            "gate": "no-OOM AND affinity_evicts<=naive AND max(p50,rps speedup)>=2x",
+        },
     )
 
 
 # --------------------------------------------------------------------------
 # Scorecard rendering
 # --------------------------------------------------------------------------
+
 
 def render_md(rows: list[dict], meta: dict) -> str:
     icon = {"PASS": "✅", "FAIL": "❌", "PROBE": "🔍"}
@@ -327,7 +364,9 @@ def render_md(rows: list[dict], meta: dict) -> str:
     lines.append(f"- result: **{'ALL CLEAR' if n_fail == 0 else f'{n_fail} FAILED'}**")
     lines += ["", "| Check | Verdict | Detail |", "|-------|---------|--------|"]
     for r in rows:
-        lines.append(f"| {r['check']} | {icon.get(r['verdict'], '?')} {r['verdict']} | {r['message']} |")
+        lines.append(
+            f"| {r['check']} | {icon.get(r['verdict'], '?')} {r['verdict']} | {r['message']} |"
+        )
     lines += ["", "## Evidence", ""]
     for r in rows:
         lines.append(f"- **{r['check']}** — `{json.dumps(r['evidence'])}`")
@@ -349,10 +388,18 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--url", default="http://localhost:8765")
     ap.add_argument("--out", default="eval-results/scorecard.json")
-    ap.add_argument("--disk-baseline-ms", type=float, default=None,
-                    help="0.6B from-disk load time (ms) to score the V7 unpark speedup")
-    ap.add_argument("--compare", nargs=2, metavar=("AFFINITY_JSON", "NAIVE_JSON"),
-                    help="V11 A/B: compare two benchmark.py outputs instead of live checks")
+    ap.add_argument(
+        "--disk-baseline-ms",
+        type=float,
+        default=None,
+        help="0.6B from-disk load time (ms) to score the V7 unpark speedup",
+    )
+    ap.add_argument(
+        "--compare",
+        nargs=2,
+        metavar=("AFFINITY_JSON", "NAIVE_JSON"),
+        help="V11 A/B: compare two benchmark.py outputs instead of live checks",
+    )
     args = ap.parse_args()
 
     if args.compare:
@@ -379,9 +426,11 @@ def main() -> None:
         except Exception as exc:  # noqa: BLE001 — one probe must not abort the scorecard
             rows.append(_row(fn.__name__, "FAIL", f"probe raised: {exc}", {}))
     # Measured checks.
-    for fn in (check_v6_coalesce,
-               lambda u: check_v7_ram_cache(u, args.disk_baseline_ms),
-               check_v10_stress):
+    for fn in (
+        check_v6_coalesce,
+        lambda u: check_v7_ram_cache(u, args.disk_baseline_ms),
+        check_v10_stress,
+    ):
         try:
             rows.append(fn(args.url))
         except Exception as exc:  # noqa: BLE001

@@ -2,16 +2,21 @@ from __future__ import annotations
 
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 import lancedb
+from rag_common.config import embed_cost_per_million
 
 from repo_rag.chunk.prefix import build_prefixed_text
 from repo_rag.chunk.types import TextChunk
-from repo_rag.ingest.embed import ENV_PREFIX, EmbedConfig, EmbedStats, embed_config_from_env, embed_texts, prepare_embed_config
-from rag_common.config import embed_cost_per_million
-
+from repo_rag.ingest.embed import (
+    ENV_PREFIX,
+    EmbedConfig,
+    EmbedStats,
+    embed_config_from_env,
+    embed_texts,
+)
 from repo_rag.paths import CHUNKS_TABLE, ProfileIndexPaths, profile_index_paths
 
 __all__ = [
@@ -180,7 +185,7 @@ def update_ingest_metadata(
         state["embed_quant"] = config.quant
     state["total_tokens_embedded"] = prev_tokens + run_tokens
     state["estimated_cost_usd"] = round(prev_cost + run_cost, 6)
-    state["last_indexed_at"] = datetime.now(timezone.utc).isoformat()
+    state["last_indexed_at"] = datetime.now(UTC).isoformat()
 
 
 def embed_config_from_state(state: dict[str, Any]) -> EmbedConfig | None:

@@ -6,14 +6,19 @@ import subprocess
 import sys
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from statistics import mean
 from typing import Any
 
 import click
 
-from rag_literature_rag.eval.gold_validation import EVAL_TRACKS, EvalTrack, cases_for_track, validate_gold
+from rag_literature_rag.eval.gold_validation import (
+    EVAL_TRACKS,
+    EvalTrack,
+    cases_for_track,
+    validate_gold,
+)
 from rag_literature_rag.eval.hardware import (
     assert_memory_start_safe,
     memory_abort_reason,
@@ -31,7 +36,7 @@ from rag_literature_rag.paths import DATA_DIR
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
 def evaluate_strategy(
@@ -70,8 +75,7 @@ def evaluate_strategy(
                 "category": case.category,
                 "relevant_doc_ids": sorted(case.relevant_doc_ids),
                 "top_doc_ids": [
-                    row.get("canonical_doc_id") or row["doc_id"]
-                    for row in results[:10]
+                    row.get("canonical_doc_id") or row["doc_id"] for row in results[:10]
                 ],
                 "latency_ms": round(latency * 1000, 2),
                 **metrics,
@@ -146,7 +150,9 @@ def run_benchmark(
         experimental_index=retrieval_index is not None,
     )
     if not selected:
-        raise click.ClickException("No strategies selected. Pass --strategy or enable --llm-transforms.")
+        raise click.ClickException(
+            "No strategies selected. Pass --strategy or enable --llm-transforms."
+        )
 
     validation = validate_gold()
     if not validation["valid"]:
@@ -170,7 +176,9 @@ def run_benchmark(
     results: list[dict[str, Any]] = []
     for track in selected_tracks:
         for strategy in selected:
-            result_path = run_dir / "strategies" / f"{track}--{strategy.name}.json" if run_dir else None
+            result_path = (
+                run_dir / "strategies" / f"{track}--{strategy.name}.json" if run_dir else None
+            )
             if resume and result_path and result_path.is_file():
                 results.append(json.loads(result_path.read_text(encoding="utf-8")))
                 if verbose:
@@ -335,7 +343,7 @@ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def _default_run_dir(embed_profile: str) -> Path:
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     return DATA_DIR / "eval" / "runs" / f"{timestamp}-{embed_profile}-{uuid.uuid4().hex[:8]}"
 
 

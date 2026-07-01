@@ -1,7 +1,5 @@
 import json
 
-import pytest
-
 from rag_literature_rag.harvest import prune as prune_mod
 from rag_literature_rag.manifest import Manifest, ManifestItem
 
@@ -31,7 +29,9 @@ def _manifest():
                 "Self-RAG reflection tokens for retrieval augmented generation",
                 local="data/raw/pdf/a.pdf",
             ),
-            _item("b", "Coarse root architecture of boreal tree species", local="data/raw/pdf/b.pdf"),
+            _item(
+                "b", "Coarse root architecture of boreal tree species", local="data/raw/pdf/b.pdf"
+            ),
             _item(
                 "c",
                 "Gradient-based learning applied to document recognition",

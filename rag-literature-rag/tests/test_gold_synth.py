@@ -3,6 +3,7 @@
 Covers the deterministic, no-LLM core: category mapping, anti-leakage rejection,
 near-duplicate rejection (within-set and vs curated), and the cases.json round-trip.
 """
+
 from __future__ import annotations
 
 from rag_literature_rag.eval.gold_cases import GOLD_CASES
@@ -30,14 +31,20 @@ def _seed(doc_id: str, title: str, abstract: str) -> Seed:
 
 def test_category_for_maps_tags_to_curated_vocab():
     item = ManifestItem(
-        id="x", title="A ColBERT late interaction study", source="s", url="u",
-        status="metadata_only", tags=["reranking"],
+        id="x",
+        title="A ColBERT late interaction study",
+        source="s",
+        url="u",
+        status="metadata_only",
+        tags=["reranking"],
     )
     assert category_for(item) in {"reranking", "dense-retrieval"}
 
 
 def test_leakage_query_is_rejected():
-    seed = _seed("d1", "Dense Passage Retrieval for Open Domain QA", "bi-encoder dense passage retrieval")
+    seed = _seed(
+        "d1", "Dense Passage Retrieval for Open Domain QA", "bi-encoder dense passage retrieval"
+    )
     # Query echoes the seed wording → high Jaccard → leakage drop.
     leaky = {0: "Dense passage retrieval for open domain question answering bi-encoder"}
     kept, stats = quality_filters([seed], ["single"], leaky)
@@ -46,7 +53,9 @@ def test_leakage_query_is_rejected():
 
 
 def test_independent_phrasing_survives():
-    seed = _seed("d1", "Dense Passage Retrieval for Open Domain QA", "bi-encoder dense passage retrieval")
+    seed = _seed(
+        "d1", "Dense Passage Retrieval for Open Domain QA", "bi-encoder dense passage retrieval"
+    )
     good = {0: "how to embed questions and documents separately to find answers fast"}
     kept, stats = quality_filters([seed], ["single"], good)
     assert len(kept) == 1

@@ -12,7 +12,7 @@ on the main thread; only the network fetches are parallel.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from rag_literature_rag import citation_store as cs
 from rag_literature_rag.harvest.log import get_logger
@@ -36,7 +36,9 @@ _S2_PAGE = 1000  # max page size the citations endpoint accepts
 _S2_INCOMING_WORKERS = 32
 
 
-def _citer_node_id(doi: str | None, paper_id: str | None, corpus_oa_by_doi: dict[str, str]) -> str | None:
+def _citer_node_id(
+    doi: str | None, paper_id: str | None, corpus_oa_by_doi: dict[str, str]
+) -> str | None:
     """Stable node id for an external citer.
 
     A citer that is itself a corpus paper reuses the corpus OpenAlex id (so co-citation
@@ -58,7 +60,7 @@ def _fetch_work_by_doi(doi: str) -> dict | None:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _fetch_record(spec: dict) -> dict | None:
@@ -85,9 +87,15 @@ def _fetch_record(spec: dict) -> dict | None:
 
 def _write_record(db, rec: dict, ts: str) -> None:
     cs.upsert_paper(
-        db, oa_id=rec["oa_id"], doi=rec["doi"], doc_id=rec["doc_id"],
-        title=rec["title"], year=rec["year"], cited_by_count=rec["cbc"],
-        in_corpus=True, enriched_at=ts,
+        db,
+        oa_id=rec["oa_id"],
+        doi=rec["doi"],
+        doc_id=rec["doc_id"],
+        title=rec["title"],
+        year=rec["year"],
+        cited_by_count=rec["cbc"],
+        in_corpus=True,
+        enriched_at=ts,
     )
     cs.upsert_alias(db, provider="openalex", external_id=rec["oa_id"], oa_id=rec["oa_id"])
     cs.upsert_alias(db, provider="doi", external_id=rec["doi"], oa_id=rec["oa_id"])
@@ -105,7 +113,7 @@ def _s2_influential_pass(db, dois: list[str], log) -> int:
     """Overlay Semantic Scholar isInfluential on existing edges. Best-effort; throttled."""
     hits = 0
     for i in range(0, len(dois), 400):
-        chunk = dois[i:i + 400]
+        chunk = dois[i : i + 400]
         body = {"ids": [f"DOI:{d}" for d in chunk]}
         outcome = SEMANTIC_SCHOLAR.request(
             "POST",
@@ -127,7 +135,12 @@ def _s2_influential_pass(db, dois: list[str], log) -> int:
                 dst_doi = cs.normalize_doi((ref.get("externalIds") or {}).get("DOI"))
                 if dst_doi:
                     hits += db_set_influential(db, src_doi, dst_doi)
-        log.info("s2 influential pass %d/%d DOIs, %d edges flagged", min(i + 400, len(dois)), len(dois), hits)
+        log.info(
+            "s2 influential pass %d/%d DOIs, %d edges flagged",
+            min(i + 400, len(dois)),
+            len(dois),
+            hits,
+        )
     return hits
 
 
@@ -146,7 +159,11 @@ def _fetch_s2_incoming(doi: str, *, cap: int) -> RequestOutcome:
     out: list[dict] = []
     offset = 0
     while len(out) < cap:
-        params = {"fields": fields, "limit": str(min(_S2_PAGE, cap - len(out))), "offset": str(offset)}
+        params = {
+            "fields": fields,
+            "limit": str(min(_S2_PAGE, cap - len(out))),
+            "offset": str(offset),
+        }
         outcome = SEMANTIC_SCHOLAR.request("GET", url, params=params, timeout=90.0)
         if outcome.kind is OutcomeKind.TERMINAL_MISS:
             return outcome
@@ -157,12 +174,14 @@ def _fetch_s2_incoming(doi: str, *, cap: int) -> RequestOutcome:
         for item in data:
             citing = item.get("citingPaper") or {}
             ext = citing.get("externalIds") or {}
-            out.append({
-                "doi": cs.normalize_doi(ext.get("DOI")),
-                "paper_id": citing.get("paperId"),
-                "year": citing.get("year"),
-                "is_influential": bool(item.get("isInfluential")),
-            })
+            out.append(
+                {
+                    "doi": cs.normalize_doi(ext.get("DOI")),
+                    "paper_id": citing.get("paperId"),
+                    "year": citing.get("year"),
+                    "is_influential": bool(item.get("isInfluential")),
+                }
+            )
         nxt = payload.get("next")
         if nxt is None or not data:
             break
@@ -171,7 +190,13 @@ def _fetch_s2_incoming(doi: str, *, cap: int) -> RequestOutcome:
 
 
 def _s2_incoming_pass(
-    db, specs: list[dict], *, cap: int, checkpoint_every: int, log, workers: int = _S2_INCOMING_WORKERS
+    db,
+    specs: list[dict],
+    *,
+    cap: int,
+    checkpoint_every: int,
+    log,
+    workers: int = _S2_INCOMING_WORKERS,
 ) -> dict[str, int]:
     """Populate incoming-citation edges (and isInfluential) from Semantic Scholar.
 
@@ -186,8 +211,12 @@ def _s2_incoming_pass(
     corpus_oa_by_doi = cs.corpus_oa_by_doi(db)
     done = cs.incoming_done_dois(db)
     todo = [s for s in specs if s["doi"] not in done and s["doi"] in corpus_oa_by_doi]
-    log.info("cite enrich: S2 incoming pass over %d corpus DOIs (cap=%d/paper, workers=%d)",
-             len(todo), cap, workers)
+    log.info(
+        "cite enrich: S2 incoming pass over %d corpus DOIs (cap=%d/paper, workers=%d)",
+        len(todo),
+        cap,
+        workers,
+    )
 
     new_edges = 0
     new_influential = 0
@@ -214,7 +243,9 @@ def _s2_incoming_pass(
                     continue
                 in_corpus = bool(c["doi"] and c["doi"] in corpus_oa_by_doi)
                 cs.upsert_paper(db, oa_id=node, doi=c["doi"], year=c["year"], in_corpus=in_corpus)
-                cs.upsert_alias(db, provider="semantic-scholar", external_id=c["paper_id"], oa_id=node)
+                cs.upsert_alias(
+                    db, provider="semantic-scholar", external_id=c["paper_id"], oa_id=node
+                )
                 cs.upsert_alias(db, provider="doi", external_id=c["doi"], oa_id=node)
                 infl = 1 if c["is_influential"] else 0
                 edges.append((node, target_oa, infl))
@@ -224,10 +255,19 @@ def _s2_incoming_pass(
         processed += 1
         if processed % max(1, checkpoint_every) == 0 or processed == len(todo):
             db.commit()
-            log.info("cite enrich: S2 incoming %d/%d papers, %d edges (%d fetch-fails)",
-                     processed, len(todo), new_edges, failed)
-    log.info("cite enrich: S2 incoming done, %d edges (%d influential, %d fetch-fails to retry)",
-             new_edges, new_influential, failed)
+            log.info(
+                "cite enrich: S2 incoming %d/%d papers, %d edges (%d fetch-fails)",
+                processed,
+                len(todo),
+                new_edges,
+                failed,
+            )
+    log.info(
+        "cite enrich: S2 incoming done, %d edges (%d influential, %d fetch-fails to retry)",
+        new_edges,
+        new_influential,
+        failed,
+    )
     return {
         "incoming_edges": new_edges,
         "incoming_influential": new_influential,
@@ -272,15 +312,21 @@ def enrich_citations(
 
     all_specs = list(specs)  # incoming pass runs over every corpus DOI (own resumption marker)
     if not force:
-        done = {r[0] for r in db.execute(
-            "SELECT doi FROM papers WHERE in_corpus=1 AND enriched_at IS NOT NULL AND doi IS NOT NULL"
-        )}
+        done = {
+            r[0]
+            for r in db.execute(
+                "SELECT doi FROM papers WHERE in_corpus=1 AND enriched_at IS NOT NULL AND doi IS NOT NULL"
+            )
+        }
         specs = [s for s in specs if s["doi"] not in done]
 
     log.info("cite enrich: %d corpus DOIs to fetch (workers=%d)", len(specs), workers)
 
     records = parallel_map(
-        _fetch_record, specs, workers=workers, label="openalex citations",
+        _fetch_record,
+        specs,
+        workers=workers,
+        label="openalex citations",
     )
 
     written = 0
@@ -299,8 +345,12 @@ def enrich_citations(
     if incoming and all_specs:
         try:
             _s2_incoming_pass(
-                db, all_specs, cap=incoming_cap, checkpoint_every=checkpoint_every,
-                log=log, workers=incoming_workers,
+                db,
+                all_specs,
+                cap=incoming_cap,
+                checkpoint_every=checkpoint_every,
+                log=log,
+                workers=incoming_workers,
             )
         except Exception as exc:  # never let S2 sink the whole run
             log.warning("s2 incoming pass aborted: %s", exc)

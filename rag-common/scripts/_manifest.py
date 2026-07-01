@@ -19,6 +19,7 @@ place that understands the manifest — the bash harness stays dumb.
 
 Requires Python >= 3.11 (tomllib).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -40,7 +41,9 @@ def _expand(data_dir: Path, entries: list[str], exclude: list[str]) -> list[Path
     """Expand a list of relative globs/paths under data_dir into existing paths."""
     out: list[Path] = []
     for entry in entries:
-        matches = sorted(data_dir.glob(entry)) if any(c in entry for c in "*?[") else [data_dir / entry]
+        matches = (
+            sorted(data_dir.glob(entry)) if any(c in entry for c in "*?[") else [data_dir / entry]
+        )
         for p in matches:
             if not p.exists():
                 continue
@@ -91,10 +94,17 @@ def jobs_for_tool(tool: str, cfg: dict, data_root: Path, exclude: list[str]):
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--manifest", required=True)
-    ap.add_argument("--data-root", required=True, help="dir the manifest's data_dir paths are relative to (the tools/ dir)")
+    ap.add_argument(
+        "--data-root",
+        required=True,
+        help="dir the manifest's data_dir paths are relative to (the tools/ dir)",
+    )
     ap.add_argument("--tool", action="append", help="limit to these tools (repeatable)")
-    ap.add_argument("--datadirs", action="store_true",
-                    help="instead of jobs, print '<tool>\\t<abs data_dir>' for each tool (used by restore)")
+    ap.add_argument(
+        "--datadirs",
+        action="store_true",
+        help="instead of jobs, print '<tool>\\t<abs data_dir>' for each tool (used by restore)",
+    )
     args = ap.parse_args()
 
     with open(args.manifest, "rb") as fh:
@@ -114,7 +124,9 @@ def main() -> int:
     wanted = set(args.tool) if args.tool else None
     unknown = (wanted - set(tools)) if wanted else set()
     if unknown:
-        sys.exit(f"error: unknown tool(s): {', '.join(sorted(unknown))}; known: {', '.join(sorted(tools))}")
+        sys.exit(
+            f"error: unknown tool(s): {', '.join(sorted(unknown))}; known: {', '.join(sorted(tools))}"
+        )
 
     for tool, cfg in tools.items():
         if wanted and tool not in wanted:

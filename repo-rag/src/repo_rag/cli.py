@@ -12,19 +12,19 @@ from repo_rag.logging_config import get_logger, setup_logging
 load_env_file()
 setup_logging()
 
+from repo_rag.context import assemble_context, read_entity
+from repo_rag.eval import benchmark, compare
+from repo_rag.graph import find_entities, graph_counts, neighbors
 from repo_rag.harvest.manifest import save_manifest
 from repo_rag.harvest.walk import harvest_repo
-from repo_rag.context import assemble_context, read_entity
-from repo_rag.graph import find_entities, graph_counts, neighbors
 from repo_rag.ingest import bm25 as bm25_index
 from repo_rag.ingest.embed import embed_config_from_env
 from repo_rag.ingest.index import chunk_count, embed_config_from_state, load_ingest_state
-from repo_rag.ingest.run import index_cmd
 from repo_rag.ingest.reembed import reembed_cmd
-from repo_rag.watch import watch_cmd
+from repo_rag.ingest.run import index_cmd
 from repo_rag.paths import DEFAULT_LOG_FILE, list_profile_indexes, profile_index_paths
 from repo_rag.query.search import search
-from repo_rag.eval import benchmark, compare
+from repo_rag.watch import watch_cmd
 
 
 @click.group()
@@ -88,7 +88,9 @@ def embed_profiles_cmd(as_json: bool) -> None:
 @main.command("query")
 @click.argument("text")
 @click.option("--top", default=8, show_default=True)
-@click.option("--source-type", default=None, help="Filter: handoff, terraform, code, app, test, doc")
+@click.option(
+    "--source-type", default=None, help="Filter: handoff, terraform, code, app, test, doc"
+)
 @click.option("--package", default=None, help="Filter by package name.")
 @click.option("--path-contains", default=None, help="Filter file_path substring.")
 @click.option(
@@ -185,7 +187,9 @@ def symbol_cmd(name: str) -> None:
 @click.option("--depth", default=1, type=click.IntRange(1, 5), show_default=True)
 def neighbors_cmd(entity: str, edge_type: str | None, depth: int) -> None:
     """Traverse incoming and outgoing repository graph edges."""
-    click.echo(json.dumps({"entity": entity, "results": neighbors(entity, edge_type, depth)}, indent=2))
+    click.echo(
+        json.dumps({"entity": entity, "results": neighbors(entity, edge_type, depth)}, indent=2)
+    )
 
 
 @main.command("read")
@@ -198,7 +202,11 @@ def read_cmd(entity: str) -> None:
 @main.command("context")
 @click.argument("task")
 @click.option("--budget", default=6000, type=click.IntRange(100, 100000), show_default=True)
-@click.option("--agentic", is_flag=True, help="Reserved provider-neutral explorer mode; currently deterministic.")
+@click.option(
+    "--agentic",
+    is_flag=True,
+    help="Reserved provider-neutral explorer mode; currently deterministic.",
+)
 def context_cmd(task: str, budget: int, agentic: bool) -> None:
     """Assemble task-aware hybrid and graph context."""
     payload = assemble_context(task, budget)
@@ -211,7 +219,16 @@ def context_cmd(task: str, budget: int, agentic: bool) -> None:
 def explain_cmd(result_id: str) -> None:
     """Explain indexed entity and graph evidence."""
     rows = find_entities(result_id)
-    click.echo(json.dumps({"result_id": result_id, "entities": rows, "neighbors": neighbors(result_id) if rows else []}, indent=2))
+    click.echo(
+        json.dumps(
+            {
+                "result_id": result_id,
+                "entities": rows,
+                "neighbors": neighbors(result_id) if rows else [],
+            },
+            indent=2,
+        )
+    )
 
 
 @main.group("eval")
@@ -221,14 +238,26 @@ def eval_group() -> None:
 
 @eval_group.command("benchmark")
 @click.option("--limit", default=None, type=click.IntRange(1, 10000))
-@click.option("-k", "k", default=10, type=click.IntRange(1, 100), show_default=True, help="Cutoff for Hit@k / nDCG@k.")
+@click.option(
+    "-k",
+    "k",
+    default=10,
+    type=click.IntRange(1, 100),
+    show_default=True,
+    help="Cutoff for Hit@k / nDCG@k.",
+)
 @click.option(
     "--rerank/--no-rerank",
     "rerank",
     default=None,
     help="Force rerank on/off for this run (default: RAG_RERANK_ENABLED env).",
 )
-@click.option("--compare", "do_compare", is_flag=True, help="Run rerank off vs on and report the metric delta.")
+@click.option(
+    "--compare",
+    "do_compare",
+    is_flag=True,
+    help="Run rerank off vs on and report the metric delta.",
+)
 def benchmark_cmd(limit: int | None, k: int, rerank: bool | None, do_compare: bool) -> None:
     """Run the judged query benchmark (Hit@k, MRR, nDCG@k, latency) and emit JSON."""
     if do_compare:
@@ -258,10 +287,16 @@ def status_cmd(embed_profile: str | None) -> None:
         "chunks_bm25": bm25_index.chunk_count(index_paths),
         "files_in_repo": len(manifest.files),
         "files_indexed": len(state.get("files", {})),
-        "embed_backend": state.get("embed_backend", indexed.backend if indexed else resolved.backend),
+        "embed_backend": state.get(
+            "embed_backend", indexed.backend if indexed else resolved.backend
+        ),
         "embed_model": state.get("embed_model", indexed.model if indexed else resolved.model),
-        "embed_dims": state.get("embed_dims", indexed.dimensions if indexed else resolved.dimensions),
-        "embed_profile": state.get("embed_profile", indexed.profile if indexed else resolved.profile),
+        "embed_dims": state.get(
+            "embed_dims", indexed.dimensions if indexed else resolved.dimensions
+        ),
+        "embed_profile": state.get(
+            "embed_profile", indexed.profile if indexed else resolved.profile
+        ),
         "resolved_backend": resolved.backend,
         "resolved_model": resolved.model,
         "resolved_profile": resolved.profile,
@@ -289,7 +324,7 @@ def mcp_cmd() -> None:
     except ModuleNotFoundError as exc:
         raise SystemExit(
             f"MCP server needs the 'mcp' extra: cd tools/repo-rag && uv sync --extra mcp ({exc})"
-        )
+        ) from exc
     run_mcp()
 
 

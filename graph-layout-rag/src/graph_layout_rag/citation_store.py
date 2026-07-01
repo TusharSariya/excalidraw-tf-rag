@@ -22,11 +22,11 @@ import array
 import json
 import re
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterable
 
 from graph_layout_rag.paths import CITATIONS_DB_PATH
 
@@ -41,7 +41,7 @@ def normalize_doi(raw: str | None) -> str | None:
     low = s.lower()
     for prefix in _DOI_PREFIXES:
         if low.startswith(prefix):
-            s = s[len(prefix):]
+            s = s[len(prefix) :]
             break
     s = s.strip().lower().rstrip(").,;")
     if not s.startswith("10."):
@@ -170,9 +170,14 @@ def upsert_paper(
           enriched_at=COALESCE(excluded.enriched_at, papers.enriched_at)
         """,
         {
-            "oa": oa_id, "doi": doi, "doc": doc_id, "title": title, "year": year,
+            "oa": oa_id,
+            "doi": doi,
+            "doc": doc_id,
+            "title": title,
+            "year": year,
             "cbc": int(cited_by_count) if cited_by_count is not None else None,
-            "corpus": 1 if in_corpus else 0, "ts": enriched_at,
+            "corpus": 1 if in_corpus else 0,
+            "ts": enriched_at,
         },
     )
 
@@ -220,9 +225,7 @@ def upsert_alias(
     )
 
 
-def oa_id_for_alias(
-    db: sqlite3.Connection, *, provider: str, external_id: str
-) -> str | None:
+def oa_id_for_alias(db: sqlite3.Connection, *, provider: str, external_id: str) -> str | None:
     row = db.execute(
         "SELECT oa_id FROM paper_aliases WHERE provider=? AND external_id=?",
         (provider.lower(), external_id),
@@ -258,8 +261,11 @@ def author_key(name: str) -> str:
 
 # --- read accessors -------------------------------------------------------------
 
+
 def oa_id_for_doi(db: sqlite3.Connection, doi: str) -> str | None:
-    row = db.execute("SELECT oa_id FROM papers WHERE doi=? AND oa_id IS NOT NULL", (doi,)).fetchone()
+    row = db.execute(
+        "SELECT oa_id FROM papers WHERE doi=? AND oa_id IS NOT NULL", (doi,)
+    ).fetchone()
     return row[0] if row else None
 
 
@@ -316,6 +322,7 @@ def paper_row(db: sqlite3.Connection, oa_id: str) -> sqlite3.Row | None:
 
 # --- enrichment metadata (papers_meta) ------------------------------------------
 
+
 @dataclass
 class PaperMeta:
     doc_id: str
@@ -325,14 +332,14 @@ class PaperMeta:
     cited_by_count: int | None = None
     oa_pdf_url: str | None = None
     license: str | None = None
-    biblio: dict | None = None          # parsed from biblio_json
-    full_authors: list | None = None    # parsed from full_authors_json
+    biblio: dict | None = None  # parsed from biblio_json
+    full_authors: list | None = None  # parsed from full_authors_json
     enriched_at: str | None = None
     source_provider: str | None = None
 
 
 def _meta_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _row_to_paper_meta(row: sqlite3.Row) -> PaperMeta:
@@ -427,9 +434,7 @@ def paper_meta_map(
 
 
 def has_paper_meta(db: sqlite3.Connection, doc_id: str) -> bool:
-    return db.execute(
-        "SELECT 1 FROM papers_meta WHERE doc_id=?", (doc_id,)
-    ).fetchone() is not None
+    return db.execute("SELECT 1 FROM papers_meta WHERE doc_id=?", (doc_id,)).fetchone() is not None
 
 
 def upsert_specter2(db: sqlite3.Connection, doc_id: str, vec: list[float]) -> None:
@@ -445,9 +450,7 @@ def upsert_specter2(db: sqlite3.Connection, doc_id: str, vec: list[float]) -> No
 
 
 def specter2_for_doc(db: sqlite3.Connection, doc_id: str) -> list[float] | None:
-    row = db.execute(
-        "SELECT vec FROM doc_specter2 WHERE doc_id=?", (doc_id,)
-    ).fetchone()
+    row = db.execute("SELECT vec FROM doc_specter2 WHERE doc_id=?", (doc_id,)).fetchone()
     if not row:
         return None
     arr = array.array("f")
@@ -476,10 +479,14 @@ def counts(db: sqlite3.Connection) -> dict[str, int]:
         "cite_edges": db.execute("SELECT count(*) FROM cites").fetchone()[0],
         "citation_provenance": db.execute("SELECT count(*) FROM cite_provenance").fetchone()[0],
         "paper_aliases": db.execute("SELECT count(*) FROM paper_aliases").fetchone()[0],
-        "influential_edges": db.execute("SELECT count(*) FROM cites WHERE is_influential=1").fetchone()[0],
+        "influential_edges": db.execute(
+            "SELECT count(*) FROM cites WHERE is_influential=1"
+        ).fetchone()[0],
         "papers_with_incoming": db.execute(
             "SELECT count(*) FROM papers WHERE in_corpus=1 AND incoming_at IS NOT NULL"
         ).fetchone()[0],
         "authorship_edges": db.execute("SELECT count(*) FROM authorship").fetchone()[0],
-        "distinct_authors": db.execute("SELECT count(DISTINCT author_key) FROM authorship").fetchone()[0],
+        "distinct_authors": db.execute(
+            "SELECT count(DISTINCT author_key) FROM authorship"
+        ).fetchone()[0],
     }

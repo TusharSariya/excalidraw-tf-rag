@@ -4,30 +4,30 @@ import json
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 import lancedb
-
+from rag_common.config import embed_cost_per_million
 from rag_common.gemini_embed import is_gemini_embedding_2
 
-from rag_literature_rag.ingest import bm25
+from rag_literature_rag.ingest import bm25, embed_cache
 from rag_literature_rag.ingest.chunk import (
     TextChunk,
     embed_body_text,
     embed_input_text,
     enrich_texts_for_section,
-    is_small2big_dual_profile,
     is_section_enriched_profile,
+    is_small2big_dual_profile,
 )
 from rag_literature_rag.ingest.doc_summary import (
     DocumentSummary,
-    cache_stats as docsummary_cache_stats,
     summary_row,
     summary_to_chunk,
 )
-from rag_literature_rag.ingest.raptor import cache_stats as raptor_cache_stats
-from rag_literature_rag.ingest.log import get_logger
+from rag_literature_rag.ingest.doc_summary import (
+    cache_stats as docsummary_cache_stats,
+)
 from rag_literature_rag.ingest.embed import (
     ENV_PREFIX,
     EmbedConfig,
@@ -35,9 +35,8 @@ from rag_literature_rag.ingest.embed import (
     embed_config_from_env,
     embed_texts,
 )
-from rag_literature_rag.ingest import embed_cache
-from rag_common.config import embed_cost_per_million
-
+from rag_literature_rag.ingest.log import get_logger
+from rag_literature_rag.ingest.raptor import cache_stats as raptor_cache_stats
 from rag_literature_rag.paths import (
     CHUNKS_TABLE,
     PARENTS_TABLE,
@@ -222,7 +221,7 @@ def update_ingest_metadata(
         state["pdf_backend"] = pdf_backend
     state["total_tokens_embedded"] = prev_tokens + run_tokens
     state["estimated_cost_usd"] = round(prev_cost + run_cost, 6)
-    state["last_indexed_at"] = datetime.now(timezone.utc).isoformat()
+    state["last_indexed_at"] = datetime.now(UTC).isoformat()
 
 
 def _index_texts(chunks: list[TextChunk], cfg: EmbedConfig) -> tuple[list[str], list[str] | None]:
@@ -234,7 +233,10 @@ def _index_texts(chunks: list[TextChunk], cfg: EmbedConfig) -> tuple[list[str], 
         titles = None
     if is_section_enriched_profile(cfg.profile):
         texts = enrich_texts_for_section(chunks, texts)
-    from rag_literature_rag.ingest.contextual import augment_texts_for_context, is_contextual_profile
+    from rag_literature_rag.ingest.contextual import (
+        augment_texts_for_context,
+        is_contextual_profile,
+    )
 
     if is_contextual_profile(cfg.profile):
         texts = augment_texts_for_context(chunks, texts)
@@ -321,10 +323,7 @@ def _write_lancedb_rows(
     table = db.open_table(table_name)
     schema_names = set(getattr(getattr(table, "schema", None), "names", []) or [])
     if schema_names:
-        rows = [
-            {key: value for key, value in row.items() if key in schema_names}
-            for row in rows
-        ]
+        rows = [{key: value for key, value in row.items() if key in schema_names} for row in rows]
     if delete_scope == "chunk_id":
         for row in rows:
             escaped = str(row["id"]).replace("'", "''")
@@ -453,7 +452,9 @@ def upsert_chunks(
     return len(rows)
 
 
-def _summary_index_texts(summaries: list[DocumentSummary], cfg: EmbedConfig) -> tuple[list[str], list[str] | None]:
+def _summary_index_texts(
+    summaries: list[DocumentSummary], cfg: EmbedConfig
+) -> tuple[list[str], list[str] | None]:
     chunks = [summary_to_chunk(summary) for summary in summaries]
     return _index_texts(chunks, cfg)
 

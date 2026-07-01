@@ -4,11 +4,11 @@ import json
 import os
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 import lancedb
-
+from rag_common.config import embed_cost_per_million, resolved_embed_backend
 from rag_common.gemini_embed import is_gemini_embedding_2
 
 from graph_layout_rag.ingest import bm25, embed_cache
@@ -19,7 +19,6 @@ from graph_layout_rag.ingest.chunk import (
     enrich_texts_for_section,
     is_section_enriched_profile,
 )
-from graph_layout_rag.ingest.log import get_logger
 from graph_layout_rag.ingest.embed import (
     ENV_PREFIX,
     EmbedConfig,
@@ -27,8 +26,7 @@ from graph_layout_rag.ingest.embed import (
     embed_config_from_env,
     embed_texts,
 )
-from rag_common.config import embed_cost_per_million, resolved_embed_backend
-
+from graph_layout_rag.ingest.log import get_logger
 from graph_layout_rag.paths import (
     CHUNKS_TABLE,
     ProfileIndexPaths,
@@ -217,7 +215,7 @@ def update_ingest_metadata(
         state["pdf_backend"] = pdf_backend
     state["total_tokens_embedded"] = prev_tokens + run_tokens
     state["estimated_cost_usd"] = round(prev_cost + run_cost, 6)
-    state["last_indexed_at"] = datetime.now(timezone.utc).isoformat()
+    state["last_indexed_at"] = datetime.now(UTC).isoformat()
 
 
 def upsert_chunks(

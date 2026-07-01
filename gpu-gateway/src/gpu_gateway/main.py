@@ -57,7 +57,7 @@ _TOOLS_ROOT = os.path.normpath(
 _KNOWN_TOOLS = {"graph-layout-rag", "repo-rag", "rag-literature-rag"}
 
 _VRAM_MB: dict[str, int] = {
-    "cuda-qwen4b-1024": 5800,    # Qwen3-4B int8, 1024-dim MRL
+    "cuda-qwen4b-1024": 5800,  # Qwen3-4B int8, 1024-dim MRL
     "cuda-qwen0.6b-1024": 1800,  # Qwen3-0.6B BF16, seq=512
     "bge-reranker-v2-m3": 1200,  # BGE reranker v2 m3
 }
@@ -153,8 +153,7 @@ class GatewayHTTP:
         free = _CARD_MB
         try:
             out = subprocess.check_output(
-                ["nvidia-smi", "--query-gpu=memory.free",
-                 "--format=csv,noheader,nounits"],
+                ["nvidia-smi", "--query-gpu=memory.free", "--format=csv,noheader,nounits"],
                 timeout=5,
             ).decode()
             free = int(out.strip().splitlines()[0].strip())
@@ -177,7 +176,8 @@ class GatewayHTTP:
                 if dep is None:
                     continue
                 running = sum(
-                    n for st, n in getattr(dep, "replica_states", {}).items()
+                    n
+                    for st, n in getattr(dep, "replica_states", {}).items()
                     if str(st).upper().endswith("RUNNING")
                 )
                 if running > 1:
@@ -237,8 +237,7 @@ class GatewayHTTP:
                 Job(kind="embed", canonical=canonical, items=miss_texts)
             )
             store_entries = [
-                (keys[miss_indices[j]], model, new_vecs[j])
-                for j in range(len(miss_texts))
+                (keys[miss_indices[j]], model, new_vecs[j]) for j in range(len(miss_texts))
             ]
             await self._cache.batch_set.remote(store_entries)
             for j, idx in enumerate(miss_indices):
@@ -246,8 +245,7 @@ class GatewayHTTP:
 
         x_cache = "MISS" if miss_texts else "HIT"
         data = [
-            {"index": i, "embedding": hits[k], "object": "embedding"}
-            for i, k in enumerate(keys)
+            {"index": i, "embedding": hits[k], "object": "embedding"} for i, k in enumerate(keys)
         ]
         return JSONResponse(
             {"object": "list", "data": data, "model": model},
@@ -277,18 +275,12 @@ class GatewayHTTP:
                     payload={"query": query},
                 )
             )
-            store = [
-                (keys[miss_indices[j]], model, [scores[j]])
-                for j in range(len(miss_passages))
-            ]
+            store = [(keys[miss_indices[j]], model, [scores[j]]) for j in range(len(miss_passages))]
             await self._cache.batch_set.remote(store)
             for j, idx in enumerate(miss_indices):
                 cached[keys[idx]] = [scores[j]]
 
-        results = [
-            {"index": i, "score": round(cached[k][0], 6)}
-            for i, k in enumerate(keys)
-        ]
+        results = [{"index": i, "score": round(cached[k][0], 6)} for i, k in enumerate(keys)]
         return JSONResponse({"results": results, "model": model})
 
     async def _chat(self, body: dict) -> JSONResponse:
@@ -296,9 +288,7 @@ class GatewayHTTP:
         # model, serves the LLM alone, then drops the sentinel so the next embed/rerank
         # admit waits (via the measured gate) for Ollama's VRAM to actually clear.
         self._assert_single_replica()
-        result = await self._sched.submit(
-            Job(kind="chat", canonical=LLM_SENTINEL, payload=body)
-        )
+        result = await self._sched.submit(Job(kind="chat", canonical=LLM_SENTINEL, payload=body))
         return JSONResponse(result)
 
     async def _search(self, body: dict) -> JSONResponse:
@@ -332,29 +322,39 @@ class GatewayHTTP:
 
         tool_root = os.path.join(_TOOLS_ROOT, tool)
         if not os.path.isdir(tool_root):
-            return JSONResponse(
-                {"error": f"tool root not found: {tool_root}"}, status_code=500
-            )
+            return JSONResponse({"error": f"tool root not found: {tool_root}"}, status_code=500)
 
         uv = shutil.which("uv") or os.path.expanduser("~/.local/bin/uv")
         cmd = [
-            uv, "run", "--no-sync", tool,
-            "query", query,
-            "--embed-profile", profile,
-            "--top", str(top),
+            uv,
+            "run",
+            "--no-sync",
+            tool,
+            "query",
+            query,
+            "--embed-profile",
+            profile,
+            "--top",
+            str(top),
             "--json",
             *flags,
         ]
 
         env = os.environ.copy()
         env["RAG_GPU_GATEWAY_URL"] = "http://localhost:8765"
-        env.pop("GRAPH_RAG_GATEWAY_SEARCH", None)   # prevent recursion
-        env.pop("REPO_RAG_GATEWAY_SEARCH", None)    # prevent recursion
-        env.pop("RAG_LIT_GATEWAY_SEARCH", None)     # prevent recursion
-        env.pop("RAG_LOCAL_EMBED_DEVICE", None)      # never load models directly
+        env.pop("GRAPH_RAG_GATEWAY_SEARCH", None)  # prevent recursion
+        env.pop("REPO_RAG_GATEWAY_SEARCH", None)  # prevent recursion
+        env.pop("RAG_LIT_GATEWAY_SEARCH", None)  # prevent recursion
+        env.pop("RAG_LOCAL_EMBED_DEVICE", None)  # never load models directly
 
-        log.info("search: tool=%s profile=%s top=%d query=%r flags=%s",
-                 tool, profile, top, query[:80], flags)
+        log.info(
+            "search: tool=%s profile=%s top=%d query=%r flags=%s",
+            tool,
+            profile,
+            top,
+            query[:80],
+            flags,
+        )
         try:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
@@ -364,7 +364,7 @@ class GatewayHTTP:
                 stderr=asyncio.subprocess.PIPE,
             )
             stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             return JSONResponse({"error": "search timed out (120s)"}, status_code=504)
         except Exception as exc:  # noqa: BLE001
             log.error("search subprocess error: %s", exc)
@@ -391,17 +391,22 @@ class GatewayHTTP:
         gpu_info: list[dict] = []
         try:
             out = subprocess.check_output(
-                ["nvidia-smi", "--query-gpu=memory.used,memory.total",
-                 "--format=csv,noheader,nounits"],
+                [
+                    "nvidia-smi",
+                    "--query-gpu=memory.used,memory.total",
+                    "--format=csv,noheader,nounits",
+                ],
                 timeout=5,
             ).decode()
             for i, line in enumerate(out.strip().splitlines()):
                 used, total = line.split(",")
-                gpu_info.append({
-                    "device": f"cuda:{i}",
-                    "used_mb": int(used.strip()),
-                    "total_mb": int(total.strip()),
-                })
+                gpu_info.append(
+                    {
+                        "device": f"cuda:{i}",
+                        "used_mb": int(used.strip()),
+                        "total_mb": int(total.strip()),
+                    }
+                )
         except Exception:  # noqa: BLE001
             pass
 
@@ -413,19 +418,21 @@ class GatewayHTTP:
             ram_cache_4b = await self._embed4b.ram_cache_status.remote()
         except Exception:  # noqa: BLE001
             pass
-        return JSONResponse({
-            "status": "ok",
-            "sched_mode": self._sched_mode,
-            "gpus": gpu_info,
-            "cache_entries": cache_count,
-            # Scheduler-tracked model state for observability.
-            "loaded_models": snap["resident"].get("cuda:0", []),
-            "parked_models": snap["parked"],
-            "queue_depth": snap["queue_depth"],
-            "dispatcher_alive": snap["dispatcher_alive"],
-            "scheduler_counters": snap["counters"],
-            "ram_cache_4b": ram_cache_4b,
-        })
+        return JSONResponse(
+            {
+                "status": "ok",
+                "sched_mode": self._sched_mode,
+                "gpus": gpu_info,
+                "cache_entries": cache_count,
+                # Scheduler-tracked model state for observability.
+                "loaded_models": snap["resident"].get("cuda:0", []),
+                "parked_models": snap["parked"],
+                "queue_depth": snap["queue_depth"],
+                "dispatcher_alive": snap["dispatcher_alive"],
+                "scheduler_counters": snap["counters"],
+                "ram_cache_4b": ram_cache_4b,
+            }
+        )
 
 
 # serve.bind() wiring — exported as `app` for `serve run config/serve_config.yaml`

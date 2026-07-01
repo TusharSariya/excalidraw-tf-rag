@@ -7,13 +7,16 @@ import signal
 import sys
 import threading
 import time
+from collections.abc import Iterable, Iterator
 from concurrent.futures import FIRST_COMPLETED, Future, ProcessPoolExecutor, wait
 from dataclasses import dataclass
-from typing import Iterable, Iterator, Literal
+from typing import Literal
 
 import click
+from rag_common.config import local_embed_quant, mlx_q4_model_id, use_mlx_q4_embed
 
 from rag_literature_rag.catalog.classify import classify_item
+from rag_literature_rag.ingest import embed_cache, extract_cache
 from rag_literature_rag.ingest.canonical import IngestDocument, canonical_ingest_projection
 from rag_literature_rag.ingest.chunk import (
     TextChunk,
@@ -26,26 +29,27 @@ from rag_literature_rag.ingest.chunk import (
 from rag_literature_rag.ingest.doc_summary import (
     SummaryCacheStats,
     build_document_summary,
-    cache_stats as docsummary_cache_stats,
     is_docsummary_profile,
     unload_ollama_model,
 )
-from rag_literature_rag.ingest.raptor import (
-    build_raptor_tree,
-    cache_stats as raptor_cache_stats,
-    is_raptor_profile,
-    unload_ollama_model_for_raptor,
+from rag_literature_rag.ingest.doc_summary import (
+    cache_stats as docsummary_cache_stats,
 )
-from rag_literature_rag.ingest.embed import ENV_PREFIX, EmbedStats, embed_texts, prepare_embed_config, resolve_workers
-from rag_literature_rag.ingest import embed_cache, extract_cache
-from rag_common.config import local_embed_quant, mlx_q4_model_id, use_mlx_q4_embed
+from rag_literature_rag.ingest.embed import (
+    ENV_PREFIX,
+    EmbedStats,
+    embed_texts,
+    prepare_embed_config,
+    resolve_workers,
+)
 from rag_literature_rag.ingest.extract import (
     default_pdf_backend,
-    extraction_cache_options,
     extract_metadata_text,
     extract_pdf_pages,
+    extraction_cache_options,
 )
 from rag_literature_rag.ingest.index import (
+    IndexPhaseStats,
     chunk_count,
     chunking_fingerprint_mismatch,
     clear_doc_entries,
@@ -57,11 +61,16 @@ from rag_literature_rag.ingest.index import (
     update_ingest_metadata,
     upsert_chunks,
     upsert_summaries,
-    IndexPhaseStats,
 )
 from rag_literature_rag.ingest.log import setup_ingest_logging
-from rag_literature_rag.manifest import ManifestItem, load_manifest
-from rag_literature_rag.paths import PKG_ROOT, profile_index_paths
+from rag_literature_rag.ingest.raptor import (
+    build_raptor_tree,
+    is_raptor_profile,
+    unload_ollama_model_for_raptor,
+)
+from rag_literature_rag.ingest.raptor import (
+    cache_stats as raptor_cache_stats,
+)
 from rag_literature_rag.ingest.status import (
     format_duration,
     ingest_status_cmd,
@@ -72,6 +81,8 @@ from rag_literature_rag.ingest.status import (
     refresh_progress_estimate,
     write_status,
 )
+from rag_literature_rag.manifest import ManifestItem, load_manifest
+from rag_literature_rag.paths import PKG_ROOT, profile_index_paths
 
 
 def _ingest_doc_batch() -> int:
@@ -133,8 +144,7 @@ def _ensure_pdf_backend_available(pdf_backend: str) -> None:
         from docling.document_converter import DocumentConverter  # noqa: F401
     except ImportError as exc:
         raise click.ClickException(
-            "RAG_LIT_PDF_BACKEND=docling but docling is not installed. "
-            "Run: uv sync --extra docling"
+            "RAG_LIT_PDF_BACKEND=docling but docling is not installed. Run: uv sync --extra docling"
         ) from exc
 
 
@@ -229,10 +239,20 @@ def _extract_pdf_task(task: ExtractionTask) -> ExtractionOutcome:
     """Extract and chunk one PDF. This top-level worker is process-pool picklable."""
     from rag_literature_rag.ingest.extract_cache import (
         get as cache_get,
+    )
+    from rag_literature_rag.ingest.extract_cache import (
         get_bundle as cache_get_bundle,
+    )
+    from rag_literature_rag.ingest.extract_cache import (
         get_pages as page_cache_get,
+    )
+    from rag_literature_rag.ingest.extract_cache import (
         put as cache_put,
+    )
+    from rag_literature_rag.ingest.extract_cache import (
         put_bundle as cache_put_bundle,
+    )
+    from rag_literature_rag.ingest.extract_cache import (
         put_pages as page_cache_put,
     )
 
@@ -271,11 +291,7 @@ def _extract_pdf_task(task: ExtractionTask) -> ExtractionOutcome:
 
     # Page cache hit: skip expensive PDF extraction while allowing new chunk profiles.
     cache_options = extraction_cache_options(task.pdf_backend)
-    pages = (
-        page_cache_get(sha256, task.pdf_backend, options=cache_options)
-        if sha256
-        else None
-    )
+    pages = page_cache_get(sha256, task.pdf_backend, options=cache_options) if sha256 else None
     reason = "page_cache_hit" if pages is not None else None
     if pages is None:
         pages = extract_pdf_pages(task.item, backend=task.pdf_backend)
@@ -375,7 +391,11 @@ def _iter_extraction_outcomes(
         for raw_document in items:
             if stop_event is not None and stop_event.is_set():
                 return
-            document = raw_document if isinstance(raw_document, IngestDocument) else IngestDocument(raw_document)
+            document = (
+                raw_document
+                if isinstance(raw_document, IngestDocument)
+                else IngestDocument(raw_document)
+            )
             item = document.item
             decision = _classify_ingest_item(item, force=force, state=state)
             if decision.kind == "skip":
@@ -408,7 +428,11 @@ def _iter_extraction_outcomes(
         for raw_document in items:
             if stop_event is not None and stop_event.is_set():
                 break
-            document = raw_document if isinstance(raw_document, IngestDocument) else IngestDocument(raw_document)
+            document = (
+                raw_document
+                if isinstance(raw_document, IngestDocument)
+                else IngestDocument(raw_document)
+            )
             item = document.item
             decision = _classify_ingest_item(item, force=force, state=state)
             if decision.kind == "skip":
@@ -469,9 +493,7 @@ def _iter_queued_extraction_outcomes(
                 if blocked_started is not None:
                     telemetry.backpressure_seconds += time.monotonic() - blocked_started
                 telemetry.backpressure_blocked = False
-                telemetry.max_queue_depth = max(
-                    telemetry.max_queue_depth, outcome_queue.qsize()
-                )
+                telemetry.max_queue_depth = max(telemetry.max_queue_depth, outcome_queue.qsize())
                 return True
             except queue.Full:
                 if blocked_started is None:
@@ -532,7 +554,6 @@ def _iter_queued_extraction_outcomes(
         producer.join(timeout=5)
         if producer.is_alive():
             log.warning("extraction producer did not stop within 5s; shutdown continues")
-
 
 
 def _mark_item_ingested(item: ManifestItem, state: dict) -> None:
@@ -648,15 +669,18 @@ def _execute_ingest(
         force = True
 
     if chunking_fingerprint_mismatch(state, fingerprint) and not rebuild:
-        log.warning("chunking fingerprint changed for profile %s; auto-enabling rebuild", index_slug)
-        click.echo(f"Chunking fingerprint changed for profile {index_slug!r}; auto-enabling --rebuild.", err=True)
+        log.warning(
+            "chunking fingerprint changed for profile %s; auto-enabling rebuild", index_slug
+        )
+        click.echo(
+            f"Chunking fingerprint changed for profile {index_slug!r}; auto-enabling --rebuild.",
+            err=True,
+        )
         clear_doc_entries(state)
         rebuild = True
         force = True
 
-    default_workers = (
-        "48" if cfg.backend == "gemini" else ("2" if cfg.backend == "openai" else "4")
-    )
+    default_workers = "48" if cfg.backend == "gemini" else ("2" if cfg.backend == "openai" else "4")
     workers = resolve_workers(
         int(os.getenv("RAG_LIT_WORKERS", default_workers)),
         prefix="RAG_LIT_",
@@ -778,9 +802,7 @@ def _execute_ingest(
         run_status["indexing_seconds"] = round(
             index_phase_stats.lancedb_seconds + index_phase_stats.bm25_seconds, 2
         )
-        run_status["total_throughput_documents_per_second"] = run_status[
-            "documents_per_second"
-        ]
+        run_status["total_throughput_documents_per_second"] = run_status["documents_per_second"]
         if pipeline_telemetry.extraction_seconds:
             run_status["extraction_throughput_documents_per_second"] = round(
                 pipeline_telemetry.documents_extracted / pipeline_telemetry.extraction_seconds,
@@ -854,7 +876,14 @@ def _execute_ingest(
         write_status(run_status, index_paths)
 
     def flush_batch() -> None:
-        nonlocal written, rebuild_table, batch_chunks, batch_parents, batch_summaries, batch_outcomes, docs_in_batch
+        nonlocal \
+            written, \
+            rebuild_table, \
+            batch_chunks, \
+            batch_parents, \
+            batch_summaries, \
+            batch_outcomes, \
+            docs_in_batch
         nonlocal metadata_tokens_checkpointed
         if not batch_chunks:
             docs_in_batch = 0
@@ -871,9 +900,7 @@ def _execute_ingest(
             and pipeline_telemetry.documents_queued <= scanned
             and not pipeline_telemetry.producer_done
         ):
-            log.warning(
-                "Gemini embedding workers may be starved by extraction: queue depth=0"
-            )
+            log.warning("Gemini embedding workers may be starved by extraction: queue depth=0")
         report_progress(phase="embedding_and_indexing", force_log=True)
         log.info(
             "batch start documents=%d chunks=%d indexed_documents=%d chunks_written=%d",
@@ -983,11 +1010,15 @@ def _execute_ingest(
             run_status,
             chunks_written=len(batch_chunks),
             checkpoint_count=1,
-            estimated_embedding_tokens=max(0, stats.tokens - int(run_status["estimated_embedding_tokens"])),
+            estimated_embedding_tokens=max(
+                0, stats.tokens - int(run_status["estimated_embedding_tokens"])
+            ),
             documents_indexed=docs_in_batch,
             documents_checkpointed=docs_in_batch,
         )
-        run_status["summaries_written"] = int(run_status.get("summaries_written", 0)) + summaries_written
+        run_status["summaries_written"] = (
+            int(run_status.get("summaries_written", 0)) + summaries_written
+        )
         run_status["estimated_cost_usd"] = state.get("estimated_cost_usd", 0.0)
         batch_elapsed = time.monotonic() - batch_started
         run_status["last_batch_seconds"] = round(batch_elapsed, 1)
@@ -1228,7 +1259,9 @@ def _execute_ingest(
 
 
 def ingest_options(f):
-    f = click.option("--force", is_flag=True, help="Re-ingest all documents regardless of sha256.")(f)
+    f = click.option("--force", is_flag=True, help="Re-ingest all documents regardless of sha256.")(
+        f
+    )
     f = click.option("--rebuild", is_flag=True, help="Drop and recreate the LanceDB table.")(f)
     f = click.option(
         "--embed-profile",
@@ -1294,7 +1327,9 @@ def ingest_group(
         except BaseException:
             status = load_status(embed_profile)
             if status.get("status") == "running":
-                status["status"] = "interrupted" if isinstance(sys.exc_info()[1], KeyboardInterrupt) else "failed"
+                status["status"] = (
+                    "interrupted" if isinstance(sys.exc_info()[1], KeyboardInterrupt) else "failed"
+                )
                 status["finished_at"] = now_iso()
                 write_status(status, embed_profile)
             raise

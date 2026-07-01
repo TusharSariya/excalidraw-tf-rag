@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
 from urllib.parse import urljoin, urlparse
 
@@ -129,10 +128,7 @@ GRAPHVIZ_KNOWN_PDFS = [
     },
 ]
 
-_GRAPHVIZ_ALT_URLS = {
-    k["id"]: k.get("alt_urls", [])
-    for k in GRAPHVIZ_KNOWN_PDFS
-}
+_GRAPHVIZ_ALT_URLS = {k["id"]: k.get("alt_urls", []) for k in GRAPHVIZ_KNOWN_PDFS}
 
 
 def _extract_pdf_links(html: str, base_url: str) -> list[tuple[str, str]]:
@@ -168,7 +164,9 @@ def _download_graphviz_item(item: ManifestItem, *, dry_run: bool) -> ManifestIte
     return item
 
 
-def harvest_graphviz_theory(*, dry_run: bool = False, workers: int | None = None) -> list[ManifestItem]:
+def harvest_graphviz_theory(
+    *, dry_run: bool = False, workers: int | None = None
+) -> list[ManifestItem]:
     theory_url = "https://graphviz.org/theory/"
     html = fetch_text(theory_url)
     crawled = _extract_pdf_links(html, theory_url)

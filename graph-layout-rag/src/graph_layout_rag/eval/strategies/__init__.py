@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import math
 import os
 from dataclasses import dataclass
@@ -258,9 +257,10 @@ class HybridLLMRerankStrategy:
     requires_cloud_cost: bool = False
 
     def run(self, case: EvalCase, *, embed_profile: str, top: int = 20) -> list[dict[str, Any]]:
+        from rag_common.rerank import rerank_listwise_llm
+
         from graph_layout_rag.query.retrieve import diversify_candidates, retrieve_candidates
         from graph_layout_rag.query.search import format_results
-        from rag_common.rerank import rerank_listwise_llm
 
         candidates = retrieve_candidates(
             case.query,
@@ -376,8 +376,7 @@ class HyDEStrategy:
 
         passage = hyde_passage(case.query)
         ctx = resolve_retrieve_context(embed_profile=embed_profile)
-        from graph_layout_rag.ingest.embed import embed_query
-        from graph_layout_rag.ingest.embed import ENV_PREFIX
+        from graph_layout_rag.ingest.embed import ENV_PREFIX, embed_query
 
         vector = embed_query(passage, config=ctx.config, prefix=ENV_PREFIX, allow_fallback=False)
         candidates = retrieve_candidates(
@@ -390,9 +389,10 @@ class HyDEStrategy:
             vector=vector,
             bm25_query=case.query,
         )
-        from graph_layout_rag.query.search import format_results
-        from graph_layout_rag.query.retrieve import diversify_candidates
         from rag_common.rerank import rerank as rerank_candidates
+
+        from graph_layout_rag.query.retrieve import diversify_candidates
+        from graph_layout_rag.query.search import format_results
 
         diverse = diversify_candidates(candidates, max_per_doc=5, limit=max(top * 2, 50))
         reranked = rerank_candidates(case.query, diverse, top=max(top * 2, top), enabled=False)

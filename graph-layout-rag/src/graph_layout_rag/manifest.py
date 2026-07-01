@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -36,9 +36,13 @@ class ManifestItem(BaseModel):
     documentKind: DocumentKind = "paper"
     venue: str | None = None
     arxiv_category: str | None = None
-    genre: str | None = None          # e.g. OpenAlex `type` or S2 publicationType
-    venue_type: str | None = None     # OpenAlex primary_location.source.type (journal/conference/repository)
-    oa_version: str | None = None     # OpenAlex primary_location.version (publishedVersion/acceptedVersion/submittedVersion)
+    genre: str | None = None  # e.g. OpenAlex `type` or S2 publicationType
+    venue_type: str | None = (
+        None  # OpenAlex primary_location.source.type (journal/conference/repository)
+    )
+    oa_version: str | None = (
+        None  # OpenAlex primary_location.version (publishedVersion/acceptedVersion/submittedVersion)
+    )
     is_retracted: bool = False
 
 
@@ -74,7 +78,9 @@ def save_manifest(manifest: Manifest) -> None:
 def merge_items(existing: ManifestItem, incoming: ManifestItem) -> ManifestItem:
     """Merge provider records without losing a stronger previously discovered field."""
     status_rank = {"failed": 0, "metadata_only": 1, "ok": 2}
-    preferred = incoming if status_rank[incoming.status] >= status_rank[existing.status] else existing
+    preferred = (
+        incoming if status_rank[incoming.status] >= status_rank[existing.status] else existing
+    )
     fallback = existing if preferred is incoming else incoming
     merged = preferred.model_copy(deep=True)
 
@@ -143,4 +149,4 @@ def relative_local_path(abs_path: Path) -> str:
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    return datetime.now(UTC).isoformat().replace("+00:00", "Z")

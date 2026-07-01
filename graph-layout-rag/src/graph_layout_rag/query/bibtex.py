@@ -83,9 +83,7 @@ def _entry_type(venue: str | None, year: int | None) -> str:
     return "misc"
 
 
-def _cite_key(
-    item: ManifestItem, authors: list[str], year: int | None, title: str | None
-) -> str:
+def _cite_key(item: ManifestItem, authors: list[str], year: int | None, title: str | None) -> str:
     surname = _first_author_surname(authors)
     surname_tok = _ascii_fold(surname) if surname else ""
     title_tok = ""

@@ -64,7 +64,9 @@ def opencode_bin() -> str:
 
 
 def opencode_model() -> str:
-    return (os.getenv("RAG_OPENCODE_MODEL", DEFAULT_OPENCODE_MODEL)).strip() or DEFAULT_OPENCODE_MODEL
+    return (
+        os.getenv("RAG_OPENCODE_MODEL", DEFAULT_OPENCODE_MODEL)
+    ).strip() or DEFAULT_OPENCODE_MODEL
 
 
 def gemini_model() -> str:
@@ -118,7 +120,9 @@ def generate_text(
     backend = llm_backend()
     if backend == "gateway":
         resolved = model or ollama_model()
-        return _generate_gateway(prompt, model=resolved, temperature=temperature, max_tokens=max_tokens)
+        return _generate_gateway(
+            prompt, model=resolved, temperature=temperature, max_tokens=max_tokens
+        )
     if backend == "ollama":
         resolved = model or ollama_model()
         return _generate_ollama(
@@ -200,9 +204,7 @@ def _generate_opencode(prompt: str, *, model: str, timeout: float = 180.0) -> st
 
     args = [opencode_bin(), "run", "-m", model, "--format", "json", prompt]
     try:
-        proc = subprocess.run(
-            args, capture_output=True, text=True, timeout=timeout
-        )
+        proc = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
     except FileNotFoundError as exc:
         raise RuntimeError(f"opencode CLI not found ({opencode_bin()})") from exc
     except subprocess.TimeoutExpired as exc:
@@ -315,6 +317,7 @@ def _generate_ollama(
 
 def _extract_chat_text(data: dict[str, Any]) -> str:
     import re as _re
+
     choices = data.get("choices") or []
     if choices:
         message = choices[0].get("message") or {}

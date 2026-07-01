@@ -1,8 +1,8 @@
-from rag_literature_rag.eval.strategies import resolve_strategies
-from rag_literature_rag.query.hybrid import merge_rankings, reciprocal_rank_fusion
-from rag_literature_rag.query import retrieve
-from rag_literature_rag.query.retrieve import DEFAULT_HYBRID
 from rag_common.config import EmbedConfig
+from rag_literature_rag.eval.strategies import resolve_strategies
+from rag_literature_rag.query import retrieve
+from rag_literature_rag.query.hybrid import merge_rankings, reciprocal_rank_fusion
+from rag_literature_rag.query.retrieve import DEFAULT_HYBRID
 
 
 def test_production_query_default_is_hybrid():
@@ -22,7 +22,13 @@ def test_resolve_offline_strategies_default():
 
 def test_docsummary_strategies_registered_for_explicit_eval():
     strategies = resolve_strategies(
-        ["docsummary_dense", "docsummary_bm25", "docsummary_hybrid", "docsummary_then_chunks", "docsummary_fused_hybrid"],
+        [
+            "docsummary_dense",
+            "docsummary_bm25",
+            "docsummary_hybrid",
+            "docsummary_then_chunks",
+            "docsummary_fused_hybrid",
+        ],
         llm_transforms=False,
     )
     assert [strategy.name for strategy in strategies] == [
@@ -119,7 +125,10 @@ def test_small_to_big_requires_parent_indexes(tmp_path):
         retrieve._require_parent_indexes(ctx)
     except ValueError as exc:
         assert "does not have parent indexes" in str(exc)
-        assert "rag-literature-rag ingest --embed-profile cuda-qwen0.6b-small2big-dual-v1 --force --rebuild" in str(exc)
+        assert (
+            "rag-literature-rag ingest --embed-profile cuda-qwen0.6b-small2big-dual-v1 --force --rebuild"
+            in str(exc)
+        )
     else:
         raise AssertionError("expected missing parent index error")
 

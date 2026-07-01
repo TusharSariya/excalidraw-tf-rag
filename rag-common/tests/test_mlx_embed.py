@@ -1,6 +1,4 @@
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from rag_common.config import EmbedConfig, local_embed_quant, mlx_q4_model_id, use_mlx_q4_embed
 from rag_common.local_embed import embed_local_texts

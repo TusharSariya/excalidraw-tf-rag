@@ -75,9 +75,7 @@ def test_incremental_checkpoint_skips_completed_sources(tmp_path, monkeypatch):
         encoding="utf-8",
     )
     monkeypatch.setattr(trusted_venues, "CHECKPOINT_PATH", checkpoint)
-    monkeypatch.setattr(
-        trusted_venues, "_jgaa_issue_urls", lambda: ["https://jgaa.test/issue/1"]
-    )
+    monkeypatch.setattr(trusted_venues, "_jgaa_issue_urls", lambda: ["https://jgaa.test/issue/1"])
     monkeypatch.setattr(
         trusted_venues,
         "_drops_specs",
@@ -95,9 +93,7 @@ def test_failed_jgaa_issue_is_not_checkpointed(tmp_path, monkeypatch):
     checkpoint = tmp_path / "trusted.json"
     monkeypatch.setattr(trusted_venues, "CHECKPOINT_PATH", checkpoint)
     monkeypatch.setattr(trusted_venues, "DROPS_VOLUMES", ())
-    monkeypatch.setattr(
-        trusted_venues, "_jgaa_issue_urls", lambda: ["https://jgaa.test/issue/1"]
-    )
+    monkeypatch.setattr(trusted_venues, "_jgaa_issue_urls", lambda: ["https://jgaa.test/issue/1"])
     monkeypatch.setattr(
         trusted_venues,
         "_jgaa_specs",

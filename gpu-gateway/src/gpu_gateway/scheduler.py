@@ -36,17 +36,17 @@ from __future__ import annotations
 import asyncio
 import collections
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Awaitable, Callable, Optional
 
 log = logging.getLogger("gpu_gateway.scheduler")
 
 # --- Scheduler tuning constants (overridable via Scheduler.__init__ for tests) ---
-DRAIN_MAX = 64            # max jobs coalesced into one inference call
+DRAIN_MAX = 64  # max jobs coalesced into one inference call
 DRAIN_TOKEN_BUDGET = 8192  # ~token cap per coalesced batch (bounds activation memory)
-STARVE_MS = 5000.0        # a waiter older than this can preempt a long-served model
-HEADROOM_MB = 800         # measured-free margin required above a model's static weight
-EVICT_POLL_S = 0.05       # backoff when the measured gate is waiting on VRAM to free
+STARVE_MS = 5000.0  # a waiter older than this can preempt a long-served model
+HEADROOM_MB = 800  # measured-free margin required above a model's static weight
+EVICT_POLL_S = 0.05  # backoff when the measured gate is waiting on VRAM to free
 MAX_EVICT_ATTEMPTS = 200  # guard: fail the batch rather than spin forever with nothing to evict
 
 LLM_SENTINEL = "__llm__"  # pseudo-model occupying the whole card (Ollama needs it all)
@@ -63,12 +63,12 @@ class Job:
     dispatcher; the submitting request coroutine awaits it.
     """
 
-    kind: str                 # "embed" | "rerank" | "chat"
-    canonical: str            # canonical model name / LLM_SENTINEL
+    kind: str  # "embed" | "rerank" | "chat"
+    canonical: str  # canonical model name / LLM_SENTINEL
     items: list = field(default_factory=list)
     payload: dict = field(default_factory=dict)
     enqueued_at: float = 0.0
-    future: Optional[asyncio.Future] = None
+    future: asyncio.Future | None = None
     token_estimate: int = 0
 
     def __post_init__(self) -> None:
@@ -89,7 +89,7 @@ class Scheduler:
         unload_fn: Callable[[str], Awaitable[bool]],
         measured_free_mb: Callable[[], int],
         clock: Callable[[], float],
-        empty_cache: Optional[Callable[[], None]] = None,
+        empty_cache: Callable[[], None] | None = None,
         device: str = DEFAULT_DEVICE,
         mode: str = "affinity",
         drain_max: int = DRAIN_MAX,
@@ -122,16 +122,16 @@ class Scheduler:
         self._queues: dict[str, collections.deque] = {}
         # Device-parameterized resident set (single device in v1).
         self._resident: dict[str, set[str]] = {device: set()}
-        self._parked: set[str] = set()          # evicted-to-RAM (observability only)
+        self._parked: set[str] = set()  # evicted-to-RAM (observability only)
         self._loaded_at: dict[str, float] = {}  # canonical → clock() of last serve (LRU)
         # Per-model lifecycle state for well-defined reconcile after failure.
-        self._state: dict[str, str] = {}        # "loading"|"loaded"|"parked"|"failed"
+        self._state: dict[str, str] = {}  # "loading"|"loaded"|"parked"|"failed"
 
-        self._last_served: Optional[str] = None
+        self._last_served: str | None = None
         self._served_streak: int = 0
 
-        self._job_ready: Optional[asyncio.Event] = None
-        self._task: Optional[asyncio.Task] = None
+        self._job_ready: asyncio.Event | None = None
+        self._task: asyncio.Task | None = None
 
         self._metrics = collections.Counter()
         self._last_trace: dict = {}
@@ -180,7 +180,7 @@ class Scheduler:
     async def _run(self) -> None:
         assert self._job_ready is not None
         while True:
-            model: Optional[str] = None
+            model: str | None = None
             batch: list[Job] = []
             try:
                 if not self._any_queued():
@@ -210,7 +210,7 @@ class Scheduler:
     # Selection — pure decision logic (unit-tested without a GPU).
     # ------------------------------------------------------------------
 
-    def _select_model(self) -> Optional[str]:
+    def _select_model(self) -> str | None:
         """Pick the next model to serve: fairness → resident-with-work → deepest queue."""
         starved = self._find_starved()
         if starved is not None:
@@ -228,7 +228,7 @@ class Scheduler:
             return None
         return max(nonempty, key=self._qlen)
 
-    def _find_starved(self) -> Optional[str]:
+    def _find_starved(self) -> str | None:
         """A non-recently-served queue whose head has waited past STARVE_MS, once the
         recently-served model has had its DRAIN_MAX streak. Bounds worst-case wait."""
         if self._served_streak < self._drain_max:
@@ -329,7 +329,7 @@ class Scheduler:
         await self._evict(victim)
         return True
 
-    def _pick_victim(self, exclude: str) -> Optional[str]:
+    def _pick_victim(self, exclude: str) -> str | None:
         """Victim ranking: idle before busy → least-recently-used → shallower queue."""
         cands = [m for m in self._resident[self._device] if m != exclude]
         if not cands:
@@ -357,7 +357,7 @@ class Scheduler:
         self._metrics["evicts"] += 1
         log.info("evict: %s (parked=%s)", victim, parked)
 
-    async def _reconcile(self, model: Optional[str]) -> None:
+    async def _reconcile(self, model: str | None) -> None:
         """After a failure, drop the model from tracking and resync to real VRAM."""
         if model is not None:
             self._resident[self._device].discard(model)
@@ -450,9 +450,7 @@ class Scheduler:
         return self._vram_mb.get(model, 1800)
 
     def _static_free(self) -> int:
-        return self._card_mb - sum(
-            self._effective_mb(m) for m in self._resident[self._device]
-        )
+        return self._card_mb - sum(self._effective_mb(m) for m in self._resident[self._device])
 
     def _qlen(self, model: str) -> int:
         q = self._queues.get(model)
@@ -509,6 +507,5 @@ class Scheduler:
         lines.append(f"gpu_gateway_resident_count {len(snap['resident'].get(self._device, []))}")
         lines.append(f"gpu_gateway_parked_count {len(snap['parked'])}")
         for m, d in snap["queue_depth"].items():
-            safe = m.replace("-", "_").replace(".", "_").replace("__", "_")
             lines.append(f'gpu_gateway_queue_depth{{model="{m}"}} {d}')
         return "\n".join(lines) + "\n"

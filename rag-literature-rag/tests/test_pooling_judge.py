@@ -1,10 +1,17 @@
 """Unit tests for multi-system pooling, LLM judging, and bias diagnostics."""
+
 from __future__ import annotations
 
 from rag_literature_rag.eval.diagnostics import bpref, condensed_ndcg, hole_rate
 from rag_literature_rag.eval.gold_cases import EvalCase
 from rag_literature_rag.eval.judge import _parse_grade, build_judge_prompt
 from rag_literature_rag.eval.pooling import pool_stats
+from rag_literature_rag.eval.qrels import (
+    DEFAULT_RELEVANCE_THRESHOLD,
+    apply_qrels_overlay,
+    graded_labels,
+    relevant_from_grades,
+)
 from rag_literature_rag.eval.qrels_backfill import (
     collect_unjudged_pool,
     count_judge_cache_misses,
@@ -12,15 +19,9 @@ from rag_literature_rag.eval.qrels_backfill import (
     merge_qrels,
     run_qrels_backfill,
 )
-from rag_literature_rag.eval.qrels import (
-    DEFAULT_RELEVANCE_THRESHOLD,
-    apply_qrels_overlay,
-    graded_labels,
-    relevant_from_grades,
-)
-
 
 # ---- qrels overlay ----
+
 
 def _qrels(cases: dict) -> dict:
     return {"relevance_threshold": DEFAULT_RELEVANCE_THRESHOLD, "cases": cases}
@@ -55,6 +56,7 @@ def test_graded_labels_extracts_grades():
 
 # ---- judge prompt + parsing ----
 
+
 def test_judge_prompt_is_source_blind():
     # Sentinel system names that cannot appear in the rubric vocabulary (the rubric
     # legitimately mentions "dense", "colbert", etc. as retrieval methods), so the
@@ -87,6 +89,7 @@ def test_parse_grade_clamps_and_falls_back():
 
 
 # ---- diagnostics ----
+
 
 def test_hole_rate_counts_unjudged():
     ranking = ["a", "b", "c", "d"]
@@ -123,6 +126,7 @@ def test_bpref_penalizes_nonrelevant_above_relevant():
 
 # ---- pool stats ----
 
+
 def test_pool_stats_flags_neural_only_docs():
     payload = {
         "cases": {
@@ -143,6 +147,7 @@ def test_pool_stats_flags_neural_only_docs():
 
 
 # ---- targeted qrels backfill ----
+
 
 class _FakeStrategy:
     def __init__(self, rows):
@@ -171,7 +176,11 @@ def test_backfill_collection_skips_judged_and_dedupes_canonical(monkeypatch):
     import rag_literature_rag.eval.qrels_backfill as qb
 
     monkeypatch.setattr(qb, "cases_for_track", lambda track: [case])
-    monkeypatch.setattr(qb, "strategy_registry", lambda: {"dense": _FakeStrategy(rows_a), "bm25": _FakeStrategy(rows_b)})
+    monkeypatch.setattr(
+        qb,
+        "strategy_registry",
+        lambda: {"dense": _FakeStrategy(rows_a), "bm25": _FakeStrategy(rows_b)},
+    )
     monkeypatch.setattr(qb, "canonical_identity_map", lambda: _IdentityMap())
     monkeypatch.setattr(qb, "load_manifest", lambda: type("Manifest", (), {"items": []})())
     monkeypatch.setattr(qb, "manifest_by_id", lambda manifest: {})
@@ -194,7 +203,9 @@ def test_backfill_collection_skips_judged_and_dedupes_canonical(monkeypatch):
 def test_backfill_merge_preserves_existing_and_only_adds_uncached_verified(monkeypatch):
     import rag_literature_rag.eval.qrels_backfill as qb
 
-    monkeypatch.setattr(qb, "_cache_has_verdict", lambda model, case_id, doc_id: doc_id != "errored")
+    monkeypatch.setattr(
+        qb, "_cache_has_verdict", lambda model, case_id, doc_id: doc_id != "errored"
+    )
     existing = _qrels({"c1": {"old": {"grade": 3, "reason": "keep", "systems": ["curated"]}}})
     judged = {
         "c1": {
@@ -275,8 +286,12 @@ def test_backfill_report_includes_diagnostics_and_counts():
         "estimated_cost_usd": 0.00023,
         "judged_count": 1,
         "skipped_or_error_count": 0,
-        "before_diagnostics": [{"strategy": "dense", "hole@10": 0.2, "bpref": 0.5, "nDCG@10_new": 0.1}],
-        "after_diagnostics": [{"strategy": "dense", "hole@10": 0.0, "bpref": 0.8, "nDCG@10_new": 0.7}],
+        "before_diagnostics": [
+            {"strategy": "dense", "hole@10": 0.2, "bpref": 0.5, "nDCG@10_new": 0.1}
+        ],
+        "after_diagnostics": [
+            {"strategy": "dense", "hole@10": 0.0, "bpref": 0.8, "nDCG@10_new": 0.7}
+        ],
     }
 
     report = format_backfill_report(payload)

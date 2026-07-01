@@ -20,8 +20,8 @@ from __future__ import annotations
 
 import re
 import sqlite3
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 from rag_literature_rag.paths import CITATIONS_DB_PATH
 
@@ -36,7 +36,7 @@ def normalize_doi(raw: str | None) -> str | None:
     low = s.lower()
     for prefix in _DOI_PREFIXES:
         if low.startswith(prefix):
-            s = s[len(prefix):]
+            s = s[len(prefix) :]
             break
     s = s.strip().lower().rstrip(").,;")
     if not s.startswith("10."):
@@ -147,9 +147,14 @@ def upsert_paper(
           enriched_at=COALESCE(excluded.enriched_at, papers.enriched_at)
         """,
         {
-            "oa": oa_id, "doi": doi, "doc": doc_id, "title": title, "year": year,
+            "oa": oa_id,
+            "doi": doi,
+            "doc": doc_id,
+            "title": title,
+            "year": year,
             "cbc": int(cited_by_count) if cited_by_count is not None else None,
-            "corpus": 1 if in_corpus else 0, "ts": enriched_at,
+            "corpus": 1 if in_corpus else 0,
+            "ts": enriched_at,
         },
     )
 
@@ -197,9 +202,7 @@ def upsert_alias(
     )
 
 
-def oa_id_for_alias(
-    db: sqlite3.Connection, *, provider: str, external_id: str
-) -> str | None:
+def oa_id_for_alias(db: sqlite3.Connection, *, provider: str, external_id: str) -> str | None:
     row = db.execute(
         "SELECT oa_id FROM paper_aliases WHERE provider=? AND external_id=?",
         (provider.lower(), external_id),
@@ -235,8 +238,11 @@ def author_key(name: str) -> str:
 
 # --- read accessors -------------------------------------------------------------
 
+
 def oa_id_for_doi(db: sqlite3.Connection, doi: str) -> str | None:
-    row = db.execute("SELECT oa_id FROM papers WHERE doi=? AND oa_id IS NOT NULL", (doi,)).fetchone()
+    row = db.execute(
+        "SELECT oa_id FROM papers WHERE doi=? AND oa_id IS NOT NULL", (doi,)
+    ).fetchone()
     return row[0] if row else None
 
 
@@ -298,10 +304,14 @@ def counts(db: sqlite3.Connection) -> dict[str, int]:
         "cite_edges": db.execute("SELECT count(*) FROM cites").fetchone()[0],
         "citation_provenance": db.execute("SELECT count(*) FROM cite_provenance").fetchone()[0],
         "paper_aliases": db.execute("SELECT count(*) FROM paper_aliases").fetchone()[0],
-        "influential_edges": db.execute("SELECT count(*) FROM cites WHERE is_influential=1").fetchone()[0],
+        "influential_edges": db.execute(
+            "SELECT count(*) FROM cites WHERE is_influential=1"
+        ).fetchone()[0],
         "papers_with_incoming": db.execute(
             "SELECT count(*) FROM papers WHERE in_corpus=1 AND incoming_at IS NOT NULL"
         ).fetchone()[0],
         "authorship_edges": db.execute("SELECT count(*) FROM authorship").fetchone()[0],
-        "distinct_authors": db.execute("SELECT count(DISTINCT author_key) FROM authorship").fetchone()[0],
+        "distinct_authors": db.execute(
+            "SELECT count(DISTINCT author_key) FROM authorship"
+        ).fetchone()[0],
     }

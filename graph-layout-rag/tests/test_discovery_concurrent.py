@@ -21,7 +21,9 @@ def test_concurrent_discovery_merges_all_sources(monkeypatch):
     manifest = Manifest(version=1, updatedAt="x", items=[])
     saved_stages: list[str] = []
 
-    monkeypatch.setattr(run_mod, "_save_progress", lambda m, stage, log, **k: saved_stages.append(stage))
+    monkeypatch.setattr(
+        run_mod, "_save_progress", lambda m, stage, log, **k: saved_stages.append(stage)
+    )
     monkeypatch.setattr(run_mod, "harvest_openalex", lambda **k: [_item("oa1"), _item("oa2")])
     monkeypatch.setattr(run_mod, "harvest_arxiv", lambda **k: [_item("ax1", "arxiv")])
     monkeypatch.setattr(run_mod, "harvest_arxiv_category", lambda **k: [])
@@ -64,13 +66,17 @@ def test_one_source_failure_does_not_abort_pass(monkeypatch):
     def _boom(**k):
         raise RuntimeError("network down")
 
-    monkeypatch.setattr(run_mod, "_save_progress", lambda m, stage, log, **k: saved_stages.append(stage))
+    monkeypatch.setattr(
+        run_mod, "_save_progress", lambda m, stage, log, **k: saved_stages.append(stage)
+    )
     monkeypatch.setattr(run_mod, "harvest_openalex", lambda **k: [_item("oa1")])
     monkeypatch.setattr(run_mod, "harvest_arxiv", _boom)
     monkeypatch.setattr(run_mod, "harvest_arxiv_category", lambda **k: [])
     monkeypatch.setattr(run_mod, "harvest_dblp", lambda **k: [_item("db1", "dblp")])
     monkeypatch.setattr(run_mod, "harvest_trusted_venues", lambda **k: [])
-    monkeypatch.setattr(run_mod, "harvest_semantic_scholar", lambda **k: [_item("s2a", "semantic-scholar")])
+    monkeypatch.setattr(
+        run_mod, "harvest_semantic_scholar", lambda **k: [_item("s2a", "semantic-scholar")]
+    )
 
     run_mod._run_discovery_pass(
         manifest,

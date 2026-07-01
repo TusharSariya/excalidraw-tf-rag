@@ -1,10 +1,11 @@
 """Targeted qrels backfill for currently unjudged top-k retrieval holes."""
+
 from __future__ import annotations
 
 import copy
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +24,7 @@ DEFAULT_BACKFILL_STRATEGIES: tuple[str, ...] = ("dense", "hybrid", "bm25")
 
 
 def _now_slug() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 def qrels_path(track: EvalTrack) -> Path:
@@ -122,7 +123,7 @@ def collect_unjudged_pool(
     return (
         {
             "version": 1,
-            "generated_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "track": track,
             "depth": depth,
             "embed_profile": embed_profile,
@@ -171,7 +172,7 @@ def merge_qrels(
                 continue
             target[doc_id] = copy.deepcopy(verdict)
             inserted += 1
-    merged["generated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    merged["generated_at"] = datetime.now(UTC).isoformat().replace("+00:00", "Z")
     merged.setdefault("judge_model", model)
     merged.setdefault("relevance_threshold", DEFAULT_RELEVANCE_THRESHOLD)
     return merged, {"judged_count": inserted, "skipped_or_error_count": skipped}
@@ -220,10 +221,16 @@ def format_backfill_report(payload: dict[str, Any]) -> str:
         "|---|---:|---:|---:|",
     ]
     for row in payload["before_diagnostics"]:
-        lines.append(f"| {row['strategy']} | {row['hole@10']:.2f} | {row['bpref']:.3f} | {row['nDCG@10_new']:.3f} |")
-    lines.extend(["", "## After", "", "| strategy | hole@10 | bpref | nDCG@10_new |", "|---|---:|---:|---:|"])
+        lines.append(
+            f"| {row['strategy']} | {row['hole@10']:.2f} | {row['bpref']:.3f} | {row['nDCG@10_new']:.3f} |"
+        )
+    lines.extend(
+        ["", "## After", "", "| strategy | hole@10 | bpref | nDCG@10_new |", "|---|---:|---:|---:|"]
+    )
     for row in payload["after_diagnostics"]:
-        lines.append(f"| {row['strategy']} | {row['hole@10']:.2f} | {row['bpref']:.3f} | {row['nDCG@10_new']:.3f} |")
+        lines.append(
+            f"| {row['strategy']} | {row['hole@10']:.2f} | {row['bpref']:.3f} | {row['nDCG@10_new']:.3f} |"
+        )
     return "\n".join(lines) + "\n"
 
 

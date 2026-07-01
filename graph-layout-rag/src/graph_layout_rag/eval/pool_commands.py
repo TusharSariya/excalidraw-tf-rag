@@ -7,6 +7,7 @@ Workflow::
     eval diagnostics --track catalog --embed-profile P --qrels data/eval/qrels/catalog/qrels.json
     eval benchmark   --embed-profile P --qrels data/eval/qrels/catalog/qrels.json --report
 """
+
 from __future__ import annotations
 
 import json
@@ -30,10 +31,16 @@ def _experimental_indexes(splade_index: Path | None, colbert_index: Path | None)
 @click.command("pool")
 @click.option("--track", type=click.Choice(EVAL_TRACKS), required=True)
 @click.option("--embed-profile", required=True)
-@click.option("--system", "systems", multiple=True, help="Pool system (repeatable); default diverse set.")
+@click.option(
+    "--system", "systems", multiple=True, help="Pool system (repeatable); default diverse set."
+)
 @click.option("--depth", default=50, show_default=True, type=click.IntRange(min=1))
-@click.option("--splade-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None)
-@click.option("--colbert-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None)
+@click.option(
+    "--splade-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None
+)
+@click.option(
+    "--colbert-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None
+)
 @click.option("-o", "--output", "output", type=click.Path(path_type=Path), default=None)
 @click.option(
     "--leave-dense-out",
@@ -100,11 +107,7 @@ def _write_leave_dense_out_sidecars(
         seed_attribution,
     )
 
-    case_seed = {
-        c["id"]: c["seed_doc_id"]
-        for c in load_synth_cases()
-        if c.get("seed_doc_id")
-    }
+    case_seed = {c["id"]: c["seed_doc_id"] for c in load_synth_cases() if c.get("seed_doc_id")}
     if not case_seed:
         click.echo("[leave-dense-out] no synthetic cases with seeds found; skipping sidecar.")
         return
@@ -147,7 +150,12 @@ def _write_leave_dense_out_sidecars(
 
 
 @click.command("judge")
-@click.option("--track", type=click.Choice(EVAL_TRACKS), default=None, help="Locate the default pool for this track.")
+@click.option(
+    "--track",
+    type=click.Choice(EVAL_TRACKS),
+    default=None,
+    help="Locate the default pool for this track.",
+)
 @click.option("--pool", "pool_file", type=click.Path(path_type=Path, exists=True), default=None)
 @click.option("--model", default=None, help="Judge LLM model (default GRAPH_RAG_JUDGE_LLM_MODEL).")
 @click.option("-o", "--output", "output", type=click.Path(path_type=Path), default=None)
@@ -171,7 +179,9 @@ def judge_cmd(
             raise click.ClickException("Pass --pool or --track to locate the pool.")
         pool_file = pool_path(track)  # type: ignore[arg-type]
         if not pool_file.is_file():
-            raise click.ClickException(f"No pool at {pool_file}; run `eval pool --track {track}` first.")
+            raise click.ClickException(
+                f"No pool at {pool_file}; run `eval pool --track {track}` first."
+            )
     pool = json.loads(Path(pool_file).read_text(encoding="utf-8"))
     resolved_model = model or judge_model()
     cases_out = judge_pool(pool, model=resolved_model)
@@ -193,9 +203,16 @@ def judge_cmd(
 
 
 @click.command("judge-validate")
-@click.option("--track", type=click.Choice(EVAL_TRACKS), default=None, help="Locate the default pool for this track.")
+@click.option(
+    "--track",
+    type=click.Choice(EVAL_TRACKS),
+    default=None,
+    help="Locate the default pool for this track.",
+)
 @click.option("--pool", "pool_file", type=click.Path(path_type=Path, exists=True), default=None)
-@click.option("--model", default=None, help="Judge LLM model (default backend-resolved judge_model).")
+@click.option(
+    "--model", default=None, help="Judge LLM model (default backend-resolved judge_model)."
+)
 @click.option("--seeds", "seeds_path", type=click.Path(path_type=Path, exists=True), default=None)
 @click.option("-v", "--verbose", is_flag=True)
 def judge_validate_cmd(
@@ -221,7 +238,9 @@ def judge_validate_cmd(
             raise click.ClickException("Pass --pool or --track to locate the pool.")
         pool_file = pool_path(track)  # type: ignore[arg-type]
         if not pool_file.is_file():
-            raise click.ClickException(f"No pool at {pool_file}; run `eval pool --track {track}` first.")
+            raise click.ClickException(
+                f"No pool at {pool_file}; run `eval pool --track {track}` first."
+            )
 
     result = validate_judge_hg7(pool_file, model=model, seed_cases_path=seeds_path)
     click.echo(json.dumps(result, indent=2))
@@ -233,10 +252,19 @@ def judge_validate_cmd(
 @click.option("--track", type=click.Choice(EVAL_TRACKS), required=True)
 @click.option("--embed-profile", required=True)
 @click.option("--qrels", "qrels_path", type=click.Path(path_type=Path, exists=True), required=True)
-@click.option("--strategy", "strategies", multiple=True, help="Strategy (repeatable); default bm25,dense,hybrid.")
+@click.option(
+    "--strategy",
+    "strategies",
+    multiple=True,
+    help="Strategy (repeatable); default bm25,dense,hybrid.",
+)
 @click.option("--depth", default=20, show_default=True, type=click.IntRange(min=1))
-@click.option("--splade-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None)
-@click.option("--colbert-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None)
+@click.option(
+    "--splade-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None
+)
+@click.option(
+    "--colbert-index", type=click.Path(path_type=Path, exists=True, file_okay=False), default=None
+)
 @click.option("-o", "--output", "output", type=click.Path(path_type=Path), default=None)
 def diagnostics_cmd(
     track: str,
@@ -264,7 +292,9 @@ def diagnostics_cmd(
     if output:
         Path(output).parent.mkdir(parents=True, exist_ok=True)
         Path(output).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-        Path(output).with_suffix(".md").write_text(format_diagnostics_table(payload), encoding="utf-8")
+        Path(output).with_suffix(".md").write_text(
+            format_diagnostics_table(payload), encoding="utf-8"
+        )
     click.echo(format_diagnostics_table(payload))
 
 
@@ -360,9 +390,7 @@ def pool_merge_cmd(
 
     write_pool(payload, output)
     n_cases = payload["case_count"]
-    n_candidates = sum(
-        len(c.get("pooled", {})) for c in payload["cases"].values()
-    )
+    n_candidates = sum(len(c.get("pooled", {})) for c in payload["cases"].values())
     click.echo(f"Wrote {output}")
     click.echo(json.dumps({"n_cases": n_cases, "total_candidates": n_candidates}, indent=2))
 
@@ -371,8 +399,16 @@ def pool_merge_cmd(
 @click.option("--embed-profile", required=True, help="Embed profile used to sample seed docs.")
 @click.option("--n-catalog", default=90, show_default=True, type=int, help="Catalog seed count.")
 @click.option("--n-pdf", default=40, show_default=True, type=int, help="PDF-deep-read seed count.")
-@click.option("--hard-frac", default=0.30, show_default=True, type=float, help="Fraction of hard (indirect) queries.")
-@click.option("--budget-usd", default=10.0, show_default=True, type=float, help="Approximate LLM cost budget.")
+@click.option(
+    "--hard-frac",
+    default=0.30,
+    show_default=True,
+    type=float,
+    help="Fraction of hard (indirect) queries.",
+)
+@click.option(
+    "--budget-usd", default=10.0, show_default=True, type=float, help="Approximate LLM cost budget."
+)
 @click.option("--gen-only", is_flag=True, help="Generate and cache queries without writing cases.")
 @click.option("-v", "--verbose", is_flag=True)
 def gen_gold_cmd(
@@ -438,7 +474,9 @@ def corpus_health_cmd(embed_profile: str, track: str, as_json: bool) -> None:
         f"(critical={report['n_critical']} warning={report['n_warning']})\n"
     )
     for f in report["findings"]:
-        click.echo(f"  {icon.get(f['severity'], '?')} [{f['severity']}] {f['code']}: {f['message']}")
+        click.echo(
+            f"  {icon.get(f['severity'], '?')} [{f['severity']}] {f['code']}: {f['message']}"
+        )
         if f["remedy"]:
             click.echo(f"      -> {f['remedy']}")
     raise SystemExit(1 if report["n_critical"] else 0)

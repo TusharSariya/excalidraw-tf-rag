@@ -6,8 +6,8 @@ import time
 import httpx
 
 from rag_literature_rag.harvest.doi_resolver import resolve_doi_with_fallbacks
-from rag_literature_rag.harvest.log import get_logger
 from rag_literature_rag.harvest.download import download_to_file
+from rag_literature_rag.harvest.log import get_logger
 from rag_literature_rag.harvest.parallel import parallel_map
 from rag_literature_rag.harvest.relevance import is_layout_relevant
 from rag_literature_rag.manifest import ManifestItem, relative_local_path, slug_id
@@ -67,17 +67,11 @@ def _hit_to_item(hit: dict) -> ManifestItem:
     authors_raw = info.get("authors", {}).get("author", [])
     if not isinstance(authors_raw, list):
         authors_raw = [authors_raw]
-    authors = [
-        a if isinstance(a, str) else a.get("text", "")
-        for a in authors_raw
-        if a
-    ]
+    authors = [a if isinstance(a, str) else a.get("text", "") for a in authors_raw if a]
     urls = _urls_from_info(info)
     pdf_url = next((u for u in urls if ".pdf" in u.lower()), None)
     doi = _doi_from_urls(urls)
-    link = pdf_url or next((u for u in urls if "doi.org" in u), None) or (
-        urls[0] if urls else None
-    )
+    link = pdf_url or next((u for u in urls if "doi.org" in u), None) or (urls[0] if urls else None)
 
     doc_id = slug_id(f"dblp-{title}-{year or 'na'}")
     return ManifestItem(

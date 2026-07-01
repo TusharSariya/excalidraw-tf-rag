@@ -3,15 +3,14 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-from dataclasses import replace
-from dataclasses import dataclass
-from typing import Any, Callable, Sequence
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
+from typing import Any
 
 import numpy as np
+from rag_common.local_llm import DEFAULT_OLLAMA_MODEL
 from sklearn.decomposition import PCA
 from sklearn.mixture import GaussianMixture
-
-from rag_common.local_llm import DEFAULT_OLLAMA_MODEL
 
 from rag_literature_rag.ingest.chunk import TextChunk
 from rag_literature_rag.ingest.doc_summary import DocumentSummary, SummaryCacheStats
@@ -105,7 +104,9 @@ def _load_cached(key: str) -> str | None:
     return text.strip() if isinstance(text, str) and text.strip() else None
 
 
-def _store_cached(key: str, *, child_ids: list[str], model: str, source_hash: str, summary: str) -> None:
+def _store_cached(
+    key: str, *, child_ids: list[str], model: str, source_hash: str, summary: str
+) -> None:
     path = _cache_path(key)
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = {
@@ -121,7 +122,9 @@ def _store_cached(key: str, *, child_ids: list[str], model: str, source_hash: st
     os.replace(tmp, path)
 
 
-def cluster_nodes(vectors: Sequence[Sequence[float]], *, min_cluster: int = MIN_CLUSTER) -> list[int]:
+def cluster_nodes(
+    vectors: Sequence[Sequence[float]], *, min_cluster: int = MIN_CLUSTER
+) -> list[int]:
     """Assign cluster labels with PCA-reduced GMM; BIC selects k."""
     count = len(vectors)
     if count < min_cluster * 2:
@@ -167,7 +170,9 @@ def _member_source_text(members: Sequence[_TreeMember]) -> str:
     return "\n\n".join(part for part in parts if part.strip())
 
 
-def build_cluster_prompt(item: ManifestItem, members: Sequence[_TreeMember], source_text: str) -> str:
+def build_cluster_prompt(
+    item: ManifestItem, members: Sequence[_TreeMember], source_text: str
+) -> str:
     return (
         "You write one source-grounded retrieval summary for a cluster of related "
         "passages from a RAG / information retrieval research paper.\n\n"
@@ -281,13 +286,7 @@ def build_raptor_tree(
             summary_text = _summarize_cluster(item, members, model=model, stats=stats)
             if not summary_text:
                 continue
-            child_ids = sorted(
-                {
-                    source_id
-                    for member in members
-                    for source_id in member.source_ids
-                }
-            )
+            child_ids = sorted({source_id for member in members for source_id in member.source_ids})
             pages = [member.page for member in members if member.page is not None]
             page_ends = [
                 member.page_end if member.page_end is not None else member.page

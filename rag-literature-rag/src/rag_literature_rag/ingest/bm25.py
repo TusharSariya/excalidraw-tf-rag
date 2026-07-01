@@ -10,7 +10,7 @@ sparse hits merge and render through the same code path.
 from __future__ import annotations
 
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -51,7 +51,7 @@ def _open_or_create_index(index_dir: Path) -> tantivy.Index:
 
 
 def _archive_incompatible_index(index_dir: Path) -> Path:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now(UTC).strftime("%Y%m%d-%H%M%S")
     archive_dir = index_dir.with_name(f"{index_dir.name}.schema-mismatch-{stamp}")
     suffix = 1
     while archive_dir.exists():

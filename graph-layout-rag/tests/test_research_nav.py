@@ -2,6 +2,7 @@
 prior): explicit citation sort, the 'seminal' entry-point flag, and in-corpus
 citation-neighborhood traversal. All are user-driven surfacing — none change the
 relevance score."""
+
 from __future__ import annotations
 
 from graph_layout_rag.query.citation_rank import CitationGraph, in_corpus_neighbors

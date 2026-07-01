@@ -1,9 +1,7 @@
-import json
 import subprocess
 from pathlib import Path
 
 import pytest
-
 from rag_literature_rag.env import load_env_file
 from rag_literature_rag.ingest.index import chunk_count
 from rag_literature_rag.paths import list_profile_indexes, profile_index_paths

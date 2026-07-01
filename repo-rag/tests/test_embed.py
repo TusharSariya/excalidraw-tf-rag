@@ -1,6 +1,6 @@
 from unittest.mock import MagicMock, patch
 
-from repo_rag.ingest.embed import ENV_PREFIX, EmbedConfig, embed_config_from_env, embed_texts
+from repo_rag.ingest.embed import ENV_PREFIX, embed_config_from_env, embed_texts
 
 
 @patch.dict("os.environ", {"RAG_EMBED_BACKEND": "local"}, clear=True)

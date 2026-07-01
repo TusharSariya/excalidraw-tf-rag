@@ -13,7 +13,9 @@ from graph_layout_rag.paths import PKG_ROOT
 
 @click.command("check-pdfs", context_settings={"help_option_names": ["-h", "--help"]})
 @click.option("--limit", default=0, show_default=True, type=int, help="Max docs (0 = all).")
-@click.option("--warnings-only", is_flag=True, help="Only show docs with MuPDF messages or empty text.")
+@click.option(
+    "--warnings-only", is_flag=True, help="Only show docs with MuPDF messages or empty text."
+)
 @click.option("--json", "as_json", is_flag=True, help="JSON output.")
 def check_pdfs_cmd(limit: int, warnings_only: bool, as_json: bool) -> None:
     """Scan ok manifest PDFs for MuPDF font warnings and empty text extraction."""
@@ -55,7 +57,10 @@ def check_pdfs_cmd(limit: int, warnings_only: bool, as_json: bool) -> None:
     problem = sum(
         1
         for r in rows
-        if r["open_error"] or r["has_font_warnings"] or r["pages_with_text"] == 0 or r["failed_pages"]
+        if r["open_error"]
+        or r["has_font_warnings"]
+        or r["pages_with_text"] == 0
+        or r["failed_pages"]
     )
     click.echo(f"Scanned {len(rows)} PDF(s); {problem} with extraction issues.\n")
     for r in rows:

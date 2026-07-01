@@ -5,7 +5,7 @@ import sqlite3
 from pathlib import Path
 
 from repo_rag.chunk.ast_ts import chunk_file
-from repo_rag.harvest.manifest import FileEntry, RepoManifest
+from repo_rag.harvest.manifest import RepoManifest
 from repo_rag.paths import GRAPH_DB_PATH, REPO_ROOT
 
 IMPORT_RE = re.compile(r"""(?:from\s+|import\s*\()\s*["']([^"']+)["']""")
@@ -26,7 +26,11 @@ def _resolve_import(source: str, specifier: str, paths: set[str]) -> str | None:
     if not specifier.startswith("."):
         return None
     base = (Path(source).parent / specifier).as_posix()
-    candidates = [base, *(base + ext for ext in (".ts", ".tsx", ".js", ".jsx", ".json")), *(f"{base}/index{ext}" for ext in (".ts", ".tsx", ".js", ".jsx"))]
+    candidates = [
+        base,
+        *(base + ext for ext in (".ts", ".tsx", ".js", ".jsx", ".json")),
+        *(f"{base}/index{ext}" for ext in (".ts", ".tsx", ".js", ".jsx")),
+    ]
     return next((candidate for candidate in candidates if candidate in paths), None)
 
 
@@ -52,13 +56,22 @@ def build_graph(manifest: RepoManifest, path: Path = GRAPH_DB_PATH) -> dict[str,
         content = (REPO_ROOT / entry.path).read_text(encoding="utf-8", errors="replace")
         contents[entry.path] = content
         file_id = f"file:{entry.path}"
-        db.execute("INSERT INTO nodes VALUES(?,?,?,?,?,?)", (file_id, "file", Path(entry.path).name, entry.path, 1, entry.source_type))
+        db.execute(
+            "INSERT INTO nodes VALUES(?,?,?,?,?,?)",
+            (file_id, "file", Path(entry.path).name, entry.path, 1, entry.source_type),
+        )
         for chunk in chunk_file(entry, content):
             if chunk.kind == "file":
                 continue
             node_id = f"symbol:{entry.path}:{chunk.start_line}:{chunk.symbol}"
-            db.execute("INSERT OR IGNORE INTO nodes VALUES(?,?,?,?,?,?)", (node_id, "symbol", chunk.symbol, entry.path, chunk.start_line, entry.source_type))
-            db.execute("INSERT OR IGNORE INTO edges VALUES(?,?,?,?)", (file_id, node_id, "contains", f"{entry.path}:{chunk.start_line}"))
+            db.execute(
+                "INSERT OR IGNORE INTO nodes VALUES(?,?,?,?,?,?)",
+                (node_id, "symbol", chunk.symbol, entry.path, chunk.start_line, entry.source_type),
+            )
+            db.execute(
+                "INSERT OR IGNORE INTO edges VALUES(?,?,?,?)",
+                (file_id, node_id, "contains", f"{entry.path}:{chunk.start_line}"),
+            )
             symbols.setdefault(chunk.symbol, []).append(node_id)
 
     for entry in manifest.files:
@@ -67,7 +80,10 @@ def build_graph(manifest: RepoManifest, path: Path = GRAPH_DB_PATH) -> dict[str,
         for specifier in IMPORT_RE.findall(content):
             target = _resolve_import(entry.path, specifier, paths)
             if target:
-                db.execute("INSERT OR IGNORE INTO edges VALUES(?,?,?,?)", (source_id, f"file:{target}", "imports", f"{entry.path}: import {specifier}"))
+                db.execute(
+                    "INSERT OR IGNORE INTO edges VALUES(?,?,?,?)",
+                    (source_id, f"file:{target}", "imports", f"{entry.path}: import {specifier}"),
+                )
         for names, specifier in NAMED_IMPORT_RE.findall(content):
             target_file = _resolve_import(entry.path, specifier, paths)
             if not target_file:
@@ -76,7 +92,15 @@ def build_graph(manifest: RepoManifest, path: Path = GRAPH_DB_PATH) -> dict[str,
                 imported_name = imported.strip().split(" as ", 1)[0].strip()
                 for target_id in symbols.get(imported_name, []):
                     if target_id.startswith(f"symbol:{target_file}:"):
-                        db.execute("INSERT OR IGNORE INTO edges VALUES(?,?,?,?)", (source_id, target_id, "imports", f"{entry.path}: import {imported_name} from {specifier}"))
+                        db.execute(
+                            "INSERT OR IGNORE INTO edges VALUES(?,?,?,?)",
+                            (
+                                source_id,
+                                target_id,
+                                "imports",
+                                f"{entry.path}: import {imported_name} from {specifier}",
+                            ),
+                        )
         declared = set(DECL_RE.findall(content))
         for line_no, line in enumerate(content.splitlines(), 1):
             for called in CALL_RE.findall(line):
@@ -84,12 +108,23 @@ def build_graph(manifest: RepoManifest, path: Path = GRAPH_DB_PATH) -> dict[str,
                     continue
                 for target_id in symbols.get(called, []):
                     if not target_id.startswith(f"symbol:{entry.path}:"):
-                        db.execute("INSERT OR IGNORE INTO edges VALUES(?,?,?,?)", (source_id, target_id, "calls", f"{entry.path}:{line_no}: {line.strip()[:180]}"))
+                        db.execute(
+                            "INSERT OR IGNORE INTO edges VALUES(?,?,?,?)",
+                            (
+                                source_id,
+                                target_id,
+                                "calls",
+                                f"{entry.path}:{line_no}: {line.strip()[:180]}",
+                            ),
+                        )
         if entry.is_test:
             stem = re.sub(r"\.(test|spec)$", "", Path(entry.path).stem)
             for candidate in paths:
                 if not candidate == entry.path and Path(candidate).stem == stem:
-                    db.execute("INSERT OR IGNORE INTO edges VALUES(?,?,?,?)", (source_id, f"file:{candidate}", "tests", entry.path))
+                    db.execute(
+                        "INSERT OR IGNORE INTO edges VALUES(?,?,?,?)",
+                        (source_id, f"file:{candidate}", "tests", entry.path),
+                    )
     db.commit()
     counts = {
         "nodes": db.execute("SELECT count(*) FROM nodes").fetchone()[0],
@@ -102,11 +137,16 @@ def build_graph(manifest: RepoManifest, path: Path = GRAPH_DB_PATH) -> dict[str,
 
 def find_entities(name: str, path: Path = GRAPH_DB_PATH) -> list[dict]:
     with connect(path) as db:
-        rows = db.execute("SELECT * FROM nodes WHERE name = ? OR file_path = ? ORDER BY kind DESC, file_path", (name, name)).fetchall()
+        rows = db.execute(
+            "SELECT * FROM nodes WHERE name = ? OR file_path = ? ORDER BY kind DESC, file_path",
+            (name, name),
+        ).fetchall()
     return [dict(row) for row in rows]
 
 
-def neighbors(entity: str, edge_type: str | None = None, depth: int = 1, path: Path = GRAPH_DB_PATH) -> list[dict]:
+def neighbors(
+    entity: str, edge_type: str | None = None, depth: int = 1, path: Path = GRAPH_DB_PATH
+) -> list[dict]:
     seeds = find_entities(entity, path)
     if not seeds:
         return []
@@ -144,4 +184,7 @@ def graph_counts(path: Path = GRAPH_DB_PATH) -> dict[str, int]:
     if not path.exists():
         return {"nodes": 0, "edges": 0}
     with connect(path) as db:
-        return {"nodes": db.execute("SELECT count(*) FROM nodes").fetchone()[0], "edges": db.execute("SELECT count(*) FROM edges").fetchone()[0]}
+        return {
+            "nodes": db.execute("SELECT count(*) FROM nodes").fetchone()[0],
+            "edges": db.execute("SELECT count(*) FROM edges").fetchone()[0],
+        }

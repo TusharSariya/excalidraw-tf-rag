@@ -2,7 +2,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from rag_common.config import EmbedConfig
 from rag_common.profiles import get_profile, load_profiles, resolve_embed_profile_config
 

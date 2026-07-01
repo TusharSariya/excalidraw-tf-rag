@@ -42,7 +42,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import statistics
 import threading
 import time
 import urllib.error
@@ -62,19 +61,19 @@ RUN_SALT = os.urandom(3).hex()
 #             so THIS is where the reload-count win shows up.
 MIX_PROFILES = {
     "mixed": [
-        ("embed", "cuda-qwen0.6b-1024", 5),   # the hot RAG path
-        ("embed", "cuda-qwen4b-1024", 2),     # heavy embedder — forces eviction pressure
+        ("embed", "cuda-qwen0.6b-1024", 5),  # the hot RAG path
+        ("embed", "cuda-qwen4b-1024", 2),  # heavy embedder — forces eviction pressure
         ("rerank", "bge-reranker-v2-m3", 2),  # follows embed → tests co-residency
-        ("chat", "gemma4:e2b", 1),            # LLM → evicts everything (must exist in Ollama)
+        ("chat", "gemma4:e2b", 1),  # LLM → evicts everything (must exist in Ollama)
     ],
     "hotpath": [
-        ("embed", "cuda-qwen0.6b-1024", 3),   # embed→rerank alternation, co-resident pair
+        ("embed", "cuda-qwen0.6b-1024", 3),  # embed→rerank alternation, co-resident pair
         ("rerank", "bge-reranker-v2-m3", 2),
     ],
 }
-MIX = MIX_PROFILES["mixed"]        # default; overridden per --profile in main()
+MIX = MIX_PROFILES["mixed"]  # default; overridden per --profile in main()
 
-EMBED_TEXT_CHARS = 400   # ~100 tokens; pinned payload size
+EMBED_TEXT_CHARS = 400  # ~100 tokens; pinned payload size
 RERANK_PASSAGES = 8
 CHAT_PROMPT = "Summarize graph layout constraints in one sentence."
 
@@ -165,7 +164,7 @@ class PeakSampler(threading.Thread):
         self.interval = interval
         self.peak_mb = 0
         self.samples = 0
-        self._halt = threading.Event()   # NOT _stop: that shadows Thread._stop(), which join() calls
+        self._halt = threading.Event()  # NOT _stop: that shadows Thread._stop(), which join() calls
 
     def run(self) -> None:
         while not self._halt.is_set():
@@ -245,12 +244,22 @@ def main() -> None:
     ap.add_argument("--url", default="http://localhost:8765")
     ap.add_argument("--requests", type=int, default=200)
     ap.add_argument("--concurrency", type=int, default=8)
-    ap.add_argument("--cache", choices=["on", "off"], default="off",
-                    help="off = every request misses (stresses the scheduler); on = warm cache")
+    ap.add_argument(
+        "--cache",
+        choices=["on", "off"],
+        default="off",
+        help="off = every request misses (stresses the scheduler); on = warm cache",
+    )
     ap.add_argument("--tag", default="run", help="label for this run (e.g. naive | scheduler)")
-    ap.add_argument("--profile", choices=list(MIX_PROFILES), default="mixed",
-                    help="mixed = realistic 4B+LLM load; hotpath = embed→rerank co-residency only")
-    ap.add_argument("--run-salt", default="", help="override the per-run cache-buster (reproducibility)")
+    ap.add_argument(
+        "--profile",
+        choices=list(MIX_PROFILES),
+        default="mixed",
+        help="mixed = realistic 4B+LLM load; hotpath = embed→rerank co-residency only",
+    )
+    ap.add_argument(
+        "--run-salt", default="", help="override the per-run cache-buster (reproducibility)"
+    )
     ap.add_argument("--out", default="", help="write JSON results to this path")
     args = ap.parse_args()
     if args.run_salt:
@@ -266,28 +275,41 @@ def main() -> None:
     # The scheduler mode the gateway is running (affinity | naive) labels the A/B curve.
     sched_mode = health.get("sched_mode", "unknown")
 
-    print(f"# benchmark tag={args.tag} profile={args.profile} mode={sched_mode} "
-          f"url={args.url} card={card_mb} MB")
+    print(
+        f"# benchmark tag={args.tag} profile={args.profile} mode={sched_mode} "
+        f"url={args.url} card={card_mb} MB"
+    )
     # Cold phase: models unloaded → measures worst-case load/evict behavior.
     cold = run_phase(args.url, max(20, args.requests // 4), args.concurrency, args.cache, "cold")
     # Warm phase: models resident → measures steady-state throughput + thrash.
     warm = run_phase(args.url, args.requests, args.concurrency, args.cache, "warm")
 
-    result = {"tag": args.tag, "sched_mode": sched_mode, "profile": args.profile,
-              "url": args.url, "card_mb": card_mb, "cold": cold, "warm": warm}
+    result = {
+        "tag": args.tag,
+        "sched_mode": sched_mode,
+        "profile": args.profile,
+        "url": args.url,
+        "card_mb": card_mb,
+        "cold": cold,
+        "warm": warm,
+    }
 
     def line(p: dict) -> str:
         emb = p["latency_ms"]["embed"]
-        return (f"  {p['phase']:5} reqs={p['requests']:4} err={p['errors']:3} "
-                f"peakVRAM={p['peak_vram_mb']:5} evicts={p['evicts']:3} admits={p['admits']:3} "
-                f"coalesced={p['coalesced_calls']:3} rps={p['throughput_rps']:5} "
-                f"embed_p50/p95={emb['p50']}/{emb['p95']}ms")
+        return (
+            f"  {p['phase']:5} reqs={p['requests']:4} err={p['errors']:3} "
+            f"peakVRAM={p['peak_vram_mb']:5} evicts={p['evicts']:3} admits={p['admits']:3} "
+            f"coalesced={p['coalesced_calls']:3} rps={p['throughput_rps']:5} "
+            f"embed_p50/p95={emb['p50']}/{emb['p95']}ms"
+        )
 
     print(line(cold))
     print(line(warm))
     over = [p for p in (cold, warm) if card_mb and p["peak_vram_mb"] >= card_mb]
-    print(f"# peak-VRAM-safe: {'NO — OOM RISK' if over else 'yes'} "
-          f"(peak {max(cold['peak_vram_mb'], warm['peak_vram_mb'])} / {card_mb} MB)")
+    print(
+        f"# peak-VRAM-safe: {'NO — OOM RISK' if over else 'yes'} "
+        f"(peak {max(cold['peak_vram_mb'], warm['peak_vram_mb'])} / {card_mb} MB)"
+    )
 
     if args.out:
         with open(args.out, "w") as fh:

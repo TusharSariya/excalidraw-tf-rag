@@ -50,7 +50,8 @@ def _merge_canonical(canonical: ManifestItem, aliases: list[ManifestItem]) -> Ma
             "authors": sorted({author for item in all_items for author in item.authors}),
             "tags": sorted({tag for item in all_items for tag in item.tags}),
             "doi": canonical.doi or next((item.doi for item in all_items if item.doi), None),
-            "abstract": canonical.abstract or next((item.abstract for item in all_items if item.abstract), None),
+            "abstract": canonical.abstract
+            or next((item.abstract for item in all_items if item.abstract), None),
         }
     )
 

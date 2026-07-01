@@ -11,7 +11,6 @@ import asyncio
 import hashlib
 import logging
 import os
-from typing import Any
 
 import aiosqlite
 import ray
@@ -56,9 +55,7 @@ class SQLiteCache:
                     created_at INTEGER NOT NULL
                 )
             """)
-            await self._db.execute(
-                "CREATE UNIQUE INDEX IF NOT EXISTS idx_key ON embed_cache(key)"
-            )
+            await self._db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_key ON embed_cache(key)")
             await self._db.execute(
                 "CREATE INDEX IF NOT EXISTS idx_created_at ON embed_cache(created_at)"
             )
@@ -74,6 +71,7 @@ class SQLiteCache:
             f"SELECT key, vector FROM embed_cache WHERE key IN ({placeholders})", keys
         )
         import struct
+
         result: dict[str, list[float]] = {}
         for key, blob in rows:
             n = len(blob) // 4

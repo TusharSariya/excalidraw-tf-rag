@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 import warnings
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, Sequence
+from typing import Any
 
 import lancedb
-
-from rag_common.config import resolved_embed_backend
-
 from graph_layout_rag.catalog.classify import build_catalog
 from graph_layout_rag.catalog.taxonomy import PIPELINE_CATEGORIES
 from graph_layout_rag.ingest import bm25
-from graph_layout_rag.ingest.embed import ENV_PREFIX, EmbedConfig, embed_config_from_env, embed_query
+from graph_layout_rag.ingest.embed import (
+    ENV_PREFIX,
+    EmbedConfig,
+    embed_config_from_env,
+    embed_query,
+)
 from graph_layout_rag.ingest.index import (
     _table_names,
     embed_config_from_state,
@@ -20,8 +23,14 @@ from graph_layout_rag.ingest.index import (
 )
 from graph_layout_rag.manifest import load_manifest
 from graph_layout_rag.paths import CHUNKS_TABLE, profile_index_paths
-from graph_layout_rag.query.hybrid import DENSE_WEIGHT, SPARSE_WEIGHT, merge_rankings, reciprocal_rank_fusion
+from graph_layout_rag.query.hybrid import (
+    DENSE_WEIGHT,
+    SPARSE_WEIGHT,
+    merge_rankings,
+    reciprocal_rank_fusion,
+)
 from graph_layout_rag.query.identity import canonical_identity_map, clear_identity_cache
+from rag_common.config import resolved_embed_backend
 
 DEFAULT_HYBRID = True
 
@@ -43,9 +52,7 @@ def catalog_maps() -> tuple[dict[str, frozenset[str]], frozenset[str]]:
 @lru_cache(maxsize=1)
 def manifest_pdf_ids() -> frozenset[str]:
     return frozenset(
-        item.id
-        for item in load_manifest().items
-        if item.status == "ok" and item.localPath
+        item.id for item in load_manifest().items if item.status == "ok" and item.localPath
     )
 
 
@@ -115,7 +122,11 @@ def _assert_backend_match(state: dict[str, Any], config: EmbedConfig, paths: Any
 
 
 def resolve_retrieve_context(*, embed_profile: str | None = None) -> RetrieveContext:
-    slug = profile_index_paths(embed_profile).profile if embed_profile else profile_index_paths().profile
+    slug = (
+        profile_index_paths(embed_profile).profile
+        if embed_profile
+        else profile_index_paths().profile
+    )
     cached = _CONTEXT_CACHE.get(slug)
     if cached is not None:
         return cached
@@ -257,9 +268,7 @@ def _apply_filters(
 
         if filters.category:
             row_cats = {
-                c.strip()
-                for c in (row.get("pipeline_categories") or "").split(",")
-                if c.strip()
+                c.strip() for c in (row.get("pipeline_categories") or "").split(",") if c.strip()
             }
             if not row_cats:
                 row_cats = set(category_map.get(doc_id, ()))

@@ -4,20 +4,15 @@ from __future__ import annotations
 
 import logging
 import os
+import tomllib
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-import tomllib
-
 from rag_common.config import (
     EmbedBackend,
     EmbedConfig,
-    LOCAL_DEFAULT_DIMS,
-    LOCAL_DEFAULT_MODEL,
-    OPENAI_DEFAULT_DIMS,
-    OPENAI_DEFAULT_MODEL,
     local_config,
     openai_config,
 )
@@ -132,7 +127,9 @@ def _legacy_default_profile_name() -> str:
 
 def _config_from_legacy_env(prefix: str) -> EmbedConfig:
     """Synthesize embed config from RAG_EMBED_BACKEND / model env vars (pre-profile behavior)."""
-    mode = os.getenv(f"{prefix}EMBED_BACKEND", os.getenv("RAG_EMBED_BACKEND", "auto")).strip().lower()
+    mode = (
+        os.getenv(f"{prefix}EMBED_BACKEND", os.getenv("RAG_EMBED_BACKEND", "auto")).strip().lower()
+    )
 
     if mode == "local":
         cfg = local_config()
@@ -177,7 +174,9 @@ def _config_from_legacy_env(prefix: str) -> EmbedConfig:
         )
 
     if mode != "auto":
-        raise RuntimeError(f"Unknown embed backend mode: {mode!r} (use auto, openai, local, or gemini)")
+        raise RuntimeError(
+            f"Unknown embed backend mode: {mode!r} (use auto, openai, local, or gemini)"
+        )
 
     from rag_common.env import valid_openai_key
 

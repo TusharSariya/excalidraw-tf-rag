@@ -1,7 +1,6 @@
 import pathlib
 
 from click.testing import CliRunner
-
 from rag_literature_rag.ingest import compare_extract as ce
 from rag_literature_rag.manifest import ManifestItem
 from rag_literature_rag.pdf_text import PdfExtractResult
@@ -54,9 +53,7 @@ def test_compare_cli_renders_multi_backend(monkeypatch, tmp_path):
     import rag_literature_rag.ingest.compare_extract as mod
 
     monkeypatch.setattr(mod, "extract_pdf_result", _fake_results())
-    monkeypatch.setattr(
-        mod, "load_manifest", lambda: type("M", (), {"items": [_item()]})()
-    )
+    monkeypatch.setattr(mod, "load_manifest", lambda: type("M", (), {"items": [_item()]})())
     monkeypatch.setattr(pathlib.Path, "is_file", lambda self: True)  # PKG_ROOT / localPath
 
     result = CliRunner().invoke(

@@ -36,7 +36,10 @@ def test_complete_paragraph_overlap():
     pages = [
         PageText(
             1,
-            "# Section\n\n" + ("First sentence. " * 180) + f"\n\n{paragraph}\n\n" + ("Tail sentence. " * 180),
+            "# Section\n\n"
+            + ("First sentence. " * 180)
+            + f"\n\n{paragraph}\n\n"
+            + ("Tail sentence. " * 180),
         )
     ]
     chunks = chunk_pages(_item(), pages)

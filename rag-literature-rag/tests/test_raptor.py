@@ -1,5 +1,3 @@
-import numpy as np
-
 from rag_literature_rag.ingest.chunk import TextChunk, chunk_profile_variant, chunking_fingerprint
 from rag_literature_rag.ingest.doc_summary import SummaryCacheStats
 from rag_literature_rag.ingest.raptor import (
@@ -82,7 +80,15 @@ def test_build_raptor_tree_respects_depth_and_cache(tmp_path, monkeypatch):
     monkeypatch.setattr("rag_literature_rag.ingest.raptor.raptor_model", lambda: "gemma4:e4b")
     calls = {"count": 0}
 
-    def fake_generate(prompt: str, *, model: str, host: str | None = None, max_tokens: int = 2048, temperature: float = 0.1, timeout: int = 180) -> str:
+    def fake_generate(
+        prompt: str,
+        *,
+        model: str,
+        host: str | None = None,
+        max_tokens: int = 2048,
+        temperature: float = 0.1,
+        timeout: int = 180,
+    ) -> str:
         calls["count"] += 1
         return (
             "This grounded cluster summary explains recursive abstractive processing, tree-organized "
@@ -93,16 +99,15 @@ def test_build_raptor_tree_respects_depth_and_cache(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr("rag_literature_rag.ingest.raptor.generate_ollama", fake_generate)
-    monkeypatch.setattr("rag_literature_rag.ingest.raptor.unload_ollama_model_for_raptor", lambda model=None: None)
+    monkeypatch.setattr(
+        "rag_literature_rag.ingest.raptor.unload_ollama_model_for_raptor", lambda model=None: None
+    )
 
     chunks = [_chunk(i) for i in range(8)]
     vectors = [[1.0, 0.0, 0.0] if i < 4 else [0.0, 1.0, 0.0] for i in range(8)]
 
     def embed_texts(texts: list[str]) -> list[list[float]]:
-        return [
-            [float(index), float(len(text) % 5), 0.25]
-            for index, text in enumerate(texts)
-        ]
+        return [[float(index), float(len(text) % 5), 0.25] for index, text in enumerate(texts)]
 
     stats = SummaryCacheStats()
     first = build_raptor_tree(

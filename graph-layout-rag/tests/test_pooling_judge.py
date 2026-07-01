@@ -1,4 +1,5 @@
 """Unit tests for multi-system pooling, LLM judging, and bias diagnostics."""
+
 from __future__ import annotations
 
 from graph_layout_rag.eval.diagnostics import bpref, condensed_ndcg, hole_rate
@@ -12,8 +13,8 @@ from graph_layout_rag.eval.qrels import (
     relevant_from_grades,
 )
 
-
 # ---- qrels overlay ----
+
 
 def _qrels(cases: dict) -> dict:
     return {"relevance_threshold": DEFAULT_RELEVANCE_THRESHOLD, "cases": cases}
@@ -48,6 +49,7 @@ def test_graded_labels_extracts_grades():
 
 # ---- judge prompt + parsing ----
 
+
 def test_judge_prompt_is_source_blind():
     doc = {
         "title": "Network Simplex for Layer Assignment",
@@ -77,6 +79,7 @@ def test_parse_grade_clamps_and_falls_back():
 
 
 # ---- diagnostics ----
+
 
 def test_hole_rate_counts_unjudged():
     ranking = ["a", "b", "c", "d"]
@@ -112,6 +115,7 @@ def test_bpref_penalizes_nonrelevant_above_relevant():
 
 
 # ---- pool stats ----
+
 
 def test_pool_stats_flags_neural_only_docs():
     payload = {

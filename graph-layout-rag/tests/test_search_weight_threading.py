@@ -25,7 +25,9 @@ def _spy_retrieve(captured: dict):
 
 def test_search_forwards_explicit_weights_to_retrieve() -> None:
     captured: dict = {}
-    with patch("graph_layout_rag.query.search.retrieve_candidates", side_effect=_spy_retrieve(captured)):
+    with patch(
+        "graph_layout_rag.query.search.retrieve_candidates", side_effect=_spy_retrieve(captured)
+    ):
         search("layered graph", sparse_weight=0.4, dense_weight=1.0)
     assert captured.get("sparse_weight") == 0.4
     assert captured.get("dense_weight") == 1.0
@@ -34,7 +36,9 @@ def test_search_forwards_explicit_weights_to_retrieve() -> None:
 def test_search_defaults_preserve_promoted_weights() -> None:
     """Omitting the kwargs keeps the shipped keyword defaults (sw=2.0/dw=1.0)."""
     captured: dict = {}
-    with patch("graph_layout_rag.query.search.retrieve_candidates", side_effect=_spy_retrieve(captured)):
+    with patch(
+        "graph_layout_rag.query.search.retrieve_candidates", side_effect=_spy_retrieve(captured)
+    ):
         search("layered graph")
     assert captured.get("sparse_weight") == SPARSE_WEIGHT == 2.0
     assert captured.get("dense_weight") == DENSE_WEIGHT == 1.0

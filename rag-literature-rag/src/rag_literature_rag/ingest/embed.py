@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 from rag_common.config import EmbedConfig, EmbedStats
 from rag_common.embed import embed_query, embed_texts, finalize_embed_config

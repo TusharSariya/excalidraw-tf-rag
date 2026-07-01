@@ -4,10 +4,9 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any
 
-from rag_literature_rag.paths import DATA_DIR
 from rag_common.local_llm import generate_text
+from rag_literature_rag.paths import DATA_DIR
 
 log = logging.getLogger("rag_literature_rag.query.transforms")
 

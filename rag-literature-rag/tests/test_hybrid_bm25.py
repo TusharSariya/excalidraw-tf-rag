@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import tantivy
-
 from rag_literature_rag.ingest import bm25
 from rag_literature_rag.ingest.chunk import TextChunk
 from rag_literature_rag.query.hybrid import reciprocal_rank_fusion
@@ -95,6 +94,7 @@ def test_rrf_merges_and_prefers_overlap():
 # Test group 1 — weighted fusion (hybrid.py T2 changes)
 # ---------------------------------------------------------------------------
 
+
 def _r(id_: str, score: float = 1.0) -> dict:
     return {"id": id_, "score": score, "title": id_, "text": "t"}
 
@@ -108,7 +108,9 @@ def test_weighted_rrf_dense_heavy_doc_beats_sparse_heavy():
     dense = [_r("dense_winner")] + [_r(f"filler_{i}") for i in range(8)] + [_r("sparse_winner")]
     sparse = [_r("sparse_winner")] + [_r(f"filler_{i}") for i in range(8)] + [_r("dense_winner")]
 
-    fused = reciprocal_rank_fusion(dense, sparse, dense_weight=DENSE_WEIGHT, sparse_weight=SPARSE_WEIGHT, top=20)
+    fused = reciprocal_rank_fusion(
+        dense, sparse, dense_weight=DENSE_WEIGHT, sparse_weight=SPARSE_WEIGHT, top=20
+    )
     ids = [r["id"] for r in fused]
     assert ids.index("dense_winner") < ids.index("sparse_winner"), (
         "dense_winner (#1 dense / #10 sparse) should outrank sparse_winner (#10 dense / #1 sparse) "
@@ -127,13 +129,16 @@ def test_weighted_defaults_differ_from_equal_weight():
     sparse = [_r("sparse_winner"), _r("x1"), _r("x2"), _r("x3"), _r("dense_winner")]
 
     fused_equal = reciprocal_rank_fusion(dense, sparse, dense_weight=1.0, sparse_weight=1.0, top=10)
-    fused_asym = reciprocal_rank_fusion(dense, sparse, top=10)  # uses DENSE_WEIGHT=1.0, SPARSE_WEIGHT=0.3
+    fused_asym = reciprocal_rank_fusion(
+        dense, sparse, top=10
+    )  # uses DENSE_WEIGHT=1.0, SPARSE_WEIGHT=0.3
 
-    top_equal = fused_equal[0]["id"]
     top_asym = fused_asym[0]["id"]
     # Both lists are symmetric in rank; with equal weights they tie (same score), so just assert
     # the asymmetric call returns dense_winner at top.
-    assert top_asym == "dense_winner", f"Expected dense_winner at top with asymmetric weights, got {top_asym}"
+    assert top_asym == "dense_winner", (
+        f"Expected dense_winner at top with asymmetric weights, got {top_asym}"
+    )
     # And confirm equal weights give the opposite or at least a different ordering.
     # (With equal weights x1 wins because it's rank 2 in both — but dense_winner is still rank 1 dense.
     # The important assertion is that asym != equal at top, OR that dense_winner beats sparse_winner in asym.)
@@ -143,7 +148,9 @@ def test_weighted_defaults_differ_from_equal_weight():
     sw_asym = asym_ids.index("sparse_winner")
     dw_equal = equal_ids.index("dense_winner")
     sw_equal = equal_ids.index("sparse_winner")
-    assert dw_asym < sw_asym, "With asymmetric weights, dense_winner should rank above sparse_winner"
+    assert dw_asym < sw_asym, (
+        "With asymmetric weights, dense_winner should rank above sparse_winner"
+    )
     # With equal weights, dense_winner and sparse_winner have identical RRF scores (symmetric input).
     # Python's sort is stable so sparse_winner (inserted first) ends up ranked higher than dense_winner.
     assert sw_equal < dw_equal, (
@@ -172,12 +179,22 @@ def test_rrf_k_shifts_scores_not_relative_order():
 # Test group 2 — contextual hard-failure fallback (contextual.py T4 changes)
 # ---------------------------------------------------------------------------
 
+
 def _make_chunk(doc_id: str = "d1", idx: int = 0, text: str = "raw chunk text") -> "TextChunk":
     from rag_literature_rag.ingest.chunk import TextChunk
+
     return TextChunk(
-        doc_id=doc_id, title="Test Paper", text=text, page=1,
-        chunk_index=idx, source_url="https://example.org/d1", year=2024,
-        tags=["rag"], authors=["Author"], pipeline_categories=["retrieval"], page_end=1,
+        doc_id=doc_id,
+        title="Test Paper",
+        text=text,
+        page=1,
+        chunk_index=idx,
+        source_url="https://example.org/d1",
+        year=2024,
+        tags=["rag"],
+        authors=["Author"],
+        pipeline_categories=["retrieval"],
+        page_end=1,
     )
 
 
@@ -197,15 +214,15 @@ def test_contextual_hard_failure_falls_back_to_raw_chunk(tmp_path, monkeypatch):
     # Patch cache path to tmp so no real cache is read/written.
     monkeypatch.setattr(ctx_mod, "CACHE_PATH", tmp_path / "ctx_cache.json")
     # Patch _generate_context to raise a non-retryable ValueError.
-    monkeypatch.setattr(ctx_mod, "_generate_context", lambda *a, **kw: (_ for _ in ()).throw(
-        ValueError("model not found — not retryable")
-    ))
+    monkeypatch.setattr(
+        ctx_mod,
+        "_generate_context",
+        lambda *a, **kw: (_ for _ in ()).throw(ValueError("model not found — not retryable")),
+    )
 
     result = ctx_mod.augment_texts_for_context([chunk], texts)
 
-    assert result == [chunk.text], (
-        f"Hard failure should fall back to raw chunk. Got: {result!r}"
-    )
+    assert result == [chunk.text], f"Hard failure should fall back to raw chunk. Got: {result!r}"
 
 
 def test_contextual_transient_failure_retries_and_succeeds(tmp_path, monkeypatch):

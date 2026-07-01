@@ -10,7 +10,9 @@ from graph_layout_rag.paths import ProfileIndexPaths
 
 
 def test_status_updates_are_atomic_and_count_progress(tmp_path):
-    paths = ProfileIndexPaths("test", tmp_path, tmp_path / "lance", tmp_path / "state.json", tmp_path / "bm25")
+    paths = ProfileIndexPaths(
+        "test", tmp_path, tmp_path / "lance", tmp_path / "state.json", tmp_path / "bm25"
+    )
     status = new_run_status(
         paths=paths,
         backend="gemini",

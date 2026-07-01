@@ -19,19 +19,25 @@ MAILTO = "rag-literature-rag@excalidraw-tf.local"
 VENUES: list[dict] = [
     {
         "label": "ACL Anthology",
-        "params": {"query.container-title": "Proceedings of the Annual Meeting of the Association for Computational Linguistics"},
+        "params": {
+            "query.container-title": "Proceedings of the Annual Meeting of the Association for Computational Linguistics"
+        },
         "trusted": False,
         "tags": ["acl", "nlp"],
     },
     {
         "label": "EMNLP",
-        "params": {"query.container-title": "Conference on Empirical Methods in Natural Language Processing"},
+        "params": {
+            "query.container-title": "Conference on Empirical Methods in Natural Language Processing"
+        },
         "trusted": False,
         "tags": ["emnlp", "nlp"],
     },
     {
         "label": "NAACL",
-        "params": {"query.container-title": "North American Chapter of the Association for Computational Linguistics"},
+        "params": {
+            "query.container-title": "North American Chapter of the Association for Computational Linguistics"
+        },
         "trusted": False,
         "tags": ["naacl", "nlp"],
     },
@@ -105,7 +111,9 @@ def _search_crossref(params: dict, *, max_results: int, rows: int = 200) -> list
                 res = client.get(
                     CROSSREF_API,
                     params=query,
-                    headers={"User-Agent": f"excalidraw-tf-rag-literature-rag/0.1 (mailto:{MAILTO})"},
+                    headers={
+                        "User-Agent": f"excalidraw-tf-rag-literature-rag/0.1 (mailto:{MAILTO})"
+                    },
                 )
             if res.status_code == 429:
                 log.warning("crossref 429 — backing off 5s")

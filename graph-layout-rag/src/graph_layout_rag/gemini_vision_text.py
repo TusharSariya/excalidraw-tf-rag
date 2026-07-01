@@ -67,8 +67,7 @@ def _vision_model() -> str:
 
 def _vision_location() -> str:
     return (
-        os.getenv("GRAPH_RAG_GEMINI_VISION_LOCATION", DEFAULT_LOCATION).strip()
-        or DEFAULT_LOCATION
+        os.getenv("GRAPH_RAG_GEMINI_VISION_LOCATION", DEFAULT_LOCATION).strip() or DEFAULT_LOCATION
     )
 
 
@@ -108,7 +107,8 @@ def _concurrency() -> int:
     if requested > MAX_CONCURRENCY:
         log.warning(
             "GRAPH_RAG_GEMINI_VISION_CONCURRENCY=%d exceeds the hard cap %d; clamping",
-            requested, MAX_CONCURRENCY,
+            requested,
+            MAX_CONCURRENCY,
         )
     return clamped
 
@@ -336,7 +336,9 @@ def extract_pages_gemini(path: Path, *, clean: bool = True) -> PdfExtractResult:
     else:
         log.info(
             "gemini-vision: transcribing %d page(s) of %s at concurrency=%d",
-            len(page_pngs), path.name, concurrency,
+            len(page_pngs),
+            path.name,
+            concurrency,
         )
         results, failed, auth_error = asyncio.run(
             _transcribe_all_async(client, page_pngs, concurrency=concurrency)

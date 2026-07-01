@@ -1,11 +1,10 @@
-import pickle
 import logging
+import pickle
 import threading
 from concurrent.futures import Future
 from pathlib import Path
 
 import pytest
-
 from graph_layout_rag.ingest import run
 from graph_layout_rag.ingest.extract import PageText
 from graph_layout_rag.ingest.status import load_status
@@ -40,21 +39,31 @@ def test_classify_skip_pdf_and_metadata(tmp_path):
     pdf.write_bytes(b"%PDF")
     state = {"same": "abc", "meta-old": "meta:meta-old"}
 
-    assert run._classify_ingest_item(
-        _item("missing", path=tmp_path / "missing.pdf"), force=False, state=state
-    ).reason == "missing_pdf"
-    assert run._classify_ingest_item(
-        _item("same", path=pdf, sha256="abc"), force=False, state=state
-    ).reason == "unchanged"
-    assert run._classify_ingest_item(
-        _item("pdf", path=pdf), force=False, state=state
-    ).kind == "pdf"
-    assert run._classify_ingest_item(
-        _item("meta", status="metadata_only"), force=False, state=state
-    ).kind == "metadata"
-    assert run._classify_ingest_item(
-        _item("meta-old", status="metadata_only"), force=False, state=state
-    ).reason == "unchanged_metadata"
+    assert (
+        run._classify_ingest_item(
+            _item("missing", path=tmp_path / "missing.pdf"), force=False, state=state
+        ).reason
+        == "missing_pdf"
+    )
+    assert (
+        run._classify_ingest_item(
+            _item("same", path=pdf, sha256="abc"), force=False, state=state
+        ).reason
+        == "unchanged"
+    )
+    assert run._classify_ingest_item(_item("pdf", path=pdf), force=False, state=state).kind == "pdf"
+    assert (
+        run._classify_ingest_item(
+            _item("meta", status="metadata_only"), force=False, state=state
+        ).kind
+        == "metadata"
+    )
+    assert (
+        run._classify_ingest_item(
+            _item("meta-old", status="metadata_only"), force=False, state=state
+        ).reason
+        == "unchanged_metadata"
+    )
 
 
 def test_extract_pdf_task_chunks_and_falls_back(tmp_path, monkeypatch):
@@ -104,8 +113,10 @@ def test_serial_mode_and_gemini_do_not_use_process_pool(tmp_path, monkeypatch):
     monkeypatch.setattr(
         run,
         "_extract_pdf_task",
-        lambda task: calls.append(task.pdf_backend)
-        or run._metadata_outcome(task.item, task.pipeline_categories),
+        lambda task: (
+            calls.append(task.pdf_backend)
+            or run._metadata_outcome(task.item, task.pipeline_categories)
+        ),
     )
 
     class ForbiddenPool:
@@ -217,9 +228,7 @@ def test_extraction_queue_never_exceeds_capacity(monkeypatch):
     monkeypatch.setattr(
         run,
         "_iter_extraction_outcomes",
-        lambda *args, **kwargs: (
-            run._metadata_outcome(item, []) for item in items
-        ),
+        lambda *args, **kwargs: (run._metadata_outcome(item, []) for item in items),
     )
     telemetry = run.ExtractionPipelineTelemetry(queue_capacity=2)
     outcomes = list(
@@ -287,9 +296,7 @@ def test_closing_queued_extraction_stops_blocked_producer(monkeypatch):
     monkeypatch.setattr(
         run,
         "_iter_extraction_outcomes",
-        lambda *args, **kwargs: (
-            run._metadata_outcome(item, []) for item in items
-        ),
+        lambda *args, **kwargs: (run._metadata_outcome(item, []) for item in items),
     )
     telemetry = run.ExtractionPipelineTelemetry(queue_capacity=1)
     iterator = run._iter_queued_extraction_outcomes(
@@ -312,9 +319,7 @@ def test_queued_extraction_external_stop_event_stops_consumer(monkeypatch):
     monkeypatch.setattr(
         run,
         "_iter_extraction_outcomes",
-        lambda *args, **kwargs: (
-            run._metadata_outcome(item, []) for item in items
-        ),
+        lambda *args, **kwargs: (run._metadata_outcome(item, []) for item in items),
     )
     stop_event = threading.Event()
     telemetry = run.ExtractionPipelineTelemetry(queue_capacity=2)
@@ -410,8 +415,7 @@ def test_execute_ingest_flushes_batches_and_checkpoints(tmp_path, monkeypatch):
     monkeypatch.setattr(
         run,
         "upsert_chunks",
-        lambda chunks, **kwargs: upserts.append((len(chunks), kwargs["rebuild"]))
-        or len(chunks),
+        lambda chunks, **kwargs: upserts.append((len(chunks), kwargs["rebuild"])) or len(chunks),
     )
     monkeypatch.setattr(
         run,
@@ -476,8 +480,7 @@ def test_execute_ingest_pause_flushes_partial_batch(tmp_path, monkeypatch):
     monkeypatch.setattr(
         run,
         "upsert_chunks",
-        lambda chunks, **kwargs: upserts.append((len(chunks), kwargs["rebuild"]))
-        or len(chunks),
+        lambda chunks, **kwargs: upserts.append((len(chunks), kwargs["rebuild"])) or len(chunks),
     )
     monkeypatch.setattr(
         run,
@@ -539,8 +542,7 @@ def test_execute_ingest_pause_flushes_when_producer_interrupts(tmp_path, monkeyp
     monkeypatch.setattr(
         run,
         "upsert_chunks",
-        lambda chunks, **kwargs: upserts.append((len(chunks), kwargs["rebuild"]))
-        or len(chunks),
+        lambda chunks, **kwargs: upserts.append((len(chunks), kwargs["rebuild"])) or len(chunks),
     )
     monkeypatch.setattr(
         run,

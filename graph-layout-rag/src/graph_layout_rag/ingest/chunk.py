@@ -57,7 +57,11 @@ def chunk_profile_variant(profile: str | None = None) -> str:
 
 
 def _limits_for_profile(profile: str | None = None) -> ChunkLimits:
-    return SMALL2BIG_LIMITS if chunk_profile_variant(profile) == SMALL2BIG_LIMITS.variant else DEFAULT_LIMITS
+    return (
+        SMALL2BIG_LIMITS
+        if chunk_profile_variant(profile) == SMALL2BIG_LIMITS.variant
+        else DEFAULT_LIMITS
+    )
 
 
 def is_section_enriched_profile(profile: str | None = None) -> bool:
@@ -235,7 +239,9 @@ def parse_markdown_blocks(pages: list[PageText]) -> list[StructuralBlock]:
                 level = len(heading.group(1))
                 headings = headings[: level - 1] + [heading.group(2).strip()]
                 blocks.append(
-                    StructuralBlock("heading", line.strip(), page.page, page.page, " > ".join(headings))
+                    StructuralBlock(
+                        "heading", line.strip(), page.page, page.page, " > ".join(headings)
+                    )
                 )
                 idx += 1
                 continue
@@ -247,7 +253,9 @@ def parse_markdown_blocks(pages: list[PageText]) -> list[StructuralBlock]:
                 while idx < len(lines) and lines[idx].strip() and "|" in lines[idx]:
                     table.append(lines[idx])
                     idx += 1
-                blocks.append(StructuralBlock("table", "\n".join(table), page.page, page.page, section))
+                blocks.append(
+                    StructuralBlock("table", "\n".join(table), page.page, page.page, section)
+                )
                 continue
 
             fence = _FENCE_RE.match(line)
@@ -265,7 +273,13 @@ def parse_markdown_blocks(pages: list[PageText]) -> list[StructuralBlock]:
                     ):
                         break
                 blocks.append(
-                    StructuralBlock("formula" if formula else "code", "\n".join(body), page.page, page.page, section)
+                    StructuralBlock(
+                        "formula" if formula else "code",
+                        "\n".join(body),
+                        page.page,
+                        page.page,
+                        section,
+                    )
                 )
                 continue
 
@@ -277,19 +291,27 @@ def parse_markdown_blocks(pages: list[PageText]) -> list[StructuralBlock]:
                 ):
                     body.append(lines[idx])
                     idx += 1
-                blocks.append(StructuralBlock("list", "\n".join(body), page.page, page.page, section))
+                blocks.append(
+                    StructuralBlock("list", "\n".join(body), page.page, page.page, section)
+                )
                 continue
 
             body = [line]
             idx += 1
             while idx < len(lines) and lines[idx].strip():
-                if _HEADING_RE.match(lines[idx]) or _FENCE_RE.match(lines[idx]) or _FORMULA_RE.match(lines[idx]):
+                if (
+                    _HEADING_RE.match(lines[idx])
+                    or _FENCE_RE.match(lines[idx])
+                    or _FORMULA_RE.match(lines[idx])
+                ):
                     break
                 if _is_table(lines, idx) or _LIST_RE.match(lines[idx]):
                     break
                 body.append(lines[idx])
                 idx += 1
-            blocks.append(StructuralBlock("paragraph", "\n".join(body), page.page, page.page, section))
+            blocks.append(
+                StructuralBlock("paragraph", "\n".join(body), page.page, page.page, section)
+            )
     return blocks
 
 
@@ -348,7 +370,9 @@ def _split_block(block: StructuralBlock, *, max_tokens: int) -> list[StructuralB
     ]
 
 
-def _trailing_paragraph(blocks: list[StructuralBlock], *, overlap_tokens: int) -> StructuralBlock | None:
+def _trailing_paragraph(
+    blocks: list[StructuralBlock], *, overlap_tokens: int
+) -> StructuralBlock | None:
     for block in reversed(blocks):
         if block.kind == "paragraph" and estimate_tokens(block.text) <= overlap_tokens:
             return block
@@ -361,7 +385,9 @@ def _assemble_blocks(
     chunk_profile: str | None = None,
 ) -> list[list[StructuralBlock]]:
     limits = _limits_for_profile(chunk_profile)
-    expanded = [part for block in blocks for part in _split_block(block, max_tokens=limits.max_tokens)]
+    expanded = [
+        part for block in blocks for part in _split_block(block, max_tokens=limits.max_tokens)
+    ]
     groups: list[list[StructuralBlock]] = []
     current: list[StructuralBlock] = []
     for block in expanded:
@@ -372,12 +398,18 @@ def _assemble_blocks(
             current = [overlap, block] if overlap and overlap is not block else [block]
         else:
             current.append(block)
-        if current and estimate_tokens("\n\n".join(b.text for b in current)) >= limits.target_tokens:
+        if (
+            current
+            and estimate_tokens("\n\n".join(b.text for b in current)) >= limits.target_tokens
+        ):
             groups.append(current)
             overlap = _trailing_paragraph(current, overlap_tokens=limits.overlap_tokens)
             current = [overlap] if overlap else []
     if current:
-        if groups and estimate_tokens("\n\n".join(b.text for b in current)) < limits.min_preferred_tokens:
+        if (
+            groups
+            and estimate_tokens("\n\n".join(b.text for b in current)) < limits.min_preferred_tokens
+        ):
             merged = "\n\n".join(b.text for b in [*groups[-1], *current])
             if estimate_tokens(merged) <= limits.max_tokens:
                 groups[-1].extend(current)

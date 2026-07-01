@@ -3,7 +3,15 @@ from rag_literature_rag.ingest.run import ExtractionOutcome, _mark_outcome_inges
 from rag_literature_rag.manifest import ManifestItem
 
 
-def _item(doc_id: str, source: str, *, status: str = "ok", sha: str | None = "same", doi: str | None = None, tags=()):
+def _item(
+    doc_id: str,
+    source: str,
+    *,
+    status: str = "ok",
+    sha: str | None = "same",
+    doi: str | None = None,
+    tags=(),
+):
     return ManifestItem(
         id=doc_id,
         title=f"Title {doc_id}",

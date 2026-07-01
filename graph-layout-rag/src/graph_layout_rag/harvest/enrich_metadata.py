@@ -28,8 +28,8 @@ from __future__ import annotations
 import os
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 import httpx
 
@@ -58,9 +58,10 @@ _ARXIV_BATCH = 50
 
 # --------------------------------------------------------------------------- helpers
 
+
 def _chunks(seq: list, size: int) -> Iterable[list]:
     for i in range(0, len(seq), size):
-        yield seq[i:i + size]
+        yield seq[i : i + size]
 
 
 def _is_synthetic_arxiv_doi(doi: str | None) -> bool:
@@ -100,10 +101,12 @@ def _arxiv_base(arxiv_id: str) -> str:
 
 # --------------------------------------------------------------------------- OpenAlex
 
+
 @dataclass
 class _ProviderHit:
     """One provider's contribution for an item: ``data`` is None on a clean miss;
     ``transient`` flags a retryable failure (rate-limit / timeout / 5xx)."""
+
     data: dict | None = None
     transient: bool = False
 
@@ -175,9 +178,7 @@ def _oa_request(kind: str, value: str):
     # bare .request() here sent every enrich lookup to the *unauthenticated*
     # polite pool — which OpenAlex now meters to "$0, resets midnight UTC" —
     # so title-searches failed transient and keys were never actually used.
-    return OPENALEX.request_openalex(
-        "GET", url, operation=operation, params=params, timeout=30.0
-    )
+    return OPENALEX.request_openalex("GET", url, operation=operation, params=params, timeout=30.0)
 
 
 def _norm_title(s: str | None) -> str:
@@ -227,6 +228,7 @@ def _fetch_openalex(item: ManifestItem) -> _ProviderHit:
 
 
 # --------------------------------------------------------------------------- Sem. Scholar
+
 
 def _s2_id_for_item(item: ManifestItem) -> str | None:
     doi = cs.normalize_doi(item.doi)
@@ -287,6 +289,7 @@ def _fetch_s2_batch(items: list[ManifestItem]) -> dict[str, _ProviderHit]:
 
 # --------------------------------------------------------------------------- arXiv
 
+
 def _arxiv_query(ids: list[str]) -> str | None:
     """Raw Atom XML for an arXiv ``id_list`` (monkeypatched in tests)."""
     params = {"id_list": ",".join(ids), "max_results": str(len(ids))}
@@ -301,9 +304,7 @@ def _arxiv_query(ids: list[str]) -> str | None:
 
 def _extract_arxiv_entry(entry: ET.Element) -> dict:
     cats = [
-        c.attrib["term"]
-        for c in entry.findall("atom:category", ATOM_NS)
-        if c.attrib.get("term")
+        c.attrib["term"] for c in entry.findall("atom:category", ATOM_NS) if c.attrib.get("term")
     ]
     primary_el = entry.find("arxiv:primary_category", ARXIV_NS)
     primary = primary_el.attrib.get("term") if primary_el is not None else None
@@ -353,7 +354,10 @@ def _fetch_arxiv(items: list[ManifestItem]) -> dict[str, _ProviderHit]:
 
 # --------------------------------------------------------------------------- orchestration
 
-def _apply_to_manifest(item: ManifestItem, oa: dict | None, s2: dict | None, ax: dict | None) -> bool:
+
+def _apply_to_manifest(
+    item: ManifestItem, oa: dict | None, s2: dict | None, ax: dict | None
+) -> bool:
     """Fold provider data into the item's new fields. Returns True if a missing abstract was
     backfilled."""
     oa = oa or {}
@@ -494,14 +498,22 @@ def enrich_metadata(
     }
     log.info(
         "enrich-metadata: %d items to enrich (force=%s dry_run=%s workers=%d)",
-        len(items), force, dry_run, workers,
+        len(items),
+        force,
+        dry_run,
+        workers,
     )
 
     try:
         for batch in _chunks(items, max(1, batch_size)):
             _process_batch(
-                db, manifest, batch,
-                workers=workers, dry_run=dry_run, stats=stats, log=log,
+                db,
+                manifest,
+                batch,
+                workers=workers,
+                dry_run=dry_run,
+                stats=stats,
+                log=log,
             )
     finally:
         db.close()

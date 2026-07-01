@@ -4,7 +4,7 @@ import json
 import os
 import time
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import click
@@ -13,7 +13,7 @@ from graph_layout_rag.paths import ProfileIndexPaths, profile_index_paths
 
 
 def now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def new_run_status(
@@ -137,7 +137,7 @@ def refresh_progress_estimate(
     status["documents_per_second"] = round(rate, 4)
     status["eta_seconds"] = round(eta_seconds, 1) if eta_seconds is not None else None
     status["eta_at"] = (
-        (datetime.now(timezone.utc) + timedelta(seconds=eta_seconds)).isoformat()
+        (datetime.now(UTC) + timedelta(seconds=eta_seconds)).isoformat()
         if eta_seconds is not None
         else None
     )

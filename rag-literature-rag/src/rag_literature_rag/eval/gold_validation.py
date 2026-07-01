@@ -75,9 +75,7 @@ def validate_gold(manifest: Manifest | None = None) -> dict:
         if doc_id in by_id and by_id[doc_id].status == "metadata_only"
     ]
     failed = [
-        doc_id
-        for doc_id in relevant_ids
-        if doc_id in by_id and by_id[doc_id].status == "failed"
+        doc_id for doc_id in relevant_ids if doc_id in by_id and by_id[doc_id].status == "failed"
     ]
     impossible_pdf_cases = []
     for case in gold_cases():
@@ -115,11 +113,7 @@ def cases_for_track(
         out = [replace(case, pdf_only=False) for case in cases]
     else:
         manifest = manifest or load_manifest()
-        pdf_ids = {
-            item.id
-            for item in manifest.items
-            if item.status == "ok" and item.localPath
-        }
+        pdf_ids = {item.id for item in manifest.items if item.status == "ok" and item.localPath}
         out = []
         for case in cases:
             relevant = frozenset(doc_id for doc_id in case.relevant_doc_ids if doc_id in pdf_ids)

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
+from rag_common.rerank import rerank as rerank_candidates
 from rag_literature_rag.catalog.taxonomy import PIPELINE_CATEGORIES
+from rag_literature_rag.query.identity import canonical_identity_map, split_values
 from rag_literature_rag.query.retrieve import (
-    RetrieveFilters,
     DEFAULT_HYBRID,
+    RetrieveFilters,
     catalog_maps,
     diversify_candidates,
     retrieve_candidates,
@@ -14,8 +16,6 @@ from rag_literature_rag.query.retrieve import (
     retrieve_raptor_candidates,
     retrieve_small_to_big_candidates,
 )
-from rag_literature_rag.query.identity import canonical_identity_map, split_values
-from rag_common.rerank import rerank as rerank_candidates
 
 
 def _score(row: dict[str, Any]) -> float:
@@ -72,9 +72,7 @@ def format_results(
         evidence = [_evidence(candidate) for candidate in evidence_rows]
 
         pipeline_categories = [
-            c.strip()
-            for c in (row.get("pipeline_categories") or "").split(",")
-            if c.strip()
+            c.strip() for c in (row.get("pipeline_categories") or "").split(",") if c.strip()
         ]
         if not pipeline_categories and doc_id in category_map:
             pipeline_categories = sorted(category_map[doc_id])
@@ -216,7 +214,11 @@ def search(
             hybrid=hybrid,
             filters=filters,
         )
-    if not small_to_big and not raptor and (expand == "force" or (expand == "auto" and _should_expand(query, candidates))):
+    if (
+        not small_to_big
+        and not raptor
+        and (expand == "force" or (expand == "auto" and _should_expand(query, candidates)))
+    ):
         expanded = _expand_candidates(
             query,
             top=top,

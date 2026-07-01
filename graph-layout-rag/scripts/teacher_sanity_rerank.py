@@ -8,6 +8,7 @@ scored with the harness's own case_metrics (binary, threshold from qrels).
 Run ON the desktop GPU:
   uv run --with mxbai-rerank python scripts/teacher_sanity_rerank.py
 """
+
 from __future__ import annotations
 
 import json
@@ -15,7 +16,6 @@ import time
 from pathlib import Path
 
 import torch
-
 from graph_layout_rag.eval.metrics import case_metrics
 from graph_layout_rag.eval.qrels import (
     DEFAULT_RELEVANCE_THRESHOLD,
@@ -89,10 +89,8 @@ def main() -> None:
 
     t0 = time.time()
     # 8 GB card: cap context + small batch to avoid OOM on long excerpts.
-    model = MxbaiRerankV2(
-        TEACHER, device="cuda", torch_dtype=torch.float16, max_length=512
-    )
-    print(f"teacher loaded in {time.time()-t0:.1f}s", flush=True)
+    model = MxbaiRerankV2(TEACHER, device="cuda", torch_dtype=torch.float16, max_length=512)
+    print(f"teacher loaded in {time.time() - t0:.1f}s", flush=True)
 
     per_case = []
     teacher_ndcgs = []
@@ -113,9 +111,7 @@ def main() -> None:
         doc_ids = list(pooled.keys())
         docs = [doc_text(pooled[d]) for d in doc_ids]
 
-        ranked = model.rank(
-            query, docs, top_k=len(docs), batch_size=8, return_documents=False
-        )
+        ranked = model.rank(query, docs, top_k=len(docs), batch_size=8, return_documents=False)
         teacher_order = [doc_ids[r.index] for r in ranked]
 
         t_rows = rows_from_order(teacher_order, pooled)
@@ -139,7 +135,7 @@ def main() -> None:
         )
         mem = torch.cuda.max_memory_allocated() / 1e9
         print(
-            f"[{i+1}/{len(cases)}] {case_id:48s} "
+            f"[{i + 1}/{len(cases)}] {case_id:48s} "
             f"teacher={t_m['ndcg@10']:.4f} hybrid={h_m['ndcg@10']:.4f} "
             f"pool={len(doc_ids)} rel={len(relevant)} gpu_peak={mem:.2f}GB",
             flush=True,
@@ -157,11 +153,13 @@ def main() -> None:
         "skipped_cases": skipped,
         "teacher_mean_ndcg@10": sum(teacher_ndcgs) / n if n else None,
         "hybrid_mean_ndcg@10": sum(hybrid_ndcgs) / n if n else None,
-        "delta_teacher_minus_hybrid": (
-            (sum(teacher_ndcgs) - sum(hybrid_ndcgs)) / n if n else None
+        "delta_teacher_minus_hybrid": ((sum(teacher_ndcgs) - sum(hybrid_ndcgs)) / n if n else None),
+        "teacher_wins": sum(
+            1 for c in per_case if c["teacher_ndcg@10"] > c["hybrid_ndcg@10"] + 1e-9
         ),
-        "teacher_wins": sum(1 for c in per_case if c["teacher_ndcg@10"] > c["hybrid_ndcg@10"] + 1e-9),
-        "hybrid_wins": sum(1 for c in per_case if c["hybrid_ndcg@10"] > c["teacher_ndcg@10"] + 1e-9),
+        "hybrid_wins": sum(
+            1 for c in per_case if c["hybrid_ndcg@10"] > c["teacher_ndcg@10"] + 1e-9
+        ),
         "ties": sum(1 for c in per_case if abs(c["teacher_ndcg@10"] - c["hybrid_ndcg@10"]) <= 1e-9),
         "gpu_peak_gb": torch.cuda.max_memory_allocated() / 1e9,
         "gpu_device": torch.cuda.get_device_name(0),

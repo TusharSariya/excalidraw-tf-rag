@@ -13,8 +13,9 @@ from rag_literature_rag.catalog.classify import build_catalog, summarize_catalog
 from rag_literature_rag.catalog.taxonomy import PIPELINE_CATEGORIES, UNCATEGORIZED
 from rag_literature_rag.harvest.run import harvest_group
 from rag_literature_rag.ingest.run import ingest_cmd
-from rag_literature_rag.query.search import search
 from rag_literature_rag.query.retrieve import DEFAULT_HYBRID
+from rag_literature_rag.query.search import search
+
 
 @click.group()
 def main() -> None:
@@ -30,7 +31,6 @@ def eval_group() -> None:
     """Retrieval evaluation commands."""
 
 
-from rag_literature_rag.eval.retrieval import retrieval_eval_cmd  # noqa: E402
 from rag_literature_rag.eval.benchmark import benchmark_cmd  # noqa: E402
 from rag_literature_rag.eval.commands import validate_gold_cmd  # noqa: E402
 from rag_literature_rag.eval.experimental_index import build_retrieval_index_cmd  # noqa: E402
@@ -45,6 +45,7 @@ from rag_literature_rag.eval.pool_commands import (  # noqa: E402
     pool_cmd,
     qrels_backfill_cmd,
 )
+from rag_literature_rag.eval.retrieval import retrieval_eval_cmd  # noqa: E402
 
 eval_group.add_command(retrieval_eval_cmd, name="retrieval")
 eval_group.add_command(benchmark_cmd, name="benchmark")
@@ -62,15 +63,25 @@ eval_group.add_command(gen_gold_split_cmd, name="gen-gold-split")
 
 
 @eval_group.command("related")
-@click.option("--variant", "variants", multiple=True, help="Restrict to these variants (repeatable).")
+@click.option(
+    "--variant", "variants", multiple=True, help="Restrict to these variants (repeatable)."
+)
 @click.option("--folds", default=150, show_default=True, help="Max leave-one-out folds.")
-@click.option("--min-refs", default=1, show_default=True, help="Min in-corpus references to be a seed.")
-@click.option("--embed-model", type=click.Choice(["scincl", "specter2"]), default="scincl", show_default=True)
+@click.option(
+    "--min-refs", default=1, show_default=True, help="Min in-corpus references to be a seed."
+)
+@click.option(
+    "--embed-model", type=click.Choice(["scincl", "specter2"]), default="scincl", show_default=True
+)
 @click.option("--report", is_flag=True, help="Also write a markdown report next to -o.")
 @click.option("-o", "--output", type=click.Path(), default=None, help="Write JSON payload here.")
 def eval_related_cmd(
-    variants: tuple[str, ...], folds: int, min_refs: int, embed_model: str,
-    report: bool, output: str | None,
+    variants: tuple[str, ...],
+    folds: int,
+    min_refs: int,
+    embed_model: str,
+    report: bool,
+    output: str | None,
 ) -> None:
     """Leave-one-out citation-prediction A/B for the `find related papers` rankers."""
     from pathlib import Path
@@ -79,8 +90,10 @@ def eval_related_cmd(
 
     try:
         payload = run_related_eval(
-            variants=list(variants) or None, max_cases=folds,
-            min_refs=min_refs, embed_model=embed_model,
+            variants=list(variants) or None,
+            max_cases=folds,
+            min_refs=min_refs,
+            embed_model=embed_model,
         )
     except RuntimeError as exc:
         click.echo(str(exc), err=True)
@@ -119,9 +132,15 @@ def cite_group() -> None:
     show_default=True,
     help="Fetch incoming citations from Semantic Scholar (revives co-citation).",
 )
-@click.option("--incoming-cap", default=500, show_default=True, help="Cap incoming citers per paper.")
-@click.option("--incoming-workers", default=32, show_default=True, help="Parallel S2 incoming fetchers.")
-def cite_enrich_cmd(force: bool, workers: int, no_s2: bool, incoming: bool, incoming_cap: int, incoming_workers: int) -> None:
+@click.option(
+    "--incoming-cap", default=500, show_default=True, help="Cap incoming citers per paper."
+)
+@click.option(
+    "--incoming-workers", default=32, show_default=True, help="Parallel S2 incoming fetchers."
+)
+def cite_enrich_cmd(
+    force: bool, workers: int, no_s2: bool, incoming: bool, incoming_cap: int, incoming_workers: int
+) -> None:
     """Build/refresh data/citations.sqlite from the manifest DOIs.
 
     OpenAlex supplies outgoing references + counts; Semantic Scholar supplies incoming
@@ -131,8 +150,12 @@ def cite_enrich_cmd(force: bool, workers: int, no_s2: bool, incoming: bool, inco
     from rag_literature_rag.harvest.cite_enrich import enrich_citations
 
     stats = enrich_citations(
-        force=force, workers=workers, with_s2=not no_s2,
-        incoming=incoming, incoming_cap=incoming_cap, incoming_workers=incoming_workers,
+        force=force,
+        workers=workers,
+        with_s2=not no_s2,
+        incoming=incoming,
+        incoming_cap=incoming_cap,
+        incoming_workers=incoming_workers,
     )
     click.echo(json.dumps(stats, indent=2))
 
@@ -172,8 +195,13 @@ def cite_embed_related_cmd(model: str, rebuild: bool, batch_size: int) -> None:
 # the strongest signal once incoming citations were backfilled), undirected PPR + coupling
 # cover the gaps, embedding is a light topical tiebreak. Re-tune via `eval related`.
 _FUSED_WEIGHTS = {
-    "w_ppr": 0.6, "w_ppr_fwd": 0.0, "w_ppr_bwd": 0.0,
-    "w_coupling": 0.3, "w_cocitation": 1.5, "w_prior": 0.02, "w_embedding": 0.15,
+    "w_ppr": 0.6,
+    "w_ppr_fwd": 0.0,
+    "w_ppr_bwd": 0.0,
+    "w_coupling": 0.3,
+    "w_cocitation": 1.5,
+    "w_prior": 0.02,
+    "w_embedding": 0.15,
 }
 
 
@@ -212,7 +240,10 @@ def cite_related_cmd(doc_id: str, top: int, signal: str, model: str, as_json: bo
 
     if signal == "embedding":
         if not has_doc_vectors(model):
-            click.echo(f"No {model} doc vectors. Run: rag-literature-rag cite embed-related --model {model}", err=True)
+            click.echo(
+                f"No {model} doc vectors. Run: rag-literature-rag cite embed-related --model {model}",
+                err=True,
+            )
             sys.exit(1)
         vectors = load_all_vectors(model)
         vector_seed = next((candidate for candidate in seed_doc_ids if candidate in vectors), None)
@@ -233,7 +264,11 @@ def cite_related_cmd(doc_id: str, top: int, signal: str, model: str, as_json: bo
                 break
         emb = canonical_emb
         if as_json:
-            click.echo(json.dumps({"seed": doc_id, "signal": signal, "model": model, "related": emb}, indent=2))
+            click.echo(
+                json.dumps(
+                    {"seed": doc_id, "signal": signal, "model": model, "related": emb}, indent=2
+                )
+            )
             return
         for i, r in enumerate(emb, 1):
             click.echo(f"{i:2d}. [{r['score']:.3f}] {r['doc_id']}  (embedding)")
@@ -258,8 +293,12 @@ def cite_related_cmd(doc_id: str, top: int, signal: str, model: str, as_json: bo
             weights["w_embedding"] = 0.0
 
     results = related_to_docs(
-        db, [doc_id], top=top, graph=graph,
-        weights=weights, embed_scores_by_doc=embed_scores_by_doc,
+        db,
+        [doc_id],
+        top=top,
+        graph=graph,
+        weights=weights,
+        embed_scores_by_doc=embed_scores_by_doc,
     )
     rows = [
         {
@@ -279,7 +318,11 @@ def cite_related_cmd(doc_id: str, top: int, signal: str, model: str, as_json: bo
     ]
     db.close()
     if as_json:
-        click.echo(json.dumps({"seed": doc_id, "signal": signal, "model": model, "related": rows}, indent=2))
+        click.echo(
+            json.dumps(
+                {"seed": doc_id, "signal": signal, "model": model, "related": rows}, indent=2
+            )
+        )
         return
     for i, r in enumerate(rows, 1):
         why = []
@@ -340,7 +383,9 @@ def embed_indexes_cmd(as_json: bool) -> None:
         click.echo("No profile indexes built yet. Run: rag-literature-rag ingest --force --rebuild")
         return
 
-    click.echo(f"{'Profile':<22} {'Chunks':>8} {'Parents':>8} {'Summaries':>9}  {'Dims':>5}  Model / path")
+    click.echo(
+        f"{'Profile':<22} {'Chunks':>8} {'Parents':>8} {'Summaries':>9}  {'Dims':>5}  Model / path"
+    )
     for row in rows:
         model = row.get("embed_model") or "-"
         dims = row.get("embed_dims") or "-"
@@ -480,12 +525,16 @@ def query_cmd(
 
 
 @main.command("catalog")
-@click.option("--status", default="ok", show_default=True, help="Manifest status filter (use 'all' for any).")
+@click.option(
+    "--status", default="ok", show_default=True, help="Manifest status filter (use 'all' for any)."
+)
 @click.option("--category", default=None, help="Filter to one pipeline category.")
 @click.option("--uncategorized", is_flag=True, help="List PDFs with no pipeline category.")
 @click.option("--doc-id", default=None, help="Show one document by manifest id.")
 @click.option("--limit", default=50, show_default=True, type=int, help="Max entries when listing.")
-@click.option("--include-orphans", is_flag=True, help="Include PDF files on disk missing from manifest.")
+@click.option(
+    "--include-orphans", is_flag=True, help="Include PDF files on disk missing from manifest."
+)
 @click.option("--flag-off-topic", is_flag=True, help="Mark entries failing layout relevance check.")
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON for LLM agents.")
 def catalog_cmd(

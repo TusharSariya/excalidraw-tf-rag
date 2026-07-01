@@ -1,0 +1,47 @@
+# Shared ruff config for every package in this repo (rag-common, repo-rag,
+# graph-layout-rag, rag-literature-rag, gpu-gateway). There is no root
+# pyproject.toml, so this file is the single source of lint/format truth.
+target-version = "py311"
+line-length = 100
+
+# Data, generated artifacts, and stray logs are never our source to lint.
+extend-exclude = [
+    "**/data",
+    "**/eval-results",
+    "**/__pycache__",
+    "**/*.log",
+    "training",
+]
+
+[lint]
+# pyflakes (F) + pycodestyle (E/W) + isort (I) + pyupgrade (UP) + bugbear (B).
+# A pragmatic starter set: real bugs and import hygiene without drowning a
+# never-linted codebase in style noise. Widen later once the baseline holds.
+select = ["E", "F", "I", "W", "UP", "B"]
+ignore = [
+    # Line length is enforced by the formatter, not the linter — E501 would
+    # just double-report wrapped lines the formatter left long on purpose.
+    "E501",
+    # zip(a, b) without strict=: a defensive-coding hint, not a bug. 49 sites
+    # across pre-existing code; adopting it means asserting equal-length intent
+    # everywhere. Deferred to a focused pass, not this lint-adoption baseline.
+    "B905",
+    # import-not-at-top: the CLIs and scripts here deliberately do lazy/guarded
+    # imports (optional deps, path setup) after module code. Enforcing it would
+    # fight intentional structure. Already exempt in scripts/; exempt globally.
+    "E402",
+    # (str, Enum) -> StrEnum is NOT behaviour-preserving: str() on a (str, Enum)
+    # member yields "Class.MEMBER", but "value" on a StrEnum. Migrating is a real
+    # change to make deliberately, not a lint autofix.
+    "UP042",
+]
+
+[lint.per-file-ignores]
+# Tests lean on bare asserts and comparison idioms bugbear dislikes.
+"**/tests/**" = ["B011"]
+# One-off scripts often do sys.path / env setup before their imports.
+"**/scripts/**" = ["E402"]
+
+[format]
+# Defaults (double quotes, trailing commas) — explicit for the reader.
+quote-style = "double"

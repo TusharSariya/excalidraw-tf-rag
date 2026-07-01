@@ -1,4 +1,5 @@
 """Dense embedding throughput benchmark (FP16 vs 4-bit) on CPU/MPS/CUDA."""
+
 from __future__ import annotations
 
 import argparse
@@ -6,12 +7,16 @@ import json
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from rag_common.config import EmbedConfig, use_cuda_bnb_4bit
-from rag_common.local_embed import _get_model_for_config, embed_local_texts, resolve_local_embed_device
+from rag_common.local_embed import (
+    _get_model_for_config,
+    embed_local_texts,
+    resolve_local_embed_device,
+)
 from rag_common.resolve import resolve_embed_config
 
 CHUNKS_TABLE = "chunks"
@@ -19,7 +24,7 @@ WARMUP = 32
 
 
 def _now_id() -> str:
-    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
 
 def _sample_texts(lance_dir: Path, n: int) -> list[str]:

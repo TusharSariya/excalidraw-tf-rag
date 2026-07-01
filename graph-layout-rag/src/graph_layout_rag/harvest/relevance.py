@@ -205,24 +205,24 @@ DRAWING_CONTEXT_TERMS = frozenset(
 # DOI prefixes that are definitionally never graph-layout venues.
 # Checked before any API call so we never waste a quota request on a PLOS paper.
 OFF_TOPIC_DOI_PREFIXES: tuple[str, ...] = (
-    "10.1371/",           # PLOS family (Biology, CompBio, ONE, Genetics, Medicine…)
-    "10.1186/",           # BMC family (Bioinformatics, Systems Biology, Genome Biology…)
-    "10.1038/",           # Nature family (Nature, Nature Comms, Nature Methods…)
-    "10.1073/",           # PNAS
-    "10.1523/",           # Journal of Neuroscience
+    "10.1371/",  # PLOS family (Biology, CompBio, ONE, Genetics, Medicine…)
+    "10.1186/",  # BMC family (Bioinformatics, Systems Biology, Genome Biology…)
+    "10.1038/",  # Nature family (Nature, Nature Comms, Nature Methods…)
+    "10.1073/",  # PNAS
+    "10.1523/",  # Journal of Neuroscience
     "10.1016/j.neuroimage",
     "10.1016/j.brainres",
-    "10.3389/fgene",      # Frontiers in Genetics
-    "10.3389/fneu",       # Frontiers in Neuroscience / Neurology
-    "10.3389/fnhu",       # Frontiers in Human Neuroscience
-    "10.3389/fpls",       # Frontiers in Plant Science
-    "10.3389/fpub",       # Frontiers in Public Health
-    "10.3389/fpsyg",      # Frontiers in Psychology
-    "10.3389/fmicb",      # Frontiers in Microbiology
+    "10.3389/fgene",  # Frontiers in Genetics
+    "10.3389/fneu",  # Frontiers in Neuroscience / Neurology
+    "10.3389/fnhu",  # Frontiers in Human Neuroscience
+    "10.3389/fpls",  # Frontiers in Plant Science
+    "10.3389/fpub",  # Frontiers in Public Health
+    "10.3389/fpsyg",  # Frontiers in Psychology
+    "10.3389/fmicb",  # Frontiers in Microbiology
     "10.1093/bioinformatics",
-    "10.1093/nar/",       # Nucleic Acids Research
-    "10.1093/hmg/",       # Human Molecular Genetics
-    "10.1126/science",    # Science
+    "10.1093/nar/",  # Nucleic Acids Research
+    "10.1093/hmg/",  # Human Molecular Genetics
+    "10.1126/science",  # Science
 )
 
 
@@ -325,7 +325,9 @@ OFF_TOPIC_KEYWORDS = frozenset(
 # vocabulary ("external face", "internal vertices") — and hard-killed those
 # papers at discovery. The boundary anchor removes that false negative.
 _OFF_TOPIC_RE = re.compile(
-    r"\b(?:" + "|".join(re.escape(k) for k in sorted(OFF_TOPIC_KEYWORDS, key=len, reverse=True)) + r")"
+    r"\b(?:"
+    + "|".join(re.escape(k) for k in sorted(OFF_TOPIC_KEYWORDS, key=len, reverse=True))
+    + r")"
 )
 
 

@@ -13,6 +13,7 @@ by id prefix, and answers the campaign's core question:
 
 No LLM, no embedding. Pure read over benchmark.json. Pass a run dir or use latest.
 """
+
 from __future__ import annotations
 
 import glob
@@ -86,7 +87,9 @@ def report(run_dir: Path) -> None:
                 continue
             rows.append((d["strategy"], cm, sm))
         if not rows:
-            print(f"\n## {track}: no eval'd strategies with synthetic cases (run with RAG_LIT_SYNTH_GOLD=1)")
+            print(
+                f"\n## {track}: no eval'd strategies with synthetic cases (run with RAG_LIT_SYNTH_GOLD=1)"
+            )
             continue
 
         rows.sort(key=lambda r: -r[2])  # by synthetic nDCG
@@ -103,8 +106,12 @@ def report(run_dir: Path) -> None:
         for name, cm, sm in rows:
             print(f"{name:28} {cm:16.3f} {sm:14.3f}")
         print(f"\n  nDCG@10 spread (max-min): curated={cur_spread:.3f}  synthetic={syn_spread:.3f}")
-        print(f"  separation gain: {syn_spread - cur_spread:+.3f}  (positive = synthetic separates methods better)")
-        print(f"  curated-vs-synthetic Spearman rho: {rho:.3f}  (high = synthetic agrees with the human anchor)")
+        print(
+            f"  separation gain: {syn_spread - cur_spread:+.3f}  (positive = synthetic separates methods better)"
+        )
+        print(
+            f"  curated-vs-synthetic Spearman rho: {rho:.3f}  (high = synthetic agrees with the human anchor)"
+        )
 
 
 if __name__ == "__main__":

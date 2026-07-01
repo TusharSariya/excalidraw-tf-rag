@@ -1,8 +1,6 @@
 import types
 from pathlib import Path
 
-import pytest
-
 from rag_literature_rag import gemini_vision_text
 from rag_literature_rag.ingest import extract as extract_mod
 from rag_literature_rag.manifest import ManifestItem

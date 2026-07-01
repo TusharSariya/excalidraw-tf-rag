@@ -14,6 +14,7 @@ benchmarked on the gold set and used at the CLI. LLM model is pinned via
 ``GRAPH_RAG_AGENT_LLM_MODEL`` (default 3.1-pro-preview in .env) and runs on the
 ``RAG_LLM_LOCATION`` endpoint.
 """
+
 from __future__ import annotations
 
 import logging
@@ -34,7 +35,9 @@ DEFAULT_AGENT_MODEL = "gemini-2.5-flash"
 
 
 def agent_model() -> str:
-    return os.getenv("GRAPH_RAG_AGENT_LLM_MODEL", DEFAULT_AGENT_MODEL).strip() or DEFAULT_AGENT_MODEL
+    return (
+        os.getenv("GRAPH_RAG_AGENT_LLM_MODEL", DEFAULT_AGENT_MODEL).strip() or DEFAULT_AGENT_MODEL
+    )
 
 
 def _llm(prompt: str) -> str:

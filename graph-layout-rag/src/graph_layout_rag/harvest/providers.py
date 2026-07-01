@@ -6,9 +6,10 @@ import os
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
 import httpx
 
@@ -108,9 +109,7 @@ class ProviderPolicy:
         with self._lock:
             self.metrics.requests += 1
             self.metrics.active += 1
-            self.metrics.peak_concurrency = max(
-                self.metrics.peak_concurrency, self.metrics.active
-            )
+            self.metrics.peak_concurrency = max(self.metrics.peak_concurrency, self.metrics.active)
 
     def _record_end(self) -> None:
         with self._lock:
@@ -154,7 +153,9 @@ class ProviderPolicy:
                     data = None
                 with self._lock:
                     self.metrics.successes += 1
-                return RequestOutcome(OutcomeKind.SUCCESS, data=data, status_code=response.status_code)
+                return RequestOutcome(
+                    OutcomeKind.SUCCESS, data=data, status_code=response.status_code
+                )
             elif response.status_code in terminal_statuses:
                 with self._lock:
                     self.metrics.terminal_misses += 1
@@ -183,9 +184,7 @@ class ProviderPolicy:
                     OutcomeKind.RETRYABLE_FAILURE, status_code=response.status_code
                 )
             else:
-                return RequestOutcome(
-                    OutcomeKind.TERMINAL_MISS, status_code=response.status_code
-                )
+                return RequestOutcome(OutcomeKind.TERMINAL_MISS, status_code=response.status_code)
 
             if attempt < self.max_attempts - 1:
                 with self._lock:
