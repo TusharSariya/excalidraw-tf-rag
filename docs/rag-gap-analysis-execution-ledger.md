@@ -133,4 +133,25 @@ While running the Phase 1 4B-vs-0.6B experiment, dense / hybrid / hybrid_sparse2
 | 4B | 0.476 | **0.775** | 0.173 | 13 |
 - **4B does NOT beat 0.6B on dense NL** (−0.020 nDCG@10) — contradicts the plan's "+0.087" premise (which I could not find persisted; likely a different/earlier gold set). 4B ranks its hits higher (MRR +0.076) but has 6 more complete misses, mostly hard/single-relevant synth cases. Miss sets are largely disjoint (4 shared). Full hybrid comparison (with fixed BM25) running now — that's the real ship-decision number.
 
+## 2026-07-01 ~10:50 NDT — ⛔ Phase 1 VERDICT: 4B does NOT replicate as a win — keep 0.6B
+
+With BM25 fixed, ran the correct 4B-vs-0.6B comparison on the **production strategy** (`hybrid_sparse2`, NL track, 175 cases):
+| profile | hybrid nDCG@10 | MRR | R@5 | misses | dense nDCG@10 |
+|---|---|---|---|---|---|
+| 0.6B | 0.570 | 0.854 | **0.216** | 8 | **0.496** |
+| 4B | **0.581** | 0.859 | 0.206 | 7 | 0.476 |
+
+**Paired bootstrap CI (4B−0.6B, production hybrid): +0.0101, 95% CI [−0.0028, +0.0228] → NULL** (64 cases better / 49 worse / 62 tied). On dense-only 4B is actually −0.020.
+
+**Decision D9 — DO NOT SHIP 4B; keep 0.6B as production.** Rationale:
+- The gain is statistically **null** and the point estimate (+0.011) is below the plan's own +0.03 promotion bar.
+- 4B costs **3× VRAM** (4.6 vs 1.6 GB), **~2× embed time**, and a **14 s cold-start / model-switch penalty** under the mixed routing the plan proposed.
+- **The plan's headline "+0.087 known win" does NOT replicate on the current gold set.** Most likely it was a dense-only measurement against an earlier/smaller synth gold set (synth evolved 42→531). BM25 was likely also broken/absent in whatever produced it. My 4B index is a faithful reembed (same chunk text, same model, MRL-truncated to 1024 for both doc+query via the gateway), so the contradiction is real, not an index artifact.
+- **This retires the plan's Phase 1 entirely.** The FP8/Matryoshka/warm-serve engineering it proposed would have been spent chasing a null. Net Phase-1 outcome = a rigorous negative + the incidentally-discovered BM25 fix (which is the actual value).
+
+**Reframe of where value now lives** (all evidence-led):
+1. **The BM25 fix** (already shipped `5d36dd0`) — restores production hybrid; likely the single biggest real improvement of the campaign, because hybrid (0.57–0.58) >> dense (0.48–0.50) and hybrid was silently off locally.
+2. **Phase 3A citation layer** — now the most promising untested lever (keying ~89%, co-citation edges 100k→532k+). Test `hybrid_citation` vs `hybrid_sparse2` next.
+3. Everything embedding-model-related (0.6B vs 4B vs 8B) is a dead end at current corpus/gold — consistent with "measurement/substrate-bound, not model-bound."
+
 <!-- New entries appended below, newest-last, always timestamped. -->
