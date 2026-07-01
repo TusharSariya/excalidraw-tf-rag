@@ -51,7 +51,10 @@ jobs:
           # gpu-gateway: the scheduler suite is pure stdlib — no ray/torch sync,
           # just pytest, exactly as gpu-gateway/pyproject.toml documents.
           - package: gpu-gateway
+            # PYTHONPATH=src: --no-project skips installing the package, so the
+            # pure-stdlib scheduler import needs src/ on the path (as documented).
             run: >
+              PYTHONPATH=src
               uv run --no-project --with pytest --with pytest-asyncio
               pytest tests/test_scheduler.py -q
           # RAG packages: base sync (no GPU extras) then the offline unit subset.
