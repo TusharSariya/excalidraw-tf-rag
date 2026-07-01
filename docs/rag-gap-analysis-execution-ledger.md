@@ -174,4 +174,21 @@ With BM25 fixed, ran the correct 4B-vs-0.6B comparison on the **production strat
 
 **Standing takeaway:** across the two headline levers tested with correct methodology (4B embedder, citation ranking), both are NULL. The one real win remains the **BM25 schema-drift fix** — restoring production hybrid (0.57 vs dense 0.48). Strong support for the plan's thesis: *measurement/substrate-bound, not algorithm-bound.*
 
+## 2026-07-01 ~11:45 NDT — α-sweep settles the citation layer; deliverable written
+
+**Citation boost α-sweep** (`hybrid_citation`, NL, enriched graph): α=0.25→0.578, **α=0.5→0.579 (peak)**, α=1.0→0.577, α=2.0→0.570 (= champion). MRR falls monotonically as α rises (0.844→0.788). **No operating point clears the bar** — peak is +0.009 (NULL) and stronger boost actively hurts top-rank precision. Combined with the paired-bootstrap NULL, this **settles the graph-ranking layer as not-worth-building** (and by extension the softer 3B Leiden boost). The repaired citation graph stays valuable for the *research-tool neighbor navigation*, just not for ranking.
+
+**Proved the BM25 fix on the production path** (not just eval): `retrieve_candidates(hybrid=True)` vs `hybrid=False` now returns *different* top-5 with `sparse_rank` present — before the fix they were identical (BM25 returning []).
+
+**GLR full offline suite: 489 passed / 15 skipped / 0 failed** — no regressions from Phase 0 + BM25 changes.
+
+**Deliverable written:** `docs/rag-gap-analysis-2026-07.md` — reviewer-facing synthesis (TL;DR table, per-lever results, next-step recommendation, settled-NULL list). Cross-references this ledger.
+
+### Session outcome (7+ commits)
+- ✅ Phase 0 shipped: `eval coverage`, corpus stratification, dual-backend judge.
+- ✅ **BM25 schema-drift fix (GLR+RLR)** — the real win; restored production hybrid (+0.074 vs the dense-only it silently was).
+- ✅ Phase 3A citation-keying repaired (22%→89%, edges 5×) — infra done.
+- ⛔ Phase 1 (4B) NULL · ⛔ Phase 3 (citation ranking) NULL — two rigorous negatives that retire those plan branches.
+- Thesis confirmed: **substrate/measurement-bound, not algorithm-bound.**
+
 <!-- New entries appended below, newest-last, always timestamped. -->
