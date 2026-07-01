@@ -1,0 +1,3 @@
+# Bulk reformat commits ignored by `git blame` (see: git config blame.ignoreRevsFile .git-blame-ignore-revs)
+# Adopt ruff — repo-wide format + lint baseline
+c1fba09570ecf73814d28e0762bd0616e284f206
