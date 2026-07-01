@@ -154,4 +154,24 @@ With BM25 fixed, ran the correct 4B-vs-0.6B comparison on the **production strat
 2. **Phase 3A citation layer** — now the most promising untested lever (keying ~89%, co-citation edges 100k→532k+). Test `hybrid_citation` vs `hybrid_sparse2` next.
 3. Everything embedding-model-related (0.6B vs 4B vs 8B) is a dead end at current corpus/gold — consistent with "measurement/substrate-bound, not model-bound."
 
+## 2026-07-01 ~11:20 NDT — Phase 3A citation repair DONE; citation-ranking payoff = NULL (near-threshold)
+
+**Citation-keying repair (3A) executed successfully** via resumed `cite enrich`:
+- Corpus keying **1,334 → 4,376** (~2.5% → ~89% of the DOI-bearing corpus).
+- Citation edges **100,362 → 532,284**; **in-corpus edges 9,134 → 22,706** (2.5×); papers-with-incoming 1,150 → 3,550.
+- The S2 incoming pass hung at ~2,400/3,226 papers (S2 rate-limit/hang, 32 idle open conns); stopped cleanly — DB `integrity_check ok`, per-batch commits preserved. The last ~800 papers are diminishing returns; graph is more than complete enough. Citation graph now loads 275,441 nodes.
+- RLR sibling BM25 fix shipped (`6cccd3c`) — same latent schema-drift defect, not yet firing there.
+
+**Payoff experiment — `hybrid_citation` vs `hybrid_sparse2` champion (NL, 175 cases, 0.6B, enriched graph):**
+| strategy | nDCG@10 | MRR | R@5 | misses |
+|---|---|---|---|---|
+| hybrid_sparse2 | 0.570 | **0.854** | **0.216** | 8 |
+| hybrid_citation (α=0.5) | **0.579** | 0.845 | 0.208 | 7 |
+
+**Paired bootstrap CI: +0.0089, 95% CI [−0.0012, +0.0192] → NULL** (66 better / 57 worse / 52 tied). The lower bound sits right at 0 — a *weak positive, not significant at n=175*, not a hard null like SPLADE (−0.129).
+
+**Interpretation (D10):** Repairing keying did NOT convert the citation layer into a win. `hybrid_citation` already fuses PPR + bibliographic-coupling + co-citation (the union of what a 3B Leiden / 3C walk / 3D coupling layer would contribute), so those are very unlikely to beat it. This is the plan's own "9th NULL" risk materializing — but honestly, at ~89% keying it's a *near-threshold* null, not a clear reject. Running an α (boost-strength) sweep before finalizing the verdict, out of fairness to the citation hypothesis (and because α=0.5 is arbitrary). Even if a peak clears +0.01, it must survive re-pooling/re-judging per the plan's gate.
+
+**Standing takeaway:** across the two headline levers tested with correct methodology (4B embedder, citation ranking), both are NULL. The one real win remains the **BM25 schema-drift fix** — restoring production hybrid (0.57 vs dense 0.48). Strong support for the plan's thesis: *measurement/substrate-bound, not algorithm-bound.*
+
 <!-- New entries appended below, newest-last, always timestamped. -->
