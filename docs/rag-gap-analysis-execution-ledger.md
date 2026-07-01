@@ -118,4 +118,19 @@ A code+DB subagent brief settled the go/no-go: **the keying gap is an incomplete
 **Decision D8 — execute 3A via the tested `cite enrich` command, not a hand-rolled script** (collab principle: reuse tested code). Staged: `cite enrich --no-incoming` first (fast OpenAlex keying + outgoing edges) → verify keying jump → then the slower S2 `--incoming` pass to revive co-citation. DB backed up (`citations.sqlite.bak-2026-07-01`) first. Runs independently of the gateway/reembed.
 **Next experiment enabled:** once keyed to ~81%, A/B the *existing* `hybrid_citation` strategy vs `hybrid` on the NL qrels — a clean test of whether citation ranking was coverage-limited (prior NULLs were at ~22–34% keying). Only build 3B Leiden if that shows signal or as an explicit soft-additive probe.
 
+## 2026-07-01 ~10:30 NDT — 🔴 MAJOR BUG FOUND & FIXED: BM25 silently dead → all local hybrid eval was dense-only
+
+While running the Phase 1 4B-vs-0.6B experiment, dense / hybrid / hybrid_sparse2 returned **byte-identical** numbers per profile. Root-caused (shit-testing, not assuming):
+- **`ingest/bm25.py:search_bm25` was returning `[]` for every query.** `_open_or_create_index` opens with `tantivy.Index(_build_schema(), path=…)`, which validates the *current write schema* against the on-disk index. The BM25 indexes (built Jun 24) predate schema fields added later (`venue`, `genre`, `venue_type`, `oa_version`, `is_retracted`, …), so the open raised `ValueError: Schema error: … does not match`, which `search_bm25` **swallowed** → empty BM25.
+- **Blast radius:** every hybrid/sparse query on this Mac — in **eval AND the production `query` command** — silently degraded to **dense-only** for any index built before the schema change. Direct `tantivy.Index.open()` proved the index itself is fine (41,083 docs, real hits). The original author documented choosing silent-disable ("Dense retrieval remains valid; the next rebuild creates the new schema") — but that means a schema bump silently kills hybrid until a full re-ingest.
+- **Fix:** added `_open_for_search()` using `tantivy.Index.open()` (reads the *persisted* schema; the 5 core `_QUERY_FIELDS` exist in every version). `search_bm25` now uses it; the `except` is narrowed to genuinely-unreadable indexes. Regression test simulates schema drift and asserts search survives. 7 bm25 tests pass, ruff clean. **This is pre-existing, not my regression** (untouched query/ingest code) — surfaced + fixed because it blocked the Phase 1 measurement and corrupts every local hybrid result.
+- **Immediate proof the fix matters:** with BM25 live, **BM25-only nDCG@10 = 0.537 on NL, beating dense's 0.496** — the corpus is BM25-dominant, exactly why prior campaigns promoted `sparse_weight=2.0`. Every local "hybrid" measurement taken while this bug was live was actually reporting dense-only and is **suspect** (re-measure before trusting).
+
+### Phase 1 (4B) — dense-only comparison so far (both apples-to-apples dense; NL track, 175 cases)
+| profile | dense nDCG@10 | MRR | R@5 | misses |
+|---|---|---|---|---|
+| 0.6B | **0.496** | 0.699 | 0.189 | 7 |
+| 4B | 0.476 | **0.775** | 0.173 | 13 |
+- **4B does NOT beat 0.6B on dense NL** (−0.020 nDCG@10) — contradicts the plan's "+0.087" premise (which I could not find persisted; likely a different/earlier gold set). 4B ranks its hits higher (MRR +0.076) but has 6 more complete misses, mostly hard/single-relevant synth cases. Miss sets are largely disjoint (4 shared). Full hybrid comparison (with fixed BM25) running now — that's the real ship-decision number.
+
 <!-- New entries appended below, newest-last, always timestamped. -->
