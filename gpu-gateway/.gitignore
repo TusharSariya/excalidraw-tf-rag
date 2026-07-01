@@ -1,0 +1,11 @@
+# Python build / test artifacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.egg-info/
+
+# Local secrets / benchmark + eval outputs
+.env
+*.bench.json
+eval-results/

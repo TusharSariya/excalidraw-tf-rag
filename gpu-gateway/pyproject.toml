@@ -24,6 +24,18 @@ mcp = [
     "httpx>=0.27.0",
 ]
 
+[dependency-groups]
+# Scheduler unit tests import only gpu_gateway.scheduler (pure stdlib) — no ray/torch,
+# so they run with `uv run --no-project --with pytest --with pytest-asyncio`.
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
 [project.scripts]
 gpu-gateway-mcp = "gpu_gateway.mcp_server:main"
 

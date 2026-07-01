@@ -1,8 +1,9 @@
 """Dense embedding deployments (Qwen3-4B and Qwen3-0.6B).
 
 user_config is delivered via reconfigure() in Ray Serve 2.x — NOT __init__.
-Models are loaded LAZILY on first __call__ and EVICTED before LLM requests
-(GatewayHTTP calls unload() before forwarding to Ollama so the GPU is free).
+Models are loaded LAZILY on first __call__ and EVICTED by the Scheduler before it
+admits a model that doesn't fit (and always before LLM requests). Eviction/park
+mechanics live in the shared _EvictableModel mixin.
 """
 
 from __future__ import annotations
@@ -11,10 +12,12 @@ import logging
 
 from ray import serve
 
+from gpu_gateway.handlers.evictable import _EvictableModel
+
 log = logging.getLogger("gpu_gateway.handlers.dense_embed")
 
 
-class _DenseEmbedBase:
+class _DenseEmbedBase(_EvictableModel):
     """Shared implementation; subclassed for 4B and 0.6B deployments."""
 
     def __init__(self) -> None:
@@ -25,24 +28,17 @@ class _DenseEmbedBase:
         # Store the model path; actual loading is deferred to the first __call__.
         self._model_path = config["model"]
         self._model = None  # reset so __call__ reloads when config changes
+        self._parked = False
+        self._configure_evict(config)
 
-    def _ensure_loaded(self) -> None:
-        if self._model is None:
-            from sentence_transformers import SentenceTransformer
-            log.info("lazy-loading dense embed model %s", self._model_path)
-            self._model = SentenceTransformer(self._model_path, device="cuda")
-            # Cap input sequence length — long code chunks produce O(seq²) attention
-            # tensors that OOM an 8 GB card even at batch_size=32.
-            self._model.max_seq_length = 2048
-            log.info("loaded %s", self._model_path)
-
-    async def unload(self) -> None:
-        if self._model is not None:
-            import torch
-            del self._model
-            self._model = None
-            torch.cuda.empty_cache()
-            log.info("unloaded %s", self._model_path)
+    def _load_from_disk(self) -> None:
+        from sentence_transformers import SentenceTransformer
+        log.info("lazy-loading dense embed model %s", self._model_path)
+        self._model = SentenceTransformer(self._model_path, device="cuda")
+        # Cap input sequence length — long code chunks produce O(seq²) attention
+        # tensors that OOM an 8 GB card even at batch_size=32.
+        self._model.max_seq_length = 2048
+        log.info("loaded %s", self._model_path)
 
     async def __call__(self, texts: list[str]) -> list[list[float]]:
         self._ensure_loaded()
@@ -54,24 +50,39 @@ class _DenseEmbedBase:
 
 @serve.deployment
 class DenseEmbed4B(_DenseEmbedBase):
-    def _ensure_loaded(self) -> None:
-        if self._model is None:
-            from sentence_transformers import SentenceTransformer
-            from transformers import BitsAndBytesConfig
-            # Qwen3-4B is ~8 GB in bf16 — OOMs on an 8 GB card.
-            # BitsAndBytesConfig(load_in_8bit=True) reduces to ~4 GB.
-            bnb = BitsAndBytesConfig(load_in_8bit=True)
-            log.info("lazy-loading dense embed model %s (int8, 1024-dim MRL)", self._model_path)
-            self._model = SentenceTransformer(
-                self._model_path,
-                device="cuda",
-                truncate_dim=1024,
-                model_kwargs={"quantization_config": bnb},
+    def _load_from_disk(self) -> None:
+        from sentence_transformers import SentenceTransformer
+        from transformers import BitsAndBytesConfig
+        # Qwen3-4B is ~8 GB in bf16 — OOMs on an 8 GB card.
+        # BitsAndBytesConfig(load_in_8bit=True) reduces to ~4 GB.
+        bnb = BitsAndBytesConfig(load_in_8bit=True)
+        log.info("lazy-loading dense embed model %s (int8, 1024-dim MRL)", self._model_path)
+        self._model = SentenceTransformer(
+            self._model_path,
+            device="cuda",
+            truncate_dim=1024,
+            model_kwargs={"quantization_config": bnb},
+        )
+        # 4B at int8 ≈ 5.7 GB; only ~2 GB left for activations.
+        # seq=256 keeps FFN activations to <100 MB per layer.
+        self._model.max_seq_length = 256
+        log.info("loaded %s", self._model_path)
+
+    def _validate_after_unpark(self) -> bool:
+        """bitsandbytes int8 layers don't reliably survive .to('cpu')→.to('cuda').
+        Run a 1-token self-test: correct shape + finite values, else fall back."""
+        import math
+        try:
+            v = self._model.encode(
+                ["ok"], normalize_embeddings=True, show_progress_bar=False, batch_size=1
             )
-            # 4B at int8 ≈ 5.7 GB; only ~2 GB left for activations.
-            # seq=256 keeps FFN activations to <100 MB per layer.
-            self._model.max_seq_length = 256
-            log.info("loaded %s", self._model_path)
+            vec = list(v[0])
+            if len(vec) != 1024:
+                return False
+            return all(math.isfinite(float(x)) for x in vec[:16])
+        except Exception as exc:  # noqa: BLE001
+            log.warning("4B unpark self-test raised: %s", exc)
+            return False
 
     async def __call__(self, texts: list[str]) -> list[list[float]]:
         self._ensure_loaded()
@@ -83,14 +94,13 @@ class DenseEmbed4B(_DenseEmbedBase):
 
 @serve.deployment
 class DenseEmbed06B(_DenseEmbedBase):
-    def _ensure_loaded(self) -> None:
-        if self._model is None:
-            from sentence_transformers import SentenceTransformer
-            log.info("lazy-loading dense embed model %s", self._model_path)
-            self._model = SentenceTransformer(self._model_path, device="cuda")
-            # 512 tokens: attention scales as seq², and 2048 OOMs an 8 GB card.
-            self._model.max_seq_length = 512
-            log.info("loaded %s", self._model_path)
+    def _load_from_disk(self) -> None:
+        from sentence_transformers import SentenceTransformer
+        log.info("lazy-loading dense embed model %s", self._model_path)
+        self._model = SentenceTransformer(self._model_path, device="cuda")
+        # 512 tokens: attention scales as seq², and 2048 OOMs an 8 GB card.
+        self._model.max_seq_length = 512
+        log.info("loaded %s", self._model_path)
 
     async def __call__(self, texts: list[str]) -> list[list[float]]:
         self._ensure_loaded()

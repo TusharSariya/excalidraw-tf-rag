@@ -1,4 +1,4 @@
-"""GatewayHTTP — Ray Serve router with automatic LRU VRAM eviction.
+"""GatewayHTTP — Ray Serve router with a single in-process VRAM dispatcher.
 
 This module's `app` export is what `serve run config/serve_config.yaml` imports
 (import_path: gpu_gateway.main:app). It must be a ray.serve.Application built
@@ -6,14 +6,17 @@ with serve.bind(), not a bare FastAPI app.
 
 ## VRAM management
 
-GatewayHTTP tracks which models are "known to be loaded" in _loaded_at (model →
-monotonic timestamp). Before every embed/rerank dispatch it calls _evict_for(),
-which evicts LRU models until the new model fits within _CARD_MB. This means:
+All GPU work funnels through one `Scheduler` (see scheduler.py). Request handlers
+enqueue a `Job` and await its future; a single background dispatcher task is the
+*only* code that touches VRAM, evicts, and loads — so eviction and the load that
+follows are one sequential step (no TOCTOU race). The dispatcher bin-packs
+co-resident models (0.6B embed + reranker stay loaded together), schedules by
+queue depth, and guards every load with a measured-VRAM gate. This means:
 
   - 0.6B ↔ 4B switches are automatic — no manual kill required
+  - embed→rerank no longer thrashes (both fit at 3000 MB, stay co-resident)
   - LLM requests still evict everything (Ollama needs the full card)
-  - On actor crash/restart the model is cleared from tracking; the next request
-    reloads it after any necessary eviction
+  - a load failure fails only that batch; the supervised loop keeps running
 
 VRAM budgets are measured observations on the RTX 3060 Ti (8 GB / 7822 MB
 usable). Update _VRAM_MB if you load different quantizations.
@@ -31,20 +34,20 @@ from typing import Any
 import ray
 from ray import serve
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, PlainTextResponse
 
-from gpu_gateway.cache import MODEL_DIMS, SQLiteCache, embed_cache_key, rerank_cache_key
-from gpu_gateway.coordinator import VRAMCoordinator
+from gpu_gateway.cache import SQLiteCache, embed_cache_key, rerank_cache_key
 from gpu_gateway.handlers.dense_embed import DenseEmbed06B, DenseEmbed4B
 from gpu_gateway.handlers.llm import LLMDeployment
 from gpu_gateway.handlers.reranker import RerankerDeployment
+from gpu_gateway.scheduler import LLM_SENTINEL, Job, Scheduler
 
 log = logging.getLogger("gpu_gateway.main")
 
 # ---------------------------------------------------------------------------
 # VRAM budget table (MB) — measured on RTX 3060 Ti with expandable_segments:True.
-# Used by _evict_for() to decide what to evict before loading a new model.
-# ---------------------------------------------------------------------------
+# The static planner the Scheduler uses to decide bin-packing and eviction; the
+# measured-VRAM gate (nvidia-smi) is the runtime safety check on top of it.
 # ---------------------------------------------------------------------------
 # Tools root — three levels up from this file (gpu_gateway/ → src/ → gpu-gateway/ → tools/)
 # ---------------------------------------------------------------------------
@@ -79,15 +82,7 @@ class GatewayHTTP:
         reranker: Any,
         llm: Any,
     ) -> None:
-        # VRAMCoordinator and SQLiteCache are @ray.remote actors (not @serve.deployment).
-        # We create them lazily here (get_if_exists via try/except) with lifetime="detached"
-        # so they survive GatewayHTTP restarts without namespace-matching issues.
-        try:
-            self._coordinator = ray.get_actor("gateway_coordinator")
-        except ValueError:
-            self._coordinator = VRAMCoordinator.options(
-                name="gateway_coordinator", lifetime="detached", num_cpus=0
-            ).remote()
+        # SQLiteCache is a detached @ray.remote actor (survives GatewayHTTP restarts).
         try:
             self._cache = ray.get_actor("gateway_cache")
         except ValueError:
@@ -99,12 +94,32 @@ class GatewayHTTP:
         self._reranker = reranker
         self._llm = llm
 
-        # LRU VRAM tracker: canonical model name → last-used monotonic timestamp.
-        # Set when a model call succeeds; cleared when unloaded or on actor error.
-        self._loaded_at: dict[str, float] = {}
+        # Short-TTL cache for the nvidia-smi free-VRAM probe — the admit gate polls it
+        # tightly under pressure, and shelling out each time would block the loop.
+        self._free_cache: tuple[float, int] = (0.0, 0)
+        self._replica_checked = False
+
+        # The single VRAM dispatcher. It owns all resident/eviction state; handlers
+        # just enqueue jobs and await. GPU-touching work is injected as callables so
+        # the scheduler stays ray/torch-free and unit-testable.
+        # GATEWAY_SCHED_MODE=naive forces the single-resident load-evict baseline
+        # (co-residency off, drain=1) used as the A/B control curve for the wedge
+        # proof (see scripts/eval_harness.py). Default "affinity" is the real thing.
+        self._sched_mode = os.environ.get("GATEWAY_SCHED_MODE", "affinity")
+        self._sched = Scheduler(
+            vram_mb=_VRAM_MB,
+            card_mb=_CARD_MB,
+            embed_fn=self._embed_call,
+            rerank_fn=self._rerank_call,
+            chat_fn=self._chat_call,
+            unload_fn=self._unload_call,
+            measured_free_mb=self._measured_free_mb,
+            clock=time.monotonic,
+            mode=self._sched_mode,
+        )
 
     # ------------------------------------------------------------------
-    # VRAM orchestration
+    # GPU-touching callables injected into the Scheduler
     # ------------------------------------------------------------------
 
     def _handle_for(self, canonical: str) -> Any:
@@ -114,60 +129,77 @@ class GatewayHTTP:
             return self._reranker
         return self._embed06b
 
-    async def _evict_for(self, canonical: str) -> None:
-        """LRU-evict loaded models until `canonical` fits within _CARD_MB.
+    async def _embed_call(self, canonical: str, texts: list[str]) -> list[list[float]]:
+        return await self._handle_for(canonical).remote(texts)
 
-        Never evicts the model we're about to load (it may already be loaded
-        and we just want a second call — timestamp will be updated after).
-        """
-        needed = _VRAM_MB.get(canonical, 1800)
-        current_total = sum(_VRAM_MB.get(m, 0) for m in self._loaded_at)
+    async def _rerank_call(self, query: str, passages: list[str]) -> list[float]:
+        return await self._reranker.remote(query, passages)
 
-        while current_total + needed > _CARD_MB:
-            # candidates: everything loaded except the target model
-            candidates = [(m, ts) for m, ts in self._loaded_at.items() if m != canonical]
-            if not candidates:
-                log.warning(
-                    "cannot evict further — budget %d MB still needed for %s (%d MB)",
-                    _CARD_MB, canonical, needed,
+    async def _chat_call(self, payload: dict) -> dict:
+        return await self._llm.remote(payload)
+
+    async def _unload_call(self, canonical: str) -> bool:
+        """Evict a handler's model; returns True if it was parked in RAM (vs destroyed)."""
+        return bool(await self._handle_for(canonical).unload.remote())
+
+    def _measured_free_mb(self) -> int:
+        """Real free VRAM on the card (all processes), via nvidia-smi. GatewayHTTP runs
+        with num_gpus=0 and has no CUDA context, so torch.cuda.mem_get_info is unavailable
+        here; nvidia-smi also correctly counts Ollama's out-of-process usage. 0.25s TTL."""
+        now = time.monotonic()
+        ts, val = self._free_cache
+        if now - ts < 0.25 and ts:
+            return val
+        free = _CARD_MB
+        try:
+            out = subprocess.check_output(
+                ["nvidia-smi", "--query-gpu=memory.free",
+                 "--format=csv,noheader,nounits"],
+                timeout=5,
+            ).decode()
+            free = int(out.strip().splitlines()[0].strip())
+        except Exception:  # noqa: BLE001 — assume worst-case-safe full card if probe fails
+            pass
+        self._free_cache = (now, free)
+        return free
+
+    def _assert_single_replica(self) -> None:
+        """Fail closed if GatewayHTTP is ever scaled past one replica — two dispatchers
+        would split-brain the VRAM view. Best-effort via serve.status(); config also pins
+        num_replicas: 1. Checked once, lazily, after the deployment is fully up."""
+        if self._replica_checked:
+            return
+        self._replica_checked = True
+        try:
+            status = serve.status()
+            for app in status.applications.values():
+                dep = app.deployments.get("GatewayHTTP")
+                if dep is None:
+                    continue
+                running = sum(
+                    n for st, n in getattr(dep, "replica_states", {}).items()
+                    if str(st).upper().endswith("RUNNING")
                 )
-                break
-            evict = min(candidates, key=lambda x: x[1])[0]
-            evict_mb = _VRAM_MB.get(evict, 0)
-            log.info(
-                "vram-evict: unloading %s (%d MB) to make room for %s (%d MB)",
-                evict, evict_mb, canonical, needed,
-            )
-            try:
-                await self._handle_for(evict).unload.remote()
-            except Exception as exc:  # noqa: BLE001
-                log.warning("evict %s failed (actor may already be dead): %s", evict, exc)
-            self._loaded_at.pop(evict, None)
-            current_total -= evict_mb
-
-    async def _evict_all(self) -> None:
-        """Unload every tracked model (used before LLM requests)."""
-        for canonical in list(self._loaded_at):
-            try:
-                await self._handle_for(canonical).unload.remote()
-            except Exception as exc:  # noqa: BLE001
-                log.warning("evict-all %s failed: %s", canonical, exc)
-        self._loaded_at.clear()
-
-    def _mark_loaded(self, canonical: str) -> None:
-        self._loaded_at[canonical] = time.monotonic()
-
-    def _mark_unloaded(self, canonical: str) -> None:
-        self._loaded_at.pop(canonical, None)
+                if running > 1:
+                    raise RuntimeError(
+                        f"GatewayHTTP has {running} replicas — the in-process VRAM "
+                        "dispatcher requires exactly 1 (set num_replicas: 1)."
+                    )
+        except RuntimeError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — status API shape varies; config pins 1
+            log.debug("replica-count check skipped: %s", exc)
 
     # ------------------------------------------------------------------
     # Request handlers
     # ------------------------------------------------------------------
 
-    async def __call__(self, request: Request) -> JSONResponse:
+    async def __call__(self, request: Request):
         path = request.url.path
         if path in ("/health", "/health/"):
             return await self._health()
+        if path in ("/metrics", "/metrics/"):
+            return PlainTextResponse(self._sched.prometheus_text())
         if path in ("/v1/embeddings", "/v1/embeddings/"):
             body = await request.json()
             return await self._embeddings(body)
@@ -183,13 +215,14 @@ class GatewayHTTP:
         return JSONResponse({"error": f"unknown path {path}"}, status_code=404)
 
     async def _embeddings(self, body: dict) -> JSONResponse:
+        self._assert_single_replica()
         model = body.get("model", "cuda-qwen4b-1024")
         canonical = _model_handle_name(model)
         texts: list[str] = body.get("input", [])
         if isinstance(texts, str):
             texts = [texts]
 
-        # Cache lookup
+        # Cache lookup — hits never touch the GPU (stay out of the dispatcher).
         keys = [embed_cache_key(model, t) for t in texts]
         cached = await self._cache.batch_get.remote(keys)
         hits = {k: v for k, v in cached.items()}
@@ -198,23 +231,11 @@ class GatewayHTTP:
         miss_texts = [texts[i] for i in miss_indices]
 
         if miss_texts:
-            handle = self._handle_for(canonical)
-            # Evict LRU models if necessary, then acquire the embed slot.
-            await self._evict_for(canonical)
-            acquired = False
-            try:
-                await self._coordinator.acquire.remote("embed")
-                acquired = True
-                new_vecs: list[list[float]] = await handle.remote(miss_texts)
-                self._mark_loaded(canonical)
-            except Exception:
-                # Actor may have crashed/been restarted — clear stale tracking.
-                self._mark_unloaded(canonical)
-                raise
-            finally:
-                if acquired:
-                    await self._coordinator.release.remote("embed")
-
+            # Enqueue the miss batch and await the dispatcher; it coalesces same-model
+            # jobs, bin-packs VRAM, and returns one vector per input text in order.
+            new_vecs: list[list[float]] = await self._sched.submit(
+                Job(kind="embed", canonical=canonical, items=miss_texts)
+            )
             store_entries = [
                 (keys[miss_indices[j]], model, new_vecs[j])
                 for j in range(len(miss_texts))
@@ -234,6 +255,7 @@ class GatewayHTTP:
         )
 
     async def _rerank(self, body: dict) -> JSONResponse:
+        self._assert_single_replica()
         model = body.get("model", "bge-reranker-v2-m3")
         canonical = "bge-reranker-v2-m3"
         query: str = body.get("query", "")
@@ -247,20 +269,14 @@ class GatewayHTTP:
         miss_passages = [passages[i] for i in miss_indices]
 
         if miss_passages:
-            await self._evict_for(canonical)
-            acquired = False
-            try:
-                await self._coordinator.acquire.remote("embed")
-                acquired = True
-                scores: list[float] = await self._reranker.remote(query, miss_passages)
-                self._mark_loaded(canonical)
-            except Exception:
-                self._mark_unloaded(canonical)
-                raise
-            finally:
-                if acquired:
-                    await self._coordinator.release.remote("embed")
-
+            scores: list[float] = await self._sched.submit(
+                Job(
+                    kind="rerank",
+                    canonical=canonical,
+                    items=miss_passages,
+                    payload={"query": query},
+                )
+            )
             store = [
                 (keys[miss_indices[j]], model, [scores[j]])
                 for j in range(len(miss_passages))
@@ -276,16 +292,13 @@ class GatewayHTTP:
         return JSONResponse({"results": results, "model": model})
 
     async def _chat(self, body: dict) -> JSONResponse:
-        # Ollama needs the full card — evict everything tracked.
-        await self._evict_all()
-        acquired = False
-        try:
-            await self._coordinator.acquire.remote("llm")
-            acquired = True
-            result = await self._llm.remote(body)
-        finally:
-            if acquired:
-                await self._coordinator.release.remote("llm")
+        # LLM_SENTINEL occupies the whole card: the dispatcher evicts every resident
+        # model, serves the LLM alone, then drops the sentinel so the next embed/rerank
+        # admit waits (via the measured gate) for Ollama's VRAM to actually clear.
+        self._assert_single_replica()
+        result = await self._sched.submit(
+            Job(kind="chat", canonical=LLM_SENTINEL, payload=body)
+        )
         return JSONResponse(result)
 
     async def _search(self, body: dict) -> JSONResponse:
@@ -336,6 +349,8 @@ class GatewayHTTP:
         env = os.environ.copy()
         env["RAG_GPU_GATEWAY_URL"] = "http://localhost:8765"
         env.pop("GRAPH_RAG_GATEWAY_SEARCH", None)   # prevent recursion
+        env.pop("REPO_RAG_GATEWAY_SEARCH", None)    # prevent recursion
+        env.pop("RAG_LIT_GATEWAY_SEARCH", None)     # prevent recursion
         env.pop("RAG_LOCAL_EMBED_DEVICE", None)      # never load models directly
 
         log.info("search: tool=%s profile=%s top=%d query=%r flags=%s",
@@ -391,20 +406,30 @@ class GatewayHTTP:
             pass
 
         cache_count = await self._cache.count.remote()
+        snap = self._sched.metrics_snapshot()
+        # 4B RAM-cache health (validate+fallback may have disabled it) — best-effort.
+        ram_cache_4b = "unknown"
+        try:
+            ram_cache_4b = await self._embed4b.ram_cache_status.remote()
+        except Exception:  # noqa: BLE001
+            pass
         return JSONResponse({
             "status": "ok",
+            "sched_mode": self._sched_mode,
             "gpus": gpu_info,
             "cache_entries": cache_count,
-            # expose tracked model state for observability
-            "loaded_models": {
-                m: round(time.monotonic() - ts, 1)
-                for m, ts in self._loaded_at.items()
-            },
+            # Scheduler-tracked model state for observability.
+            "loaded_models": snap["resident"].get("cuda:0", []),
+            "parked_models": snap["parked"],
+            "queue_depth": snap["queue_depth"],
+            "dispatcher_alive": snap["dispatcher_alive"],
+            "scheduler_counters": snap["counters"],
+            "ram_cache_4b": ram_cache_4b,
         })
 
 
 # serve.bind() wiring — exported as `app` for `serve run config/serve_config.yaml`
-# VRAMCoordinator and SQLiteCache are @ray.remote actors created inside GatewayHTTP.__init__.
+# SQLiteCache is a detached @ray.remote actor created inside GatewayHTTP.__init__.
 embed4b = DenseEmbed4B.bind()
 embed06b = DenseEmbed06B.bind()
 reranker = RerankerDeployment.bind()

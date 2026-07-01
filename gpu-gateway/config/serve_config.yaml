@@ -25,12 +25,13 @@ applications:
 
       - name: DenseEmbed4B
         num_replicas: 1
-        request_timeout_s: 30
+        request_timeout_s: 60    # cold load + 50-item batch can reach 35-40s; was 30 (too tight)
         ray_actor_options:
           num_cpus: 1
           num_gpus: 0.46    # 3000MB / 6500MB usable
         user_config:
           model: "Qwen/Qwen3-Embedding-4B"
+          keep_on_cpu_after_evict: false   # opt-in RAM cache; 4B uses validate+fallback (bnb int8)
 
       - name: DenseEmbed06B
         num_replicas: 1
@@ -40,6 +41,7 @@ applications:
           num_gpus: 0.12    # 800MB / 6500MB usable
         user_config:
           model: "Qwen/Qwen3-Embedding-0.6B"
+          keep_on_cpu_after_evict: false   # opt-in RAM cache (~1.2 GB RAM when parked)
 
       - name: RerankerDeployment
         num_replicas: 1
@@ -49,6 +51,7 @@ applications:
           num_gpus: 0.15    # 1000MB / 6500MB usable
         user_config:
           model: "BAAI/bge-reranker-v2-m3"
+          keep_on_cpu_after_evict: false   # opt-in RAM cache (~1.1 GB RAM when parked)
 
       - name: LLMDeployment
         num_replicas: 1
@@ -59,6 +62,7 @@ applications:
         user_config:
           ollama_url: "http://127.0.0.1:11434"
 
-      # VRAMCoordinator and SQLiteCache are @ray.remote actors (not @serve.deployment),
-      # so they are NOT listed here. Ray Serve creates them automatically via serve.bind()
-      # in main.py when the app is imported.
+      # SQLiteCache is a @ray.remote actor (not a @serve.deployment), so it is NOT
+      # listed here — GatewayHTTP creates it lazily on first use. VRAM is serialized
+      # in-process by GatewayHTTP's Scheduler (scheduler.py), which requires this
+      # deployment to stay at num_replicas: 1 (it fails closed otherwise).
