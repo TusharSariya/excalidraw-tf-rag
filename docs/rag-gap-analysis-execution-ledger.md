@@ -99,4 +99,23 @@ Ported RLR's direct-HTTP opencode judge into GLR `eval/judge.py` and extended it
 ### Reembed status (background): 4B index build in progress
 `ingest reembed 0.6B→4B` running (copied BM25, embedding 41,083 chunks at batch 256 via gateway). ~18/161 batches at ~17 s/batch → ETA ~40 min. This unblocks the Phase 1 4B-vs-0.6B re-measurement on the **existing catalog-nl qrels** (no judge needed for that comparison).
 
+## 2026-07-01 ~05:05 NDT — Phase 1 experiment staged + two navigation findings
+
+**Confirmed the NL-track eval methodology** (for the 4B-vs-0.6B money experiment): the `catalog-nl` track = 49 curated + **126 synth** cases (175 total), so a correct run needs `GRAPH_RAG_INCLUDE_SYNTH=1` (loads the synth query strings) + `--qrels data/eval/qrels/catalog-nl/qrels.json` (overlays the de-biased judgments) + `--strategy dense` (where the prior +0.087 was measured). `benchmark --qrels PATH` exists. The desktop `gpu_embedding_bakeoff.sh` is NOT usable — it reembeds/evals on the GPU box's *stale pre-submodule checkout*; I run locally against the Mac index instead (embedding still routes through the gateway).
+
+**Finding — graphify does not cover the RAG tools.** The `graphify-out/graph.json` (which the hook points at) was built over the **excalidraw TypeScript monorepo**, not `tools/*` Python. A query for citation/Leiden code returned only terraform-layout TS nodes. So graphify is not a navigation aid for this work; direct reads + subagents are. (Noted so the hook's grep-gating doesn't mislead future sessions.)
+
+**Reembed** at 33/161 batches, 4B index 791 MB and growing; ETA ~30 min.
+
+## 2026-07-01 ~05:20 NDT — Phase 3A GO: citation-keying repair started (subagent brief → execution)
+
+A code+DB subagent brief settled the go/no-go: **the keying gap is an incomplete enrich run, not a broken method.** Key facts (live DB):
+- `papers` total 53,136 (mostly external reference/citer nodes by design); **corpus-keyed = 1,334.** The oft-quoted "2.5%" uses the 53k denominator — the honest number is **~27% of the 4,907 DOI-bearing corpus items keyed**, ceiling **~81% of corpus** (4,907 distinct DOIs / 6,071 items). No arXiv column exists; arXiv would add only 7. 942 items are title-only (optional low-precision tail).
+- Single write path `harvest/cite_enrich.py:enrich_citations` keys only DOI-present items that OpenAlex resolves; the run simply never finished → **3,580 unkeyed corpus DOIs**, of which **503 are keyable with ZERO API calls** (a `papers` row already exists for that DOI) and **3,077 need free OpenAlex singleton lookups** (~1 min at the configured RPS 100 / 16 workers; `OPENALEX_API_KEY` + rotation pool present).
+- `paper_aliases` + `cite_provenance` are empty (predate the alias code). A query-time bridge `citation_rank.py:_bridge_doc_to_oa_by_doi` already lifts coverage ~22%→~34% in memory; **Phase 3A persists that + adds the new fetches.**
+- **3B Leiden scaffolding:** `citation_rank.py` already has `CitationGraph`, `bibliographic_coupling`, `co_citation`, `personalized_pagerank` (pure-Python). **No community detection exists**; `igraph`/`leidenalg`/`networkx` are NOT deps — 3B must add one.
+
+**Decision D8 — execute 3A via the tested `cite enrich` command, not a hand-rolled script** (collab principle: reuse tested code). Staged: `cite enrich --no-incoming` first (fast OpenAlex keying + outgoing edges) → verify keying jump → then the slower S2 `--incoming` pass to revive co-citation. DB backed up (`citations.sqlite.bak-2026-07-01`) first. Runs independently of the gateway/reembed.
+**Next experiment enabled:** once keyed to ~81%, A/B the *existing* `hybrid_citation` strategy vs `hybrid` on the NL qrels — a clean test of whether citation ranking was coverage-limited (prior NULLs were at ~22–34% keying). Only build 3B Leiden if that shows signal or as an explicit soft-additive probe.
+
 <!-- New entries appended below, newest-last, always timestamped. -->
