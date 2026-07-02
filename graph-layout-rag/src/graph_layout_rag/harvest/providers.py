@@ -217,10 +217,13 @@ class OpenAlexPolicy(ProviderPolicy):
         super().__init__("openalex", **kwargs)
         self._daily_budget = _env_float("GRAPH_RAG_OPENALEX_FREE_BUDGET_USD", 1.0)
         self.metrics.budget_remaining_usd = self._daily_budget
-        # Multi-key rotation: keys are tried in order; a key is retired for the
-        # life of the process once OpenAlex reports its budget exhausted (a 429
-        # with a multi-hour Retry-After) or it trips our client-side spend cap.
+        # Multi-key rotation: requests round-robin across the configured keys
+        # (spreading per-key rate/budget headroom), and a key is retired for
+        # the life of the process once OpenAlex reports its budget exhausted
+        # (a 429 with a multi-hour Retry-After) or it trips our client-side
+        # spend cap.
         self._depleted_keys: set[str] = set()
+        self._key_rr = 0
         self._key_lock = threading.Lock()
 
     @staticmethod
@@ -242,11 +245,14 @@ class OpenAlexPolicy(ProviderPolicy):
         return keys
 
     def _current_key(self) -> str | None:
+        """Next live key, round-robin across all non-depleted keys."""
         with self._key_lock:
-            for k in self._all_keys():
-                if k not in self._depleted_keys:
-                    return k
-            return None
+            live = [k for k in self._all_keys() if k not in self._depleted_keys]
+            if not live:
+                return None
+            key = live[self._key_rr % len(live)]
+            self._key_rr += 1
+            return key
 
     def _mark_depleted(self, key: str) -> tuple[bool, bool]:
         """Retire ``key``. Returns ``(newly_retired, more_keys_remain)``."""

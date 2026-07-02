@@ -64,6 +64,17 @@ def test_openalex_rotates_to_next_key_on_budget_429(monkeypatch):
     assert tried == ["KEY_B"]
 
 
+def test_openalex_round_robins_across_healthy_keys(monkeypatch):
+    monkeypatch.setenv("OPENALEX_API_KEYS", "KEY_A,KEY_B")
+    monkeypatch.delenv("OPENALEX_API_KEY", raising=False)
+    ok = RequestOutcome(OutcomeKind.SUCCESS, data={"ok": True}, status_code=200)
+    policy, tried = _key_recording_policy({"KEY_A": ok, "KEY_B": ok})
+    for _ in range(4):
+        policy.request_openalex("GET", "https://api.openalex.org/works", operation="search")
+    # healthy keys alternate so rate/budget headroom is spread evenly
+    assert tried == ["KEY_A", "KEY_B", "KEY_A", "KEY_B"]
+
+
 def test_openalex_returns_last_outcome_when_all_keys_depleted(monkeypatch):
     monkeypatch.setenv("OPENALEX_API_KEYS", "KEY_A,KEY_B")
     monkeypatch.delenv("OPENALEX_API_KEY", raising=False)
