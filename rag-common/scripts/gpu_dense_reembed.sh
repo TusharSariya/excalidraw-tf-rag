@@ -17,7 +17,7 @@ if [[ -f .env ]]; then
 fi
 
 SSH_HOST="${RAG_GPU_SSH:-${GRAPH_RAG_GPU_SSH:-desktop}}"
-REMOTE_ROOT="${RAG_GPU_REMOTE_ROOT:-${GRAPH_RAG_GPU_REMOTE_ROOT:-excalidraw-tf}}"
+REMOTE_ROOT="${RAG_GPU_REMOTE_ROOT:-${GRAPH_RAG_GPU_REMOTE_ROOT:-excalidraw-tf-rag}}"
 TOOL_REMOTE_NAME="$(basename "${RAG_GPU_TOOL}")"
 
 case "${RAG_GPU_TOOL}" in
@@ -61,7 +61,7 @@ REEMBED_CMD="$7"
 SSH_HOST="$8"
 
 export PATH="${HOME}/.local/bin:${PATH}"
-cd "${HOME}/${REMOTE_ROOT}/tools/${TOOL_REMOTE_NAME}"
+cd "${HOME}/${REMOTE_ROOT}/${TOOL_REMOTE_NAME}"
 chmod +x scripts/gpu_*.sh 2>/dev/null || true
 bash ../rag-common/scripts/gpu_remote_bootstrap.sh
 source ../rag-common/scripts/gpu_env.sh
@@ -94,7 +94,7 @@ set -euo pipefail
 : "${REEMBED_CMD:?}"
 
 export PATH="${HOME}/.local/bin:${PATH}"
-cd "${HOME}/${REMOTE_ROOT}/tools/${TOOL_REMOTE_NAME}"
+cd "${HOME}/${REMOTE_ROOT}/${TOOL_REMOTE_NAME}"
 ulimit -n 65536
 source ../rag-common/scripts/gpu_env.sh
 export RAG_LOCAL_EMBED_DEVICE=cuda
@@ -139,7 +139,7 @@ tmux new-session -d -s dense-reembed \
 echo "Started tmux dense-reembed. Attach: ssh ${SSH_HOST} tmux attach -t dense-reembed"
 REMOTE
 
-if ssh "${SSH_HOST}" "grep -q DONE ~/${REMOTE_ROOT}/tools/${TOOL_REMOTE_NAME}/data/dense-reembed.sentinel 2>/dev/null"; then
+if ssh "${SSH_HOST}" "grep -q DONE ~/${REMOTE_ROOT}/${TOOL_REMOTE_NAME}/data/dense-reembed.sentinel 2>/dev/null"; then
   "${RAG_COMMON_SCRIPTS}/gpu_sync_from_remote.sh"
   echo "Re-embed complete. Index synced to Mac."
 else

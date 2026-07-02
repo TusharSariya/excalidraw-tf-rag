@@ -5,7 +5,7 @@
 set -euo pipefail
 
 export PATH="$HOME/.local/bin:$PATH"
-ROOT="$HOME/excalidraw-tf/tools/graph-layout-rag"
+ROOT="$HOME/excalidraw-tf-rag/graph-layout-rag"
 export GRAPH_RAG_TRAIN_DATA_DIR="$ROOT/data/training/gate1"
 export GRAPH_RAG_TRAIN_NAMESPACE="gate1-v1:"
 export GRAPH_RAG_TRAIN_CORPUS_PROFILE="cuda-qwen4b-1024"

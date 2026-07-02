@@ -17,7 +17,7 @@ if [[ -f .env ]]; then
 fi
 
 SSH_HOST="${RAG_GPU_SSH:-${GRAPH_RAG_GPU_SSH:-desktop}}"
-REMOTE_ROOT="${RAG_GPU_REMOTE_ROOT:-${GRAPH_RAG_GPU_REMOTE_ROOT:-excalidraw-tf}}"
+REMOTE_ROOT="${RAG_GPU_REMOTE_ROOT:-${GRAPH_RAG_GPU_REMOTE_ROOT:-excalidraw-tf-rag}}"
 REMOTE="${SSH_HOST}:~/${REMOTE_ROOT}"
 TARGET_PROFILE="${RAG_GPU_TARGET_PROFILE:-${GRAPH_RAG_TARGET_PROFILE:-cuda-qwen0.6b-1024}}"
 TOOL_REMOTE_NAME="$(basename "${RAG_GPU_TOOL}")"
@@ -27,41 +27,41 @@ mkdir -p "data/indexes/${TARGET_PROFILE}" data/eval/runs 2>/dev/null || mkdir -p
 echo "Syncing from ${REMOTE} (tool=${TOOL_REMOTE_NAME}, target=${TARGET_PROFILE})"
 
 rsync -avz --progress \
-  "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/indexes/${TARGET_PROFILE}/" \
+  "${REMOTE}/${TOOL_REMOTE_NAME}/data/indexes/${TARGET_PROFILE}/" \
   "data/indexes/${TARGET_PROFILE}/"
 
 rsync -avz --progress \
-  "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/eval/runs/" \
+  "${REMOTE}/${TOOL_REMOTE_NAME}/data/eval/runs/" \
   data/eval/runs/ 2>/dev/null || true
 
 rsync -avz --progress \
-  "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/*.log" \
-  "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/*.sentinel" \
-  "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/*.exitcode" \
-  "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/*.crashes" \
+  "${REMOTE}/${TOOL_REMOTE_NAME}/data/*.log" \
+  "${REMOTE}/${TOOL_REMOTE_NAME}/data/*.sentinel" \
+  "${REMOTE}/${TOOL_REMOTE_NAME}/data/*.exitcode" \
+  "${REMOTE}/${TOOL_REMOTE_NAME}/data/*.crashes" \
   data/ 2>/dev/null || true
 
 rsync -avz --progress \
-  "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/eval/*.log" \
-  "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/eval/*.sentinel" \
-  "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/eval/*.exitcode" \
-  "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/eval/*.crashes" \
+  "${REMOTE}/${TOOL_REMOTE_NAME}/data/eval/*.log" \
+  "${REMOTE}/${TOOL_REMOTE_NAME}/data/eval/*.sentinel" \
+  "${REMOTE}/${TOOL_REMOTE_NAME}/data/eval/*.exitcode" \
+  "${REMOTE}/${TOOL_REMOTE_NAME}/data/eval/*.crashes" \
   data/eval/ 2>/dev/null || true
 
 rsync -avz --progress \
-  "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/eval/retrieval_indexes/" \
+  "${REMOTE}/${TOOL_REMOTE_NAME}/data/eval/retrieval_indexes/" \
   data/eval/retrieval_indexes/ 2>/dev/null || true
 
 if [[ "${RAG_GPU_SYNC_CACHES_BACK:-0}" == "1" ]]; then
   mkdir -p data/extract_cache data/embed_cache data/raptor_cache
   rsync -avz --progress \
-    "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/extract_cache/" \
+    "${REMOTE}/${TOOL_REMOTE_NAME}/data/extract_cache/" \
     data/extract_cache/ 2>/dev/null || true
   rsync -avz --progress \
-    "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/embed_cache/" \
+    "${REMOTE}/${TOOL_REMOTE_NAME}/data/embed_cache/" \
     data/embed_cache/ 2>/dev/null || true
   rsync -avz --progress \
-    "${REMOTE}/tools/${TOOL_REMOTE_NAME}/data/raptor_cache/" \
+    "${REMOTE}/${TOOL_REMOTE_NAME}/data/raptor_cache/" \
     data/raptor_cache/ 2>/dev/null || true
 fi
 

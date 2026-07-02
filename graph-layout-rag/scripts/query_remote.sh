@@ -34,7 +34,7 @@ fi
 
 # Resolve with precedence: caller env > .env > default.
 SSH_HOST="${_PRE_SSH:-${RAG_GPU_SSH:-${GRAPH_RAG_GPU_SSH:-desktop}}}"
-REMOTE_ROOT="${_PRE_ROOT:-${RAG_GPU_REMOTE_ROOT:-${GRAPH_RAG_GPU_REMOTE_ROOT:-excalidraw-tf}}}"
+REMOTE_ROOT="${_PRE_ROOT:-${RAG_GPU_REMOTE_ROOT:-${GRAPH_RAG_GPU_REMOTE_ROOT:-excalidraw-tf-rag}}}"
 
 # NL/4B config — single-sourced here (documented in .env.example).
 PROFILE="${_PRE_PROFILE:-${GRAPH_RAG_NL_PROFILE:-cuda-qwen4b-1024}}"
@@ -65,7 +65,7 @@ fi
 # half-synced, or mid-experiment desktop before we run the expensive query.
 # shellcheck disable=SC2029  # intentional: ${REMOTE_ROOT} expands locally; $HOME/$PATH stay remote
 INDEX_JSON="$(ssh "${SSH_HOST}" \
-  "cd ~/${REMOTE_ROOT}/tools/graph-layout-rag && export PATH=\"\$HOME/.local/bin:\$PATH\" && uv run graph-layout-rag embed indexes --json 2>/dev/null")" || {
+  "cd ~/${REMOTE_ROOT}/graph-layout-rag && export PATH=\"\$HOME/.local/bin:\$PATH\" && uv run graph-layout-rag embed indexes --json 2>/dev/null")" || {
   echo "ERROR: could not read remote index metadata on '${SSH_HOST}'." >&2
   exit 4
 }
@@ -135,7 +135,7 @@ ssh "${SSH_HOST}" "bash -s -- ${REMOTE_ARGS}" <<'REMOTE'
 set -euo pipefail
 ROOT="$1"; PROFILE="$2"; SW="$3"; shift 3
 export PATH="$HOME/.local/bin:$PATH"
-cd "$HOME/$ROOT/tools/graph-layout-rag"
+cd "$HOME/$ROOT/graph-layout-rag"
 # shellcheck disable=SC1091
 source ../rag-common/scripts/gpu_env.sh 2>/dev/null || true
 export RAG_LOCAL_EMBED_DEVICE=cuda

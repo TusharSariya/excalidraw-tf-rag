@@ -7,7 +7,7 @@ set -uo pipefail
 export PATH="$HOME/.local/bin:$PATH"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
-ROOT="$HOME/excalidraw-tf/tools/graph-layout-rag"
+ROOT="$HOME/excalidraw-tf-rag/graph-layout-rag"
 D="$ROOT/data/training/gate3"
 PROFILE="cuda-qwen4b-1024"
 CKPT="$D/checkpoints/splade-gd-v2"

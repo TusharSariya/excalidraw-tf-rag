@@ -33,7 +33,7 @@ if [[ -f .env ]]; then
 fi
 
 SSH_HOST="${RAG_GPU_SSH:-${GRAPH_RAG_GPU_SSH:-desktop}}"
-REMOTE_ROOT="${RAG_GPU_REMOTE_ROOT:-${GRAPH_RAG_GPU_REMOTE_ROOT:-excalidraw-tf}}"
+REMOTE_ROOT="${RAG_GPU_REMOTE_ROOT:-${GRAPH_RAG_GPU_REMOTE_ROOT:-excalidraw-tf-rag}}"
 SOURCE_PROFILE="cuda-qwen0.6b-1024"
 
 # ── Phase-0 completion gate ───────────────────────────────────────────────────
@@ -43,7 +43,7 @@ ssh "${SSH_HOST}" bash -s -- "${REMOTE_ROOT}" "${SOURCE_PROFILE}" <<'GATE'
 set -euo pipefail
 REMOTE_ROOT="$1"
 SOURCE_PROFILE="$2"
-TOOL_DIR="${HOME}/${REMOTE_ROOT}/tools/graph-layout-rag"
+TOOL_DIR="${HOME}/${REMOTE_ROOT}/graph-layout-rag"
 INDEX_DIR="${TOOL_DIR}/data/indexes/${SOURCE_PROFILE}"
 
 # a) Check chunk count > 0 in LanceDB table
