@@ -21,11 +21,6 @@ REMOTE_ROOT="${RAG_GPU_REMOTE_ROOT:-${GRAPH_RAG_GPU_REMOTE_ROOT:-excalidraw-tf-r
 TOOL_REMOTE_NAME="$(basename "${RAG_GPU_TOOL}")"
 
 case "${RAG_GPU_TOOL}" in
-  tools/repo-rag)
-    SOURCE_PROFILE="${RAG_GPU_SOURCE_PROFILE:-gemini-2}"
-    REEMBED_CMD="${RAG_REEMBED_CMD:-repo-rag reembed}"
-    ENV_PREFIX="${RAG_REEMBED_ENV_PREFIX:-REPO_RAG_}"
-    ;;
   tools/rag-literature-rag)
     SOURCE_PROFILE="${RAG_GPU_SOURCE_PROFILE:-gemini-2-structure-v1}"
     REEMBED_CMD="${RAG_REEMBED_CMD:-rag-literature-rag ingest reembed}"

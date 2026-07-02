@@ -3,8 +3,6 @@ from rag_common.embed import (
     embed_query,
     embed_texts,
     finalize_embed_config,
-    probe_gemini,
-    probe_openai,
     resolve_workers,
 )
 from rag_common.profiles import get_profile, list_profile_names, load_profiles
@@ -21,8 +19,6 @@ __all__ = [
     "list_profile_names",
     "load_profiles",
     "local_config",
-    "probe_gemini",
-    "probe_openai",
     "resolve_embed_config",
     "resolve_workers",
 ]

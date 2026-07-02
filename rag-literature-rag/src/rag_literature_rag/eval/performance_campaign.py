@@ -381,7 +381,6 @@ def performance_campaign_cmd(
                 "after_audit": run_fallback_audit(
                     log_path=root / "repair-ingest.log",
                     top=0,
-                    include_gemini=False,
                     reproduce=False,
                 )
                 if repair_ids

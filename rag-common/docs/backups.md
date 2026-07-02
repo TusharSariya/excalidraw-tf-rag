@@ -23,12 +23,12 @@ yarn rag:backup --only mlx
 
 # Verify the backup is complete + current (a pre-nuke gate; exits non-zero on any gap):
 yarn rag:verify
-yarn rag:verify --drill repo-rag/indexes/mlx-qwen4b   # prove one artifact round-trips
+yarn rag:verify --drill rag-literature-rag/indexes/mlx-qwen4b   # prove one artifact round-trips
 
 # Restore latest run of an entire tool onto an empty machine:
-yarn rag:restore repo-rag
+yarn rag:restore rag-literature-rag
 yarn rag:restore graph-layout-rag cuda-qwen0.6b-1024  # one artifact
-yarn rag:restore repo-rag --as-of 20260630T0400Z      # point-in-time
+yarn rag:restore rag-literature-rag --as-of 20260630T0400Z      # point-in-time
 ```
 
 `--dry-run` prints the plan and touches nothing. `yarn rag:{backup,restore,verify}` are

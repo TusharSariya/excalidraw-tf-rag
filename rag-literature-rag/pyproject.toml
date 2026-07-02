@@ -9,13 +9,10 @@ dependencies = [
   "click>=8.1.0",
   "httpx>=0.27.0",
   "lancedb>=0.15.0",
-  "openai>=1.40.0",
   "pydantic>=2.7.0",
   "pymupdf>=1.24.0",
-  "rag-common[gemini]",
-  "rag-common[mlx]; sys_platform == 'darwin'",
+  "rag-common",
   "tantivy>=0.22.0",
-  "tiktoken>=0.7.0",
 ]
 
 [tool.uv.sources]
@@ -23,7 +20,6 @@ rag-common = { path = "../rag-common", editable = true }
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0"]
-mlx = ["rag-common[mlx]; sys_platform == 'darwin'"]
 docling = ["docling>=2.0.0"]
 retrieval-experiments = ["qdrant-client[fastembed]>=1.14.0"]
 raptor = ["scikit-learn>=1.4.0", "numpy>=1.26.0", "pylance>=7.0.0"]

@@ -8,13 +8,11 @@ Requires Python 3.11+ and [uv](https://github.com/astral-sh/uv).
 
 ```bash
 cd tools/graph-layout-rag
-uv sync --extra mlx   # add --extra mlx on Apple Silicon for local MLX embed profiles; omit on Linux/CUDA
-cp .env.example .env   # or reuse tools/repo-rag/.env — set OPENAI_API_KEY
+uv sync
+cp .env.example .env
 ```
 
-`mlx` is an opt-in extra, not a base dependency — it's Apple-Silicon-only and breaks the Linux/CUDA desktop venv if installed there (see [docs/quality-campaign-2026-06-23.md](docs/quality-campaign-2026-06-23.md)).
-
-Embeddings use shared [`tools/rag-common`](../rag-common) with **named profiles** (`RAG_EMBED_PROFILE` or `--embed-profile`). Legacy `RAG_EMBED_BACKEND=auto|openai|local|gemini` still works as the implicit `default` profile.
+Embeddings use shared [`tools/rag-common`](../rag-common) with **named profiles** (`RAG_EMBED_PROFILE` or `--embed-profile`), all on the `local` backend (CUDA/bitsandbytes or plain CPU/MPS — no cloud API keys needed). Legacy `RAG_EMBED_BACKEND=auto|local` still works as the implicit `default` profile.
 
 ```bash
 uv run graph-layout-rag embed profiles   # list built-in profiles
@@ -22,40 +20,29 @@ uv run graph-layout-rag embed profiles   # list built-in profiles
 
 | Profile | Backend | Model | Dims | When |
 | --- | --- | --- | --- | --- |
-| `openai-large` | openai | `text-embedding-3-large` | 1024 | Fast cloud ingest (~$5–7 full corpus) |
-| `openai-small` | openai | `text-embedding-3-small` | 1024 | Cheaper cloud |
-| `gemini` | gemini | `gemini-embedding-001` | 768 | `GEMINI_API_KEY` or `GOOGLE_API_KEY` |
-| `gemini-2` | gemini | `gemini-embedding-2-preview` | 3072 | Preserved fixed-window baseline |
-| `gemini-2-structure-v1` | gemini | `gemini-embedding-2-preview` | 3072 | Secondary cloud build; source for GPU reembed |
-| `cuda-qwen0.6b-1024` | local | `Qwen/Qwen3-Embedding-0.6B` (CUDA FP16) | 1024 | **Production query profile** (GPU reembed from gemini secondary) |
+| `cuda-qwen0.6b-1024` | local | `Qwen/Qwen3-Embedding-0.6B` (CUDA FP16) | 1024 | **Production query profile** |
 | `cuda-qwen0.6b-section-v1` | local | `Qwen/Qwen3-Embedding-0.6B` (CUDA 4-bit) | 1024 | Chunking campaign: enrich indexed text with document/section metadata |
 | `cuda-qwen0.6b-small2big-v1` | local | `Qwen/Qwen3-Embedding-0.6B` (CUDA 4-bit) | 1024 | Chunking campaign: smaller child chunks (~350 target / 550 max) |
 | `cuda-qwen0.6b-contextual-v1` | local | `Qwen/Qwen3-Embedding-0.6B` (CUDA 4-bit) | 1024 | Contextual Retrieval build with local LLM-generated context |
 | `cuda-qwen4b-1024` | local | `Qwen/Qwen3-Embedding-4B` (CUDA 4-bit) | 1024 | Quality campaign probe; skipped on RTX 3060 Ti 8 GB after OOM |
 | `cuda-qwen4b-2560` | local | `Qwen/Qwen3-Embedding-4B` (CUDA 4-bit) | 2560 | Quality campaign high-dimensional probe; skipped on current GPU |
-| `mlx-qwen4b` | local | `Qwen/Qwen3-Embedding-4B` (MLX 4-bit) | 1024 | Free Apple Silicon ingest |
-| `mlx-qwen0.6b` | local | `Qwen/Qwen3-Embedding-0.6B` (MLX 4-bit) | 1024 | Faster local |
 | `local-fp16-qwen4b` | local | Qwen3-4B FP16 (ST/MPS) | 1024 | Heavier RAM |
 
-API key and embed env load from `tools/graph-layout-rag/.env`, sibling `tools/repo-rag/.env`, or `.env.example`. See **Embedding & ingest** below.
+Embed env loads from `tools/graph-layout-rag/.env`, or `.env.example`. See **Embedding & ingest** below.
 
 ## Local-first embedding
 
-Production query profile: **`cuda-qwen0.6b-1024`** (Qwen3-Embedding-0.6B @ 1024 dims on RTX 3060 Ti, $0 API). Build the **secondary** `gemini-2-structure-v1` index once on Mac/Vertex, then GPU re-embed:
+Production query profile: **`cuda-qwen0.6b-1024`** (Qwen3-Embedding-0.6B @ 1024 dims on RTX 3060 Ti, $0 API, no cloud dependency):
 
 ```bash
-# Mac: build secondary (if missing)
-RAG_EMBED_PROFILE=gemini-2-structure-v1 uv run graph-layout-rag ingest --force --rebuild
-
-# Mac → GPU box → Mac (shared scripts in tools/rag-common/scripts/)
-RAG_GPU_TOOL=tools/graph-layout-rag \
-  tools/graph-layout-rag/scripts/gpu_dense_reembed.sh
+# GPU box: build/rebuild the index
+RAG_EMBED_PROFILE=cuda-qwen0.6b-1024 uv run graph-layout-rag ingest --force --rebuild
 
 # Query (default from .env)
 yarn graph-rag:query "layered graph drawing" --top 8 --json
 ```
 
-Benchmark (catalog qrels, hybrid nDCG@10): gemini-2-structure-v1 **0.768** vs cuda-qwen0.6b-1024 **0.718**. Local Ollama HyDE (2026-06-17) did not improve cuda hybrid — see [local LLM benchmark](../../docs/graph-layout-rag-local-llm-benchmark-2026.md).
+Local Ollama HyDE (2026-06-17) did not improve cuda hybrid — see [local LLM benchmark](../../docs/graph-layout-rag-local-llm-benchmark-2026.md).
 
 ## Pipeline
 

@@ -1,6 +1,6 @@
 # Contributing
 
-This repo is a set of five uv-managed Python packages (`rag-common`, `repo-rag`,
+This repo is a set of four uv-managed Python packages (`rag-common`,
 `graph-layout-rag`, `rag-literature-rag`, `gpu-gateway`). Lint, format, and tests
 are enforced by CI (`.github/workflows/ci.yml`) and a local pre-push hook.
 

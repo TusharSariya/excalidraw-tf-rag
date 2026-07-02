@@ -1,13 +1,13 @@
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from rag_common import local_llm
 
 
-def test_llm_backend_defaults_to_gemini():
+def test_llm_backend_defaults_to_ollama():
     with patch.dict("os.environ", {}, clear=True):
-        assert local_llm.llm_backend() == "gemini"
+        assert local_llm.llm_backend() == "ollama"
 
 
 def test_llm_backend_ollama():
@@ -73,21 +73,3 @@ def test_generate_text_ollama_empty_raises():
         with patch("urllib.request.urlopen", return_value=_FakeResponse()):
             with pytest.raises(RuntimeError, match="Empty Ollama"):
                 local_llm.generate_text("prompt")
-
-
-def test_generate_text_gemini_delegates():
-    fake_client = MagicMock()
-    fake_response = MagicMock()
-    fake_response.text = "gemini output"
-    fake_client.models.generate_content.return_value = fake_response
-
-    with patch.dict(
-        "os.environ",
-        {"RAG_LLM_BACKEND": "gemini", "GRAPH_RAG_EVAL_LLM_MODEL": "gemini-2.5-flash"},
-        clear=True,
-    ):
-        with patch("rag_common.gemini_embed._client", return_value=fake_client):
-            with patch("rag_common.gemini_embed.llm_location", return_value="global"):
-                text = local_llm.generate_text("prompt")
-    assert text == "gemini output"
-    fake_client.models.generate_content.assert_called_once()

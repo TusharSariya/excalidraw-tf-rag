@@ -11,8 +11,8 @@ PaperQA2 / Search-o1 style loop, built on the existing two query paths as tools:
 
 Returns formatted, doc-level results (same shape as ``search``) so it can be both
 benchmarked on the gold set and used at the CLI. LLM model is pinned via
-``GRAPH_RAG_AGENT_LLM_MODEL`` (default 3.1-pro-preview in .env) and runs on the
-``RAG_LLM_LOCATION`` endpoint.
+``GRAPH_RAG_AGENT_LLM_MODEL``, falling back to the active ``rag_common.local_llm``
+backend's default model.
 """
 
 from __future__ import annotations
@@ -31,13 +31,11 @@ from graph_layout_rag.query.search import format_results
 
 log = logging.getLogger("graph_layout_rag.query.agent")
 
-DEFAULT_AGENT_MODEL = "gemini-2.5-flash"
-
 
 def agent_model() -> str:
-    return (
-        os.getenv("GRAPH_RAG_AGENT_LLM_MODEL", DEFAULT_AGENT_MODEL).strip() or DEFAULT_AGENT_MODEL
-    )
+    from rag_common.local_llm import active_model
+
+    return os.getenv("GRAPH_RAG_AGENT_LLM_MODEL", "").strip() or active_model()
 
 
 def _llm(prompt: str) -> str:

@@ -165,8 +165,7 @@ tools/graph-layout-rag/
 ### Env file load order (`env.py`)
 
 1. `tools/graph-layout-rag/.env`
-2. `tools/repo-rag/.env` (sibling tool; shared API keys)
-3. `.env.example` (fallback defaults only)
+2. `.env.example` (fallback defaults only)
 
 ---
 

@@ -10,7 +10,7 @@ from graph_layout_rag.pdf_text import PdfExtractResult, extract_pages_from_path
 
 log = logging.getLogger("graph_layout_rag.ingest.extract")
 
-PDF_BACKENDS = ("pymupdf", "docling", "gemini")
+PDF_BACKENDS = ("pymupdf", "docling")
 
 
 def default_pdf_backend() -> str:
@@ -37,10 +37,6 @@ def extract_pdf_result(
         from graph_layout_rag.docling_text import extract_pages_docling
 
         return extract_pages_docling(path, clean=clean)
-    if backend == "gemini":
-        from graph_layout_rag.gemini_vision_text import extract_pages_gemini
-
-        return extract_pages_gemini(path, clean=clean)
     raise ValueError(f"Unknown PDF backend {backend!r}. Choose from: {', '.join(PDF_BACKENDS)}")
 
 

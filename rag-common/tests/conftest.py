@@ -20,11 +20,6 @@ import pytest
 
 # "test_file.py::test_name" (node id minus the tests/ dir).
 _INTEGRATION = {
-    # Network: OpenAI / tiktoken / HF hub reach out (SocketBlocked on a runner).
-    "test_embed.py::test_truncate_disallowed_special_tokens",
-    "test_embed.py::test_embed_openai_success",
-    "test_embed.py::test_embed_openai_fatal_falls_back_to_local",
-    "test_mlx_embed.py::test_local_embed_routes_to_mlx_q4",
     # Needs a live Ollama server.
     "test_local_llm.py::test_generate_text_ollama_parses_openai_response",
 }

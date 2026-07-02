@@ -90,15 +90,15 @@ def _assert_backend_match(state: dict[str, Any], config: EmbedConfig, paths: Any
     """HG1: refuse to query an index whose vectors were built with a different
     concrete embed backend than this host resolves to.
 
-    The model/dims/quant check (`ensure_embed_config_matches`) is blind to the
-    MLX-vs-bitsandbytes split — both record backend "local", quant "4bit" — so a
-    `cuda-*` index benchmarked on a Mac silently embeds MLX-quant queries against
-    bnb-quant docs and produces meaningless scores that pass validation. This was
-    the defect that corrupted Stage A. Fail closed.
+    The model/dims/quant check (`ensure_embed_config_matches`) is blind to the plain-
+    vs-bitsandbytes split — both record backend "local", quant "4bit" — so a `cuda-*`
+    index benchmarked on a non-CUDA host silently scores queries against a mismatched
+    quant stack and produces meaningless scores that pass validation. This was the
+    defect that corrupted Stage A. Fail closed.
 
     Legacy indexes built before this guard carry no `resolved_embed_backend`; we warn
-    rather than hard-fail (cannot reconstruct MLX-vs-bnb from state alone) and rely on
-    backfilling the tag for indexes that matter.
+    rather than hard-fail (cannot reconstruct the quant stack from state alone) and
+    rely on backfilling the tag for indexes that matter.
     """
     recorded = state.get("resolved_embed_backend")
     host = resolved_embed_backend(config)
@@ -115,7 +115,7 @@ def _assert_backend_match(state: dict[str, Any], config: EmbedConfig, paths: Any
         raise RuntimeError(
             f"HG1 backend mismatch for index {getattr(paths, 'profile', '?')!r}: built "
             f"with embed backend '{recorded}' but this host resolves '{host}'. "
-            f"Quantized local vectors are NOT portable across MLX/bitsandbytes — "
+            f"Quantized local vectors are NOT portable across quant stacks — "
             f"benchmark each rung on the machine that embedded it. Refusing to score "
             f"a silent query/doc quant mismatch."
         )

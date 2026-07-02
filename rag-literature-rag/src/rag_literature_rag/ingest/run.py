@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 import click
-from rag_common.config import local_embed_quant, mlx_q4_model_id, use_mlx_q4_embed
+from rag_common.config import local_embed_quant
 
 from rag_literature_rag.catalog.classify import classify_item
 from rag_literature_rag.ingest import embed_cache, extract_cache
@@ -680,7 +680,7 @@ def _execute_ingest(
         rebuild = True
         force = True
 
-    default_workers = "48" if cfg.backend == "gemini" else ("2" if cfg.backend == "openai" else "4")
+    default_workers = "4"
     workers = resolve_workers(
         int(os.getenv("RAG_LIT_WORKERS", default_workers)),
         prefix="RAG_LIT_",
@@ -712,11 +712,7 @@ def _execute_ingest(
     write_status(run_status, index_paths)
 
     quant = local_embed_quant(cfg)
-    quant_note = ""
-    if cfg.backend == "local" and use_mlx_q4_embed(cfg.model, cfg):
-        quant_note = f" quant=4bit mlx={mlx_q4_model_id(cfg.model)}"
-    elif quant:
-        quant_note = f" quant={quant}"
+    quant_note = f" quant={quant}" if quant else ""
     profile_note = f" profile={cfg.profile}" if cfg.profile else ""
 
     msg = (
@@ -839,10 +835,6 @@ def _execute_ingest(
             "generated": raptor_stats.generated,
             "failures": raptor_stats.failures,
         }
-        if cfg.backend == "gemini":
-            from rag_common.gemini_rate_limit import get_rate_limiter
-
-            run_status["gemini_limiter"] = get_rate_limiter().snapshot()
         should_log = (
             force_log
             or (scanned > 0 and scanned % progress_every == 0)
@@ -895,12 +887,6 @@ def _execute_ingest(
         run_status["current_batch_documents"] = docs_in_batch
         run_status["current_batch_chunks"] = len(batch_chunks)
         run_status["documents_embedding"] = docs_in_batch
-        if (
-            cfg.backend == "gemini"
-            and pipeline_telemetry.documents_queued <= scanned
-            and not pipeline_telemetry.producer_done
-        ):
-            log.warning("Gemini embedding workers may be starved by extraction: queue depth=0")
         report_progress(phase="embedding_and_indexing", force_log=True)
         log.info(
             "batch start documents=%d chunks=%d indexed_documents=%d chunks_written=%d",
@@ -1276,10 +1262,9 @@ def ingest_options(f):
     )(f)
     f = click.option(
         "--pdf-backend",
-        type=click.Choice(["pymupdf", "docling", "gemini"]),
+        type=click.Choice(["pymupdf", "docling"]),
         default=None,
         help="PDF extraction backend (default RAG_LIT_PDF_BACKEND or pymupdf). "
-        "'gemini' makes one vision API call per page (cost). "
         "Changing this requires --force --rebuild.",
     )(f)
     f = click.option(

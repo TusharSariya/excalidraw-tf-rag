@@ -54,7 +54,7 @@ log = logging.getLogger("gpu_gateway.main")
 _TOOLS_ROOT = os.path.normpath(
     os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..")
 )
-_KNOWN_TOOLS = {"graph-layout-rag", "repo-rag", "rag-literature-rag"}
+_KNOWN_TOOLS = {"graph-layout-rag", "rag-literature-rag"}
 
 _VRAM_MB: dict[str, int] = {
     "cuda-qwen4b-1024": 5800,  # Qwen3-4B int8, 1024-dim MRL
@@ -300,7 +300,7 @@ class GatewayHTTP:
         is stripped from the subprocess env to prevent infinite recursion.
 
         Request body:
-            tool    — "graph-layout-rag" | "repo-rag" | "rag-literature-rag"
+            tool    — "graph-layout-rag" | "rag-literature-rag"
             query   — query text (required)
             profile — embed profile (default: cuda-qwen0.6b-1024)
             top     — number of results (default: 8)

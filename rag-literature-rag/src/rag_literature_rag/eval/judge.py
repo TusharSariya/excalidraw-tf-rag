@@ -31,8 +31,6 @@ from rag_literature_rag.paths import DATA_DIR
 
 log = logging.getLogger("rag_literature_rag.eval.judge")
 
-JUDGE_MODEL_ENV = "RAG_LIT_JUDGE_LLM_MODEL"
-DEFAULT_JUDGE_MODEL = "gemini-3.1-pro-preview"
 CACHE_PATH = DATA_DIR / "eval" / "judge_cache.json"
 MAX_ABSTRACT_CHARS = 1500
 MAX_EXCERPT_CHARS = 800
@@ -63,7 +61,11 @@ _RUBRIC = (
 
 
 def judge_model() -> str:
-    return os.getenv(JUDGE_MODEL_ENV, DEFAULT_JUDGE_MODEL).strip() or DEFAULT_JUDGE_MODEL
+    from rag_common.local_llm import llm_backend, ollama_model, opencode_model
+
+    if llm_backend() == "opencode":
+        return opencode_model()
+    return ollama_model()
 
 
 # --- OpenCode Go (Zen) OpenAI-compatible judge backend --------------------
@@ -84,7 +86,7 @@ def _judge_backend(model: str) -> str:
         return override
     if model.startswith(("opencode-go/", "opencode/")):
         return "opencode"
-    return "gemini"
+    return "local"
 
 
 def _opencode_key() -> str:
@@ -221,42 +223,11 @@ def _judge_one(query: str, doc: dict[str, Any], model: str) -> tuple[int, str]:
     if _judge_backend(model) == "opencode":
         return _judge_one_opencode(query, doc, model)
 
-    from rag_common.gemini_embed import (
-        _client,
-        _is_fatal,
-        _is_rate_limit,
-        _parse_retry_after,
-        llm_location,
-    )
+    from rag_common.local_llm import generate_text
 
-    client = _client(location=llm_location())
     prompt = build_judge_prompt(query, doc)
-    config: Any = None
-    try:  # deterministic if the genai types are importable
-        from google.genai import types
-
-        config = types.GenerateContentConfig(temperature=0.0)
-    except Exception:  # noqa: BLE001
-        config = None
-
-    # Retry rate-limit (429) failures so a quota burst during a large judging run
-    # is not cached as a permanent grade-0 — which would silently contaminate qrels.
-    last_exc: Exception | None = None
-    for attempt in range(4):
-        try:
-            if config is not None:
-                response = client.models.generate_content(
-                    model=model, contents=prompt, config=config
-                )
-            else:
-                response = client.models.generate_content(model=model, contents=prompt)
-            return _parse_grade(getattr(response, "text", None) or "")
-        except Exception as exc:  # noqa: BLE001
-            last_exc = exc
-            if _is_fatal(exc) or not _is_rate_limit(exc):
-                raise
-            time.sleep(min(_parse_retry_after(exc) or (2**attempt), 30))
-    raise last_exc if last_exc else RuntimeError("judge failed")
+    text = generate_text(prompt, model=model, temperature=0.0, max_tokens=256)
+    return _parse_grade(text or "")
 
 
 def _judge_workers() -> int:

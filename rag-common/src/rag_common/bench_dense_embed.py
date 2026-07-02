@@ -102,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Benchmark dense local embed throughput")
     parser.add_argument("--profile", required=True)
     parser.add_argument("--lance-dir", required=True, type=Path)
-    parser.add_argument("--env-prefix", default="", help="e.g. GRAPH_RAG_ or REPO_RAG_")
+    parser.add_argument("--env-prefix", default="", help="e.g. GRAPH_RAG_ or RAG_LIT_")
     parser.add_argument("--sample", type=int, default=512)
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--out-dir", type=Path, default=Path("data/eval/runs"))

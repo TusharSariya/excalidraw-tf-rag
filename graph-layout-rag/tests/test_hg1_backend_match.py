@@ -1,10 +1,10 @@
 """HG1 — backend-match preflight assert.
 
-Quantized local vectors are NOT portable across MLX (Apple Silicon) and
-bitsandbytes (CUDA): a profile records backend "local" / quant "4bit" for both, so
-the model/dims/quant check is blind to the split. Benchmarking a `cuda-*` index on a
-Mac silently embeds MLX-quant queries against bnb-quant docs — the defect that
-corrupted Stage A. These tests pin the fail-closed behavior.
+Quantized local vectors are not portable across bitsandbytes (CUDA) and plain
+(CPU/MPS) hosts: a profile records backend "local" / quant "4bit" for both, so
+the model/dims/quant check is blind to the split. Benchmarking a `cuda-*` index on
+a non-CUDA host silently scores queries against a mismatched quant stack — the
+defect that corrupted Stage A. These tests pin the fail-closed behavior.
 """
 
 import warnings
@@ -38,7 +38,7 @@ def test_matched_backend_passes():
 def test_cross_quant_mismatch_raises():
     cfg = _qwen_cfg()
     host = resolved_embed_backend(cfg)
-    other = "cuda-bnb-4bit" if host == "mlx-q4" else "mlx-q4"
+    other = "cuda-bnb-4bit" if host == "local-4bit" else "local-4bit"
     with pytest.raises(RuntimeError, match="HG1 backend mismatch"):
         _assert_backend_match({"resolved_embed_backend": other}, cfg, _Paths())
 
@@ -51,20 +51,7 @@ def test_legacy_index_warns_not_raises():
     assert any(issubclass(w.category, RuntimeWarning) for w in caught)
 
 
-def test_gemini_is_portable():
-    cfg = EmbedConfig(
-        backend="gemini",
-        model="gemini-embedding-2-preview",
-        dimensions=3072,
-        profile="gemini-2-structure-v1",
-        quant=None,
-    )
-    assert resolved_embed_backend(cfg) == "gemini"
-    # Gemini (API, deterministic) is portable across hosts -> matches everywhere.
-    _assert_backend_match({"resolved_embed_backend": "gemini"}, cfg, _Paths())
-
-
 def test_resolved_tag_is_host_specific_for_qwen_4bit():
     # The same config must NOT resolve to a generic "local"; it must pick a concrete
     # quant stack so cross-host scoring can be caught.
-    assert resolved_embed_backend(_qwen_cfg()) in ("mlx-q4", "cuda-bnb-4bit")
+    assert resolved_embed_backend(_qwen_cfg()) in ("local-4bit", "cuda-bnb-4bit")

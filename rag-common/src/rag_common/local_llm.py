@@ -1,7 +1,7 @@
 """Pluggable text-generation backends for RAG query transforms and agents.
 
-Supports Vertex/Gemini (default, backward compatible) and local Ollama via the
-OpenAI-compatible ``/v1/chat/completions`` API.
+Supports local Ollama (default) via the OpenAI-compatible
+``/v1/chat/completions`` API, plus opencode and GPU-gateway backends.
 """
 
 from __future__ import annotations
@@ -16,17 +16,9 @@ from typing import Any
 
 log = logging.getLogger("rag_common.local_llm")
 
-DEFAULT_BACKEND = "gemini"
+DEFAULT_BACKEND = "ollama"
 DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434"
 DEFAULT_OLLAMA_MODEL = "gemma4:e4b"
-DEFAULT_GEMINI_MODEL = "gemini-2.5-flash"
-# Apple-Silicon MLX path: an ``mlx_lm.server`` (OpenAI-compatible) serving a
-# native MLX checkpoint. Used to run a local judge/transform on the Mac where
-# the GGUF llama-server is too memory-heavy (a 12B GGUF RSS'd ~10GB and thrashed
-# a 24GB host; the MLX 4-bit equivalent is ~7GB unified). Default port matches
-# ``mlx_lm.server``'s default (8080).
-DEFAULT_MLX_HOST = "http://127.0.0.1:8080"
-DEFAULT_MLX_MODEL = "mlx-community/gemma-4-12B-it-qat-4bit"
 # opencode CLI backend: shells out to `opencode run -m <model> --format json
 # <prompt>` and collects the assistant text events. Lets the eval judge/synth
 # run on opencode-routed models (e.g. opencode-go/deepseek-v4-flash) with no
@@ -38,7 +30,7 @@ DEFAULT_OPENCODE_BIN = "opencode"
 
 def llm_backend() -> str:
     raw = os.getenv("RAG_LLM_BACKEND", DEFAULT_BACKEND).strip().lower()
-    if raw in ("gemini", "ollama", "mlx", "opencode", "gateway"):
+    if raw in ("ollama", "opencode", "gateway"):
         return raw
     return DEFAULT_BACKEND
 
@@ -51,14 +43,6 @@ def ollama_model() -> str:
     return (os.getenv("RAG_OLLAMA_MODEL", DEFAULT_OLLAMA_MODEL)).strip() or DEFAULT_OLLAMA_MODEL
 
 
-def mlx_host() -> str:
-    return (os.getenv("RAG_MLX_HOST", DEFAULT_MLX_HOST)).strip().rstrip("/")
-
-
-def mlx_model() -> str:
-    return (os.getenv("RAG_MLX_MODEL", DEFAULT_MLX_MODEL)).strip() or DEFAULT_MLX_MODEL
-
-
 def opencode_bin() -> str:
     return (os.getenv("RAG_OPENCODE_BIN", DEFAULT_OPENCODE_BIN)).strip() or DEFAULT_OPENCODE_BIN
 
@@ -69,31 +53,11 @@ def opencode_model() -> str:
     ).strip() or DEFAULT_OPENCODE_MODEL
 
 
-def gemini_model() -> str:
-    for key in (
-        "GRAPH_RAG_AGENT_LLM_MODEL",
-        "GRAPH_RAG_EVAL_LLM_MODEL",
-        "GRAPH_RAG_CONTEXT_LLM_MODEL",
-        "RAG_LIT_AGENT_LLM_MODEL",
-        "RAG_LIT_EVAL_LLM_MODEL",
-        "RAG_LIT_CONTEXT_LLM_MODEL",
-        "RAG_LLM_MODEL",
-    ):
-        value = os.getenv(key, "").strip()
-        if value:
-            return value
-    return DEFAULT_GEMINI_MODEL
-
-
 def active_model() -> str:
     backend = llm_backend()
-    if backend in ("ollama", "gateway"):
-        return ollama_model()
-    if backend == "mlx":
-        return mlx_model()
     if backend == "opencode":
         return opencode_model()
-    return gemini_model()
+    return ollama_model()
 
 
 def model_slug(model: str | None = None) -> str:
@@ -131,19 +95,11 @@ def generate_text(
             temperature=temperature,
             max_tokens=max_tokens,
         )
-    if backend == "mlx":
-        resolved = model or mlx_model()
-        return _generate_mlx(
-            prompt,
-            model=resolved,
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
     if backend == "opencode":
         resolved = model or opencode_model()
         return _generate_opencode(prompt, model=resolved)
-    resolved = model or gemini_model()
-    return _generate_gemini(prompt, model=resolved)
+    resolved = model or ollama_model()
+    return _generate_ollama(prompt, model=resolved, temperature=temperature, max_tokens=max_tokens)
 
 
 def _generate_gateway(
@@ -233,49 +189,6 @@ def _generate_opencode(prompt: str, *, model: str, timeout: float = 180.0) -> st
     return out
 
 
-def _generate_mlx(
-    prompt: str,
-    *,
-    model: str,
-    temperature: float,
-    max_tokens: int,
-) -> str:
-    """Generate via a local ``mlx_lm.server`` (OpenAI-compatible /v1/chat).
-
-    mlx_lm.server serves whatever checkpoint it was launched with; the ``model``
-    field is advisory. Reuses :func:`_extract_chat_text` (handles the OpenAI
-    ``choices`` shape and strips any ``<think>`` block).
-    """
-    url = f"{mlx_host()}/v1/chat/completions"
-    payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": temperature,
-        "max_tokens": max_tokens,
-        "stream": False,
-    }
-    body = json.dumps(payload).encode("utf-8")
-    request = urllib.request.Request(
-        url,
-        data=body,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=180) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")
-        raise RuntimeError(f"mlx_lm.server HTTP {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"mlx_lm.server unavailable at {mlx_host()}: {exc}") from exc
-
-    text = _extract_chat_text(data)
-    if not text:
-        raise RuntimeError(f"Empty mlx_lm.server response from {model}")
-    return text
-
-
 def _generate_ollama(
     prompt: str,
     *,
@@ -336,17 +249,3 @@ def _extract_chat_text(data: dict[str, Any]) -> str:
     if isinstance(content, str) and content.strip():
         return content.strip()
     return ""
-
-
-def _generate_gemini(prompt: str, *, model: str) -> str:
-    try:
-        from rag_common.gemini_embed import _client, llm_location
-    except ImportError as exc:
-        raise RuntimeError("Gemini client unavailable; install rag-common[gemini]") from exc
-
-    client = _client(location=llm_location())
-    response = client.models.generate_content(model=model, contents=prompt)
-    text = (getattr(response, "text", None) or "").strip()
-    if not text:
-        raise RuntimeError(f"Empty LLM response from {model}")
-    return text

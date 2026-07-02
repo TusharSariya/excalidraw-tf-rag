@@ -8,10 +8,8 @@ from pathlib import Path
 from rag_common.profiles import resolve_profile_name as _resolve_profile_name_env
 
 PKG_ROOT = Path(__file__).resolve().parents[2]
-REPO_RAG_ROOT = PKG_ROOT.parent / "repo-rag"
 ENV_PATH = PKG_ROOT / ".env"
 ENV_EXAMPLE_PATH = PKG_ROOT / ".env.example"
-REPO_RAG_ENV_PATH = REPO_RAG_ROOT / ".env"
 DATA_DIR = PKG_ROOT / "data"
 RETRIEVAL_INDEXES_DIR = DATA_DIR / "retrieval-indexes"
 RAW_DIR = DATA_DIR / "raw"

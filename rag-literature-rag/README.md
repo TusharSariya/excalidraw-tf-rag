@@ -7,14 +7,14 @@ Local research corpus for **core retrieval-augmented generation** literature: fo
 ```bash
 cd tools/rag-literature-rag
 uv sync
-cp .env.example .env   # or reuse tools/repo-rag/.env
+cp .env.example .env
 ```
 
 Embeddings use shared [`tools/rag-common`](../rag-common) with named profiles (`RAG_EMBED_PROFILE` or `--embed-profile`).
 
 | Profile | When |
 | --- | --- |
-| `cuda-qwen0.6b-1024` | **Production query** — GPU reembed from gemini secondary |
+| `cuda-qwen0.6b-1024` | **Production query** |
 | `cuda-qwen0.6b-section-v1` | Chunking campaign: enrich indexed text with document/section metadata |
 | `cuda-qwen0.6b-small2big-v1` | Chunking campaign: smaller child chunks (~350 target / 550 max) |
 | `cuda-qwen0.6b-small2big-dual-v1` | Parent-child A/B: retrieve small child chunks, return baseline-sized parent passages |
@@ -22,19 +22,15 @@ Embeddings use shared [`tools/rag-common`](../rag-common) with named profiles (`
 | `cuda-qwen0.6b-longrag-v1` | LongRAG/larger-unit A/B: larger section/page-span chunks (~1800 target / 2400 max) |
 | `cuda-qwen0.6b-512-v1` / `cuda-qwen0.6b-768-v1` | Qwen3-0.6B reduced-dimension smoke profiles; not promoted |
 | `cuda-qwen4b-1024` / `cuda-qwen4b-2560` | Qwen3-4B CUDA quality probes; skipped on RTX 3060 Ti 8 GB after OOM |
-| `gemini-2-structure-v1` | Secondary cloud build (Docling, structure-aware chunks @ 3072) |
-| `openai-large` | Fast cloud ingest |
-| `mlx-qwen4b` | Free local ingest on Apple Silicon |
 | `mlx-qwen4b-raptor-gemma4-v1` | Local RAPTOR experiment: MLX embed + Ollama recursive tree summaries (opt-in) |
 | `cuda-qwen0.6b-raptor-gemma4-v1` | Desktop RAPTOR experiment: CUDA Qwen3-0.6B embed + Ollama Gemma4 tree summaries (opt-in) |
 
 ## Local-first embedding
 
-Build `gemini-2-structure-v1` on Mac, GPU re-embed to `cuda-qwen0.6b-1024`, query locally:
+Build/rebuild the production index directly on the GPU box, query locally:
 
 ```bash
-RAG_EMBED_PROFILE=gemini-2-structure-v1 uv run rag-literature-rag ingest --force --rebuild
-RAG_GPU_TOOL=tools/rag-literature-rag tools/rag-literature-rag/scripts/gpu_dense_reembed.sh
+RAG_EMBED_PROFILE=cuda-qwen0.6b-1024 uv run rag-literature-rag ingest --force --rebuild
 yarn rag-lit:query "Self-RAG reflection tokens" --top 8 --json
 ```
 

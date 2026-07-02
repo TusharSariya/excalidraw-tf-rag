@@ -21,7 +21,7 @@ DEFAULT_RERANK_MODEL = "BAAI/bge-reranker-v2-m3"
 # Configurable via RAG_RERANK_MAX_CHARS so structured chunks are not over-truncated.
 MAX_RERANK_CHARS = 2000
 DEFAULT_RERANK_BATCH_SIZE = 8
-DEFAULT_LISTWISE_LLM_MODEL = "gemini-2.5-flash"
+DEFAULT_LISTWISE_LLM_MODEL = "gemma4:e4b"
 # Listwise candidates are passed in a single prompt; keep each snippet compact.
 LISTWISE_SNIPPET_CHARS = 600
 

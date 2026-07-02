@@ -15,7 +15,6 @@ from rag_common.config import (
     EmbedStats,
     LocalEmbedMode,
     use_cuda_bnb_4bit,
-    use_mlx_q4_embed,
 )
 
 if TYPE_CHECKING:
@@ -207,19 +206,6 @@ def embed_local_texts(
 ) -> list[list[float]]:
     if not texts:
         return []
-
-    if use_mlx_q4_embed(config.model, config):
-        try:
-            from rag_common.mlx_embed import embed_mlx_q4_texts
-
-            return embed_mlx_q4_texts(texts, config=config, stats=stats, mode=mode)
-        except ImportError as exc:
-            log.warning(
-                "RAG_LOCAL_EMBED_QUANT=%s but mlx-embeddings is not installed (%s); "
-                "falling back to sentence-transformers",
-                os.getenv("RAG_LOCAL_EMBED_QUANT"),
-                exc,
-            )
 
     model = _get_model_for_config(config)
     prepared = [

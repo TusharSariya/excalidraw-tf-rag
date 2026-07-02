@@ -1,4 +1,4 @@
-# Shared ruff config for every package in this repo (rag-common, repo-rag,
+# Shared ruff config for every package in this repo (rag-common,
 # graph-layout-rag, rag-literature-rag, gpu-gateway). There is no root
 # pyproject.toml, so this file is the single source of lint/format truth.
 target-version = "py311"

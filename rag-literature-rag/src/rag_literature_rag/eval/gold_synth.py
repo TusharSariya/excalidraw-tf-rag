@@ -10,7 +10,7 @@ Pipeline:
   1. ``sample_seed_docs`` — stratified, balanced sampling of manifest docs across
      category (tag-derived) × year-bucket, separately per track. Catalog seeds use
      title+abstract; pdf-deep-read seeds additionally pull a full-text chunk.
-  2. ``generate_query`` — a *system-blind* Gemini-Flash call writes an information
+  2. ``generate_query`` — a *system-blind* local-LLM call writes an information
      need grounded in the seed. ``single`` mode = a direct need answerable by the
      seed; ``hard`` mode = indirect phrasing, or a multi-hop need spanning two
      thematically-linked seeds.
@@ -56,8 +56,6 @@ SYNTH_DIR = DATA_DIR / "eval" / "gold_synth"
 CASES_PATH = SYNTH_DIR / "cases.json"
 GEN_CACHE_PATH = SYNTH_DIR / "gen_cache.json"
 
-GEN_MODEL_ENV = "RAG_LIT_SYNTH_LLM_MODEL"
-DEFAULT_GEN_MODEL = "gemini-2.5-flash"
 GEN_WORKERS_ENV = "RAG_LIT_SYNTH_WORKERS"
 
 MAX_ABSTRACT_CHARS = 1200
@@ -246,7 +244,11 @@ def pair_for_multihop(seeds: list[Seed], *, rng: random.Random) -> None:
 # Query generation (system-blind)
 # --------------------------------------------------------------------------- #
 def _gen_model() -> str:
-    return os.getenv(GEN_MODEL_ENV, DEFAULT_GEN_MODEL).strip() or DEFAULT_GEN_MODEL
+    from rag_common.local_llm import llm_backend, ollama_model, opencode_model
+
+    if llm_backend() == "opencode":
+        return opencode_model()
+    return ollama_model()
 
 
 def _gen_workers() -> int:
@@ -305,44 +307,12 @@ def _build_prompt(seed: Seed, mode: str) -> str:
 
 
 def _generate_one(seed: Seed, mode: str, model: str) -> str:
-    import time
+    from rag_common.local_llm import generate_text
 
-    from rag_common.gemini_embed import (
-        _client,
-        _is_fatal,
-        _is_rate_limit,
-        _parse_retry_after,
-        llm_location,
-    )
-
-    client = _client(location=llm_location())
     prompt = _build_prompt(seed, mode)
-    config: Any = None
-    try:
-        from google.genai import types
-
-        config = types.GenerateContentConfig(temperature=0.7)
-    except Exception:  # noqa: BLE001
-        config = None
-
-    # Light retry so a 429 burst during a large parallel run doesn't silently drop
-    # cases (we cache only successes, so anything still empty just retries next run).
-    last_exc: Exception | None = None
-    for attempt in range(4):
-        try:
-            if config is not None:
-                resp = client.models.generate_content(model=model, contents=prompt, config=config)
-            else:
-                resp = client.models.generate_content(model=model, contents=prompt)
-            text = (getattr(resp, "text", None) or "").strip().replace("\n", " ")
-            return re.sub(r'^["\']|["\']$', "", text).strip()
-        except Exception as exc:  # noqa: BLE001
-            last_exc = exc
-            if _is_fatal(exc) or not _is_rate_limit(exc):
-                raise
-            wait = _parse_retry_after(exc) or (2**attempt)
-            time.sleep(min(wait, 30))
-    raise last_exc if last_exc else RuntimeError("generation failed")
+    text = (generate_text(prompt, model=model, temperature=0.7, max_tokens=128) or "").strip()
+    text = text.replace("\n", " ")
+    return re.sub(r'^["\']|["\']$', "", text).strip()
 
 
 def generate_queries(seeds: list[Seed], modes: list[str]) -> dict[int, str]:
