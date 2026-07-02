@@ -1,0 +1,20 @@
+# RAG indexes and corpora (multi-GB if present)
+**/data/
+**/indexes/
+**/retrieval-indexes/
+**/extract_cache/
+**/embed_cache/
+**/lancedb/
+**/bm25/
+**/*.sqlite
+**/*.sqlite-*
+
+# Tooling noise
+.venv/
+**/.venv/
+.pytest_cache/
+.ruff_cache/
+**/uv.lock
+
+# Graphify output (don't index itself)
+graphify-out/
