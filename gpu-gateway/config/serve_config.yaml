@@ -1,6 +1,6 @@
-# tools/gpu-gateway/config/serve_config.yaml
+# gpu-gateway/config/serve_config.yaml
 # Deploy with: serve run config/serve_config.yaml
-# (from tools/gpu-gateway/ with .venv/bin/serve or after `uv sync`)
+# (from gpu-gateway/ with .venv/bin/serve or after `uv sync`)
 #
 # runtime_env.pip is intentionally omitted — Ray would create an isolated pip env
 # that overrides the uv venv. Rely on the venv activated before `serve run`.

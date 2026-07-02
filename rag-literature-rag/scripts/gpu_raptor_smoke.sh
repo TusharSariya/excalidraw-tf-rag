@@ -15,12 +15,12 @@ fi
 RAG_COMMON="$(cd "${ROOT}/../rag-common" && pwd)"
 RAG_GPU_TOOL="${RAG_GPU_TOOL:-tools/rag-literature-rag}"
 SSH_HOST="${RAG_GPU_SSH:-desktop}"
-REMOTE_ROOT="${RAG_GPU_REMOTE_ROOT:-excalidraw-tf}"
+REMOTE_ROOT="${RAG_GPU_REMOTE_ROOT:-excalidraw-tf-rag}"
 TARGET_PROFILE="${RAG_GPU_TARGET_PROFILE:-cuda-qwen0.6b-raptor-gemma4-v1}"
 DOC_LIMIT="${RAG_GPU_RAPTOR_SMOKE_LIMIT:-50}"
 RUN_DIR="${RAG_GPU_RAPTOR_RUN_DIR:-data/eval/runs/20260621-raptor-cuda-smoke}"
 CUDA_BATCH="${RAG_CUDA_BATCH_SIZE:-8}"
-REMOTE="${SSH_HOST}:~/${REMOTE_ROOT}/tools/rag-literature-rag"
+REMOTE="${SSH_HOST}:~/${REMOTE_ROOT}/rag-literature-rag"
 SYNC_CORPUS="${RAG_GPU_SYNC_CORPUS:-1}"
 PULL_ON_DONE="${RAG_GPU_PULL_ON_DONE:-0}"
 
@@ -51,7 +51,7 @@ CUDA_BATCH="$5"
 SSH_HOST="$6"
 
 export PATH="${HOME}/.local/bin:${PATH}"
-cd "${HOME}/${REMOTE_ROOT}/tools/rag-literature-rag"
+cd "${HOME}/${REMOTE_ROOT}/rag-literature-rag"
 chmod +x scripts/gpu_*.sh 2>/dev/null || true
 
 if ! curl -sf http://127.0.0.1:11434/api/tags | grep -qi gemma4; then
@@ -89,7 +89,7 @@ set -euo pipefail
 : "${CUDA_BATCH:?}"
 
 export PATH="${HOME}/.local/bin:${PATH}"
-cd "${HOME}/${REMOTE_ROOT}/tools/rag-literature-rag"
+cd "${HOME}/${REMOTE_ROOT}/rag-literature-rag"
 ulimit -n 65536
 source ../rag-common/scripts/gpu_env.sh
 export RAG_LIT_PDF_BACKEND=docling
@@ -138,10 +138,10 @@ REMOTE
 
 if [[ "${PULL_ON_DONE}" == "1" ]]; then
   echo "Waiting for remote ingest to finish..."
-  while ! ssh "${SSH_HOST}" "test -f ~/${REMOTE_ROOT}/tools/rag-literature-rag/${RUN_DIR}/ingest.sentinel"; do
+  while ! ssh "${SSH_HOST}" "test -f ~/${REMOTE_ROOT}/rag-literature-rag/${RUN_DIR}/ingest.sentinel"; do
     sleep 60
   done
-  if ssh "${SSH_HOST}" "grep -q DONE ~/${REMOTE_ROOT}/tools/rag-literature-rag/${RUN_DIR}/ingest.sentinel"; then
+  if ssh "${SSH_HOST}" "grep -q DONE ~/${REMOTE_ROOT}/rag-literature-rag/${RUN_DIR}/ingest.sentinel"; then
     RAG_GPU_TARGET_PROFILE="${TARGET_PROFILE}" RAG_GPU_SYNC_CACHES_BACK=1 \
       "${ROOT}/scripts/gpu_sync_from_remote.sh"
     rsync -avz --progress \

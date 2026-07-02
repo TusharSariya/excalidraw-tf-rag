@@ -13,7 +13,7 @@ if [[ -f .env ]]; then
 fi
 
 SSH_HOST="${GRAPH_RAG_GPU_SSH:-desktop}"
-REMOTE_ROOT="${GRAPH_RAG_GPU_REMOTE_ROOT:-excalidraw-tf}"
+REMOTE_ROOT="${GRAPH_RAG_GPU_REMOTE_ROOT:-excalidraw-tf-rag}"
 REMOTE="${SSH_HOST}:~/${REMOTE_ROOT}"
 PROFILE="${GRAPH_RAG_BASE_PROFILE:-gemini-2-structure-v1}"
 RAG_COMMON="$(cd "${ROOT}/../rag-common" && pwd)"
@@ -38,29 +38,29 @@ RSYNC_EXCLUDES=(
   --exclude 'data/indexes'
 )
 rsync -avz --progress "${RSYNC_EXCLUDES[@]}" \
-  "${ROOT}/" "${REMOTE}/tools/graph-layout-rag/"
+  "${ROOT}/" "${REMOTE}/graph-layout-rag/"
 
 rsync -avz --progress \
   --exclude '.venv' --exclude '__pycache__' \
-  "${RAG_COMMON}/" "${REMOTE}/tools/rag-common/"
+  "${RAG_COMMON}/" "${REMOTE}/rag-common/"
 
 rsync -avz --progress \
   "data/indexes/${PROFILE}/lancedb/" \
-  "${REMOTE}/tools/graph-layout-rag/data/indexes/${PROFILE}/lancedb/"
+  "${REMOTE}/graph-layout-rag/data/indexes/${PROFILE}/lancedb/"
 
 rsync -avz --progress \
   "data/indexes/${PROFILE}/ingest_state.json" \
-  "${REMOTE}/tools/graph-layout-rag/data/indexes/${PROFILE}/ingest_state.json" 2>/dev/null || true
+  "${REMOTE}/graph-layout-rag/data/indexes/${PROFILE}/ingest_state.json" 2>/dev/null || true
 
 rsync -avz --progress \
   data/eval/qrels/ \
-  "${REMOTE}/tools/graph-layout-rag/data/eval/qrels/"
+  "${REMOTE}/graph-layout-rag/data/eval/qrels/"
 
 echo "=== Remote bootstrap + build + benchmark (tmux) ==="
 ssh "${SSH_HOST}" bash -lc "
   set -euo pipefail
   export PATH=\"\${HOME}/.local/bin:\${PATH}\"
-  cd ~/${REMOTE_ROOT}/tools/graph-layout-rag
+  cd ~/${REMOTE_ROOT}/graph-layout-rag
   chmod +x scripts/gpu_*.sh
   ./scripts/gpu_remote_bootstrap.sh
   export GRAPH_RAG_QDRANT_URL=http://127.0.0.1:6333
@@ -69,7 +69,7 @@ ssh "${SSH_HOST}" bash -lc "
   tmux new-session -d -s graphrag-encode \
     \"bash -lc 'set -euo pipefail
      export PATH=\${HOME}/.local/bin:\${PATH}
-     cd ~/${REMOTE_ROOT}/tools/graph-layout-rag
+     cd ~/${REMOTE_ROOT}/graph-layout-rag
      ulimit -n 65536
      source scripts/gpu_env.sh
      export GRAPH_RAG_QDRANT_URL=http://127.0.0.1:6333 GRAPH_RAG_ENCODE_DEVICE=cuda
@@ -102,7 +102,7 @@ ssh "${SSH_HOST}" bash -lc "
 "
 
 echo "=== Pull results back (skip if pipeline still running in tmux) ==="
-if ssh "${SSH_HOST}" "grep -q DONE ~/${REMOTE_ROOT}/tools/graph-layout-rag/data/eval/gpu_pipeline.sentinel 2>/dev/null"; then
+if ssh "${SSH_HOST}" "grep -q DONE ~/${REMOTE_ROOT}/graph-layout-rag/data/eval/gpu_pipeline.sentinel 2>/dev/null"; then
   "${ROOT}/scripts/gpu_sync_from_remote.sh"
   echo "Done. Check data/eval/runs/ on Mac."
 else

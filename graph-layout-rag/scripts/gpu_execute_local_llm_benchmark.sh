@@ -14,7 +14,7 @@ if [[ -f .env ]]; then
 fi
 
 SSH_HOST="${GRAPH_RAG_GPU_SSH:-desktop}"
-REMOTE_ROOT="${GRAPH_RAG_GPU_REMOTE_ROOT:-excalidraw-tf}"
+REMOTE_ROOT="${GRAPH_RAG_GPU_REMOTE_ROOT:-excalidraw-tf-rag}"
 REMOTE="${SSH_HOST}:~/${REMOTE_ROOT}"
 PROFILE="${RAG_EMBED_PROFILE:-cuda-qwen0.6b-1024}"
 LOCAL_LLM_MODELS="${RAG_LOCAL_LLM_MODELS:-gemma4:e4b}"
@@ -40,29 +40,29 @@ RSYNC_EXCLUDES=(
 )
 
 rsync -avz --progress "${RSYNC_EXCLUDES[@]}" \
-  "${ROOT}/" "${REMOTE}/tools/graph-layout-rag/"
+  "${ROOT}/" "${REMOTE}/graph-layout-rag/"
 
 rsync -avz --progress \
   --exclude '.venv' --exclude '__pycache__' \
-  "${RAG_COMMON}/" "${REMOTE}/tools/rag-common/"
+  "${RAG_COMMON}/" "${REMOTE}/rag-common/"
 
 rsync -avz --progress \
   "data/indexes/${PROFILE}/lancedb/" \
-  "${REMOTE}/tools/graph-layout-rag/data/indexes/${PROFILE}/lancedb/"
+  "${REMOTE}/graph-layout-rag/data/indexes/${PROFILE}/lancedb/"
 
 rsync -avz --progress \
   "data/indexes/${PROFILE}/ingest_state.json" \
-  "${REMOTE}/tools/graph-layout-rag/data/indexes/${PROFILE}/ingest_state.json" 2>/dev/null || true
+  "${REMOTE}/graph-layout-rag/data/indexes/${PROFILE}/ingest_state.json" 2>/dev/null || true
 
 rsync -avz --progress \
   data/eval/qrels/ \
-  "${REMOTE}/tools/graph-layout-rag/data/eval/qrels/" 2>/dev/null || true
+  "${REMOTE}/graph-layout-rag/data/eval/qrels/" 2>/dev/null || true
 
 echo "=== Remote bootstrap + local LLM benchmark (tmux) ==="
 ssh "${SSH_HOST}" env PROFILE="${PROFILE}" LOCAL_LLM_MODELS="${LOCAL_LLM_MODELS}" REMOTE_ROOT="${REMOTE_ROOT}" bash -s <<'REMOTE'
 set -euo pipefail
 export PATH="${HOME}/.local/bin:${PATH}"
-cd "${HOME}/${REMOTE_ROOT}/tools/graph-layout-rag"
+cd "${HOME}/${REMOTE_ROOT}/graph-layout-rag"
 chmod +x scripts/gpu_*.sh
 ./scripts/gpu_remote_bootstrap.sh
 export RAG_EMBED_PROFILE="${PROFILE}"
@@ -75,7 +75,7 @@ cat > data/eval/run-local-llm-job.sh <<'JOB'
 #!/usr/bin/env bash
 set -euo pipefail
 export PATH="${HOME}/.local/bin:${PATH}"
-cd "${HOME}/${REMOTE_ROOT}/tools/graph-layout-rag"
+cd "${HOME}/${REMOTE_ROOT}/graph-layout-rag"
 ulimit -n 65536
 source scripts/gpu_env.sh
 export RAG_EMBED_PROFILE="${PROFILE}"
@@ -116,5 +116,5 @@ echo "Started tmux session graphrag-local-llm. Tail: tmux attach -t graphrag-loc
 REMOTE
 
 echo "=== Pull results when finished ==="
-echo "  ssh ${SSH_HOST} 'cat ~/${REMOTE_ROOT}/tools/graph-layout-rag/data/eval/local_llm_benchmark.sentinel'"
+echo "  ssh ${SSH_HOST} 'cat ~/${REMOTE_ROOT}/graph-layout-rag/data/eval/local_llm_benchmark.sentinel'"
 echo "  ./scripts/gpu_sync_from_remote.sh"

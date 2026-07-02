@@ -31,7 +31,7 @@ if [[ -f .env ]]; then
 fi
 
 SSH_HOST="${_PRE_SSH:-${RAG_GPU_SSH:-${RAG_LIT_GPU_SSH:-desktop}}}"
-REMOTE_ROOT="${_PRE_ROOT:-${RAG_GPU_REMOTE_ROOT:-${RAG_LIT_GPU_REMOTE_ROOT:-excalidraw-tf}}}"
+REMOTE_ROOT="${_PRE_ROOT:-${RAG_GPU_REMOTE_ROOT:-${RAG_LIT_GPU_REMOTE_ROOT:-excalidraw-tf-rag}}}"
 PROFILE="${_PRE_PROFILE:-${RAG_LIT_NL_PROFILE:-cuda-qwen4b-1024}}"
 EXPECTED_CHUNKS="${_PRE_CHUNKS:-${RAG_LIT_NL_EXPECTED_CHUNKS:-21211}}"
 
@@ -51,7 +51,7 @@ fi
 # --- Preflight 2: parity check — index is the expected 4B state --------------
 # shellcheck disable=SC2029
 INDEX_JSON="$(ssh "${SSH_HOST}" \
-  "cd ~/${REMOTE_ROOT}/tools/rag-literature-rag && export PATH=\"\$HOME/.local/bin:\$PATH\" && uv run rag-literature-rag embed indexes --json 2>/dev/null")" || {
+  "cd ~/${REMOTE_ROOT}/rag-literature-rag && export PATH=\"\$HOME/.local/bin:\$PATH\" && uv run rag-literature-rag embed indexes --json 2>/dev/null")" || {
   echo "ERROR: could not read remote index metadata on '${SSH_HOST}'." >&2
   exit 4
 }
@@ -101,7 +101,7 @@ ssh "${SSH_HOST}" "bash -s -- ${REMOTE_ARGS}" <<'REMOTE'
 set -euo pipefail
 ROOT="$1"; PROFILE="$2"; shift 2
 export PATH="$HOME/.local/bin:$PATH"
-cd "$HOME/$ROOT/tools/rag-literature-rag"
+cd "$HOME/$ROOT/rag-literature-rag"
 # shellcheck disable=SC1091
 source ../rag-common/scripts/gpu_env.sh 2>/dev/null || true
 export RAG_LOCAL_EMBED_DEVICE=cuda
