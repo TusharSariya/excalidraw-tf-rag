@@ -229,6 +229,29 @@ def _fetch_by_doi(doi: str) -> dict | None:
     return outcome.data if outcome.kind is OutcomeKind.SUCCESS else None
 
 
+def _fetch_by_arxiv(arxiv_id: str) -> dict | None:
+    """OpenAlex singleton lookup by arXiv id — the DOI-less-item citation-keying path."""
+    url = f"{OPENALEX_API}/arxiv:{arxiv_id}"
+    outcome = OPENALEX.request_openalex("GET", url, operation="singleton", timeout=30.0)
+    return outcome.data if outcome.kind is OutcomeKind.SUCCESS else None
+
+
+def _search_by_title(title: str, *, max_results: int = 5) -> list[dict]:
+    """Title-search candidates for `rag_common.citation_matching.best_title_match`.
+
+    Last-resort keying path (no DOI, no arXiv id, or both lookups failed). The caller
+    applies the conservative similarity + year-tolerance gate; this just fetches raw
+    candidates.
+    """
+    params = {"filter": f"title.search:{title}", "per_page": str(max_results)}
+    outcome = OPENALEX.request_openalex(
+        "GET", OPENALEX_API, operation="search", params=params, timeout=30.0
+    )
+    if outcome.kind is not OutcomeKind.SUCCESS:
+        return []
+    return (outcome.data or {}).get("results") or []
+
+
 def _try_download_pdf(item: ManifestItem, url: str, *, dry_run: bool) -> bool:
     dest = PDF_DIR / f"{item.id}.pdf"
     insecure = any(h in url for h in ("infotech.monash.edu", "it.monash.edu", "marvl."))

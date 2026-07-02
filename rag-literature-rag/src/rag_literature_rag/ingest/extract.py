@@ -10,7 +10,7 @@ from rag_literature_rag.pdf_text import PdfExtractResult, extract_pages_from_pat
 
 log = logging.getLogger("rag_literature_rag.ingest.extract")
 
-PDF_BACKENDS = ("pymupdf", "docling", "gemini")
+PDF_BACKENDS = ("pymupdf", "docling")
 
 
 def default_pdf_backend() -> str:
@@ -25,11 +25,6 @@ def extraction_cache_options(backend: str) -> dict[str, object]:
         return {
             "ocr": os.getenv("RAG_LIT_DOCLING_OCR", "false").strip().lower(),
             "tables": os.getenv("RAG_LIT_DOCLING_TABLES", "true").strip().lower(),
-        }
-    if backend == "gemini":
-        return {
-            "model": os.getenv("RAG_LIT_GEMINI_VISION_MODEL", "gemini-3.1-pro-preview").strip(),
-            "dpi": os.getenv("RAG_LIT_GEMINI_VISION_DPI", "200").strip(),
         }
     return {}
 
@@ -52,10 +47,6 @@ def extract_pdf_result(
         from rag_literature_rag.docling_text import extract_pages_docling
 
         return extract_pages_docling(path, clean=clean)
-    if backend == "gemini":
-        from rag_literature_rag.gemini_vision_text import extract_pages_gemini
-
-        return extract_pages_gemini(path, clean=clean)
     raise ValueError(f"Unknown PDF backend {backend!r}. Choose from: {', '.join(PDF_BACKENDS)}")
 
 

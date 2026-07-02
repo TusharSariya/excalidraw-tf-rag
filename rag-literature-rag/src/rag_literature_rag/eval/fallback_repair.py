@@ -130,12 +130,9 @@ def ranked_fallback_docs(
 def reproduce_extractors(
     item: ManifestItem,
     *,
-    include_gemini: bool = False,
     backends: tuple[str, ...] | None = None,
 ) -> list[BackendReproduction]:
     selected = tuple(backends or LOCAL_BACKENDS)
-    if include_gemini and "gemini" not in selected:
-        selected = (*selected, "gemini")
     out: list[BackendReproduction] = []
     for backend in selected:
         if backend not in PDF_BACKENDS:
@@ -231,7 +228,6 @@ def index_doc_stats(doc_ids: list[str], *, embed_profile: str) -> dict[str, dict
 def enrich_rows(
     rows: list[dict[str, Any]],
     *,
-    include_gemini: bool = False,
     reproduce: bool = True,
 ) -> list[dict[str, Any]]:
     manifest = manifest_by_id(load_manifest())
@@ -240,9 +236,7 @@ def enrich_rows(
         item = manifest.get(row["doc_id"])
         path = _resolve_local_path(item)
         file_exists = bool(path and path.is_file())
-        reproductions = (
-            reproduce_extractors(item, include_gemini=include_gemini) if item and reproduce else []
-        )
+        reproductions = reproduce_extractors(item) if item and reproduce else []
         file_size = path.stat().st_size if file_exists and path else None
         sha256 = item.sha256 if item else None
         if item and not sha256 and path:
@@ -271,13 +265,12 @@ def run_fallback_audit(
     *,
     log_path: Path = INGEST_LOG_PATH,
     top: int = 0,
-    include_gemini: bool = False,
     reproduce: bool = True,
 ) -> dict[str, Any]:
     rows = ranked_fallback_docs(log_path=log_path)
     if top:
         rows = rows[:top]
-    enriched = enrich_rows(rows, include_gemini=include_gemini, reproduce=reproduce)
+    enriched = enrich_rows(rows, reproduce=reproduce)
     classifications = collections.Counter(row["classification"] for row in enriched)
     return {
         "log_path": str(log_path),
@@ -360,11 +353,6 @@ def invalidate_repair_caches(
 @click.option(
     "--top", default=0, show_default=True, type=click.IntRange(min=0), help="Limit rows; 0 = all."
 )
-@click.option(
-    "--include-gemini",
-    is_flag=True,
-    help="Also try Gemini vision extraction; can incur cloud cost.",
-)
 @click.option("--no-reproduce", is_flag=True, help="Skip extractor reproduction.")
 @click.option("--repair", is_flag=True, help="Re-ingest locally repairable docs only.")
 @click.option("--embed-profile", default="cuda-qwen0.6b-1024", show_default=True)
@@ -375,7 +363,6 @@ def invalidate_repair_caches(
 def fallback_audit_cmd(
     log_path: Path,
     top: int,
-    include_gemini: bool,
     no_reproduce: bool,
     repair: bool,
     embed_profile: str,
@@ -386,7 +373,6 @@ def fallback_audit_cmd(
     payload = run_fallback_audit(
         log_path=log_path,
         top=top,
-        include_gemini=include_gemini,
         reproduce=not no_reproduce,
     )
     run_dir = DATA_DIR / "eval" / "runs" / f"{_timestamp()}-fallback-repair"
@@ -429,7 +415,6 @@ def fallback_audit_cmd(
             payload["repair"]["after_audit"] = run_fallback_audit(
                 log_path=Path(run_dir / "repair-ingest.log"),
                 top=0,
-                include_gemini=False,
                 reproduce=False,
             )
             write_report(payload, run_dir)

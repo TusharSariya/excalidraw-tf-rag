@@ -6,9 +6,9 @@
 # pre-nuke gate.
 #
 #   ./verify_backup.sh                         # every tool present locally
-#   ./verify_backup.sh --tool repo-rag         # one tool
+#   ./verify_backup.sh --tool rag-literature-rag         # one tool
 #   ./verify_backup.sh --only mlx              # only artifacts matching a substring
-#   ./verify_backup.sh --drill repo-rag/indexes/mlx-qwen4b
+#   ./verify_backup.sh --drill rag-literature-rag/indexes/mlx-qwen4b
 #                                              # round-trip one artifact S3→disk→checksum
 #
 # Uses the DynamoDB catalog for the freshness check; without it, falls back to a

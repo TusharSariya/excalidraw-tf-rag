@@ -23,30 +23,26 @@ def _fake_results():
     """Map (clean, backend) -> PdfExtractResult for a deterministic compare run."""
     raw = PdfExtractResult(pages=[(1, "net-\nwork strati-\nfied")])  # 2 hyphen breaks
     pymupdf = PdfExtractResult(pages=[(1, "network stratified text")])
-    gemini = PdfExtractResult(
-        pages=[(1, "## Title\n\n| a | b |\n| - | - |\nnetwork")], tokens=2_000_000
-    )
+    docling = PdfExtractResult(pages=[(1, "## Title\n\n| a | b |\n| - | - |\nnetwork")])
 
     def fake(item, *, clean=True, backend="pymupdf"):
         if not clean:
             return raw
-        return gemini if backend == "gemini" else pymupdf
+        return docling if backend == "docling" else pymupdf
 
     return fake
 
 
 def test_compare_one_row_per_backend(monkeypatch):
     monkeypatch.setattr(ce, "extract_pdf_result", _fake_results())
-    row = ce._compare_one(_item(), backends=["pymupdf", "gemini"])
+    row = ce._compare_one(_item(), backends=["pymupdf", "docling"])
 
     assert row["hyphen_breaks_baseline"] == 2
-    assert [b["backend"] for b in row["backends"]] == ["pymupdf", "gemini"]
+    assert [b["backend"] for b in row["backends"]] == ["pymupdf", "docling"]
 
-    gem = next(b for b in row["backends"] if b["backend"] == "gemini")
-    assert gem["headings"] == 1
-    assert gem["table_rows"] == 2
-    assert gem["tokens"] == 2_000_000
-    assert gem["est_cost"] == round(2.0 * 2.0, 4)  # 2M tokens * $2/Mtok default
+    doc = next(b for b in row["backends"] if b["backend"] == "docling")
+    assert doc["headings"] == 1
+    assert doc["table_rows"] == 2
 
 
 def test_compare_cli_renders_multi_backend(monkeypatch, tmp_path):
@@ -57,8 +53,8 @@ def test_compare_cli_renders_multi_backend(monkeypatch, tmp_path):
     monkeypatch.setattr(pathlib.Path, "is_file", lambda self: True)  # PKG_ROOT / localPath
 
     result = CliRunner().invoke(
-        mod.compare_extract_cmd, ["--backend", "pymupdf", "--backend", "gemini"]
+        mod.compare_extract_cmd, ["--backend", "pymupdf", "--backend", "docling"]
     )
     assert result.exit_code == 0, result.output
     assert "aggregate (mean per doc)" in result.output
-    assert "pymupdf" in result.output and "gemini" in result.output
+    assert "pymupdf" in result.output and "docling" in result.output

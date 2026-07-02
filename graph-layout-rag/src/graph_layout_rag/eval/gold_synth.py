@@ -8,7 +8,7 @@ Pipeline:
   1. ``sample_seed_docs`` — stratified, balanced sampling of manifest docs across
      category (tag-derived) × year-bucket, separately per track. Catalog seeds use
      title+abstract; pdf-deep-read seeds additionally pull a full-text chunk.
-  2. ``generate_query`` — a *system-blind* Gemini-Flash call writes an information
+  2. ``generate_query`` — a *system-blind* local-LLM call writes an information
      need grounded in the seed. ``single`` mode = a direct need answerable by the
      seed; ``hard`` mode = indirect phrasing (applied, problem-first question).
   3. ``quality_filters`` — drop leakage (queries that lexically echo the seed →
@@ -56,8 +56,6 @@ SYNTH_DIR = DATA_DIR / "eval" / "gold_synth"
 CASES_PATH = SYNTH_DIR / "cases.json"
 GEN_CACHE_PATH = SYNTH_DIR / "gen_cache.json"
 
-GEN_MODEL_ENV = "GRAPH_RAG_SYNTH_LLM_MODEL"
-DEFAULT_GEN_MODEL = "gemini-2.5-flash"
 GEN_WORKERS_ENV = "GRAPH_RAG_SYNTH_WORKERS"
 
 MAX_ABSTRACT_CHARS = 1200
@@ -224,18 +222,14 @@ def sample_seed_docs(
 # Query generation (system-blind)
 # --------------------------------------------------------------------------- #
 def _gen_model() -> str:
-    # Honour the active local_llm backend so the generator and judge can share a
-    # non-Gemini transport (e.g. opencode/ollama/mlx) when GCP billing is dead.
-    from rag_common.local_llm import llm_backend, mlx_model, ollama_model, opencode_model
+    # Honour the active local_llm backend so the generator and judge share the
+    # same transport (opencode/ollama/gateway).
+    from rag_common.local_llm import llm_backend, ollama_model, opencode_model
 
     backend = llm_backend()
     if backend == "opencode":
         return opencode_model()
-    if backend == "ollama":
-        return ollama_model()
-    if backend == "mlx":
-        return mlx_model()
-    return os.getenv(GEN_MODEL_ENV, DEFAULT_GEN_MODEL).strip() or DEFAULT_GEN_MODEL
+    return ollama_model()
 
 
 def _gen_workers() -> int:
@@ -288,54 +282,12 @@ def _build_prompt(seed: Seed, mode: str) -> str:
 
 
 def _generate_one(seed: Seed, mode: str, model: str) -> str:
-    import time
-
-    from rag_common.local_llm import llm_backend
+    from rag_common.local_llm import generate_text
 
     prompt = _build_prompt(seed, mode)
-
-    # Non-Gemini backends (opencode/ollama/mlx) route through the shared
-    # local_llm transport; only the Gemini path keeps its bespoke retry client.
-    if llm_backend() != "gemini":
-        from rag_common.local_llm import generate_text
-
-        text = (generate_text(prompt, model=model, temperature=0.7, max_tokens=128) or "").strip()
-        text = text.replace("\n", " ")
-        return re.sub(r'^["\']|["\']$', "", text).strip()
-
-    from rag_common.gemini_embed import (
-        _client,
-        _is_fatal,
-        _is_rate_limit,
-        _parse_retry_after,
-        llm_location,
-    )
-
-    client = _client(location=llm_location())
-    config: Any = None
-    try:
-        from google.genai import types
-
-        config = types.GenerateContentConfig(temperature=0.7)
-    except Exception:  # noqa: BLE001
-        config = None
-
-    last_exc: Exception | None = None
-    for attempt in range(4):
-        try:
-            if config is not None:
-                resp = client.models.generate_content(model=model, contents=prompt, config=config)
-            else:
-                resp = client.models.generate_content(model=model, contents=prompt)
-            text = (getattr(resp, "text", None) or "").strip().replace("\n", " ")
-            return re.sub(r'^["\']|["\']$', "", text).strip()
-        except Exception as exc:  # noqa: BLE001
-            last_exc = exc
-            if _is_fatal(exc) or not _is_rate_limit(exc):
-                raise
-            wait = _parse_retry_after(exc) or (2**attempt)
-            time.sleep(min(wait, 30))
-    raise last_exc if last_exc else RuntimeError("generation failed")
+    text = (generate_text(prompt, model=model, temperature=0.7, max_tokens=128) or "").strip()
+    text = text.replace("\n", " ")
+    return re.sub(r'^["\']|["\']$', "", text).strip()
 
 
 def generate_queries(seeds: list[Seed], modes: list[str]) -> dict[int, str]:

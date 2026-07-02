@@ -14,14 +14,13 @@ from rag_common.config import (
     EmbedBackend,
     EmbedConfig,
     local_config,
-    openai_config,
 )
 
 log = logging.getLogger("rag_common.profiles")
 
 _BUILTIN_PROFILES_PATH = Path(__file__).with_name("embed_profiles.toml")
 
-_VALID_BACKENDS = frozenset({"openai", "local", "gemini", "auto"})
+_VALID_BACKENDS = frozenset({"local", "auto"})
 
 
 @dataclass(frozen=True)
@@ -45,7 +44,7 @@ class ProfileSpec:
     def _resolved_backend(self) -> EmbedBackend:
         if self.backend == "auto":
             raise ValueError(f"Profile {self.name!r} uses backend=auto; resolve before converting")
-        if self.backend not in ("openai", "local", "gemini"):
+        if self.backend != "local":
             raise ValueError(f"Profile {self.name!r} has invalid backend {self.backend!r}")
         return self.backend  # type: ignore[return-value]
 
@@ -131,66 +130,8 @@ def _config_from_legacy_env(prefix: str) -> EmbedConfig:
         os.getenv(f"{prefix}EMBED_BACKEND", os.getenv("RAG_EMBED_BACKEND", "auto")).strip().lower()
     )
 
-    if mode == "local":
-        cfg = local_config()
-        quant = os.getenv("RAG_LOCAL_EMBED_QUANT", "").strip().lower() or None
-        if quant in ("", "none", "off", "false", "0"):
-            quant = None
-        return EmbedConfig(
-            backend=cfg.backend,
-            model=cfg.model,
-            dimensions=cfg.dimensions,
-            profile=_legacy_default_profile_name(),
-            quant=quant,
-        )
-
-    if mode == "gemini":
-        from rag_common.config import gemini_config
-        from rag_common.env import valid_gemini_auth
-
-        if not valid_gemini_auth():
-            raise RuntimeError(
-                "RAG_EMBED_BACKEND=gemini but Gemini auth is missing "
-                "(GEMINI_API_KEY or Vertex: GOOGLE_GENAI_USE_VERTEXAI + GOOGLE_CLOUD_PROJECT)."
-            )
-        return gemini_config(profile=_legacy_default_profile_name())
-
-    if mode == "openai":
-        from rag_common.env import valid_openai_key
-
-        if not valid_openai_key():
-            raise RuntimeError(
-                "RAG_EMBED_BACKEND=openai but OPENAI_API_KEY is missing or a placeholder."
-            )
-        model = os.getenv(f"{prefix}EMBED_MODEL") or os.getenv("RAG_OPENAI_EMBED_MODEL")
-        dims_env = os.getenv(f"{prefix}EMBED_DIMS") or os.getenv("RAG_OPENAI_EMBED_DIMS")
-        dims = int(dims_env) if dims_env else None
-        cfg = openai_config(model=model, dimensions=dims)
-        return EmbedConfig(
-            backend=cfg.backend,
-            model=cfg.model,
-            dimensions=cfg.dimensions,
-            profile=_legacy_default_profile_name(),
-        )
-
-    if mode != "auto":
-        raise RuntimeError(
-            f"Unknown embed backend mode: {mode!r} (use auto, openai, local, or gemini)"
-        )
-
-    from rag_common.env import valid_openai_key
-
-    if valid_openai_key():
-        model = os.getenv(f"{prefix}EMBED_MODEL") or os.getenv("RAG_OPENAI_EMBED_MODEL")
-        dims_env = os.getenv(f"{prefix}EMBED_DIMS") or os.getenv("RAG_OPENAI_EMBED_DIMS")
-        dims = int(dims_env) if dims_env else None
-        cfg = openai_config(model=model, dimensions=dims)
-        return EmbedConfig(
-            backend=cfg.backend,
-            model=cfg.model,
-            dimensions=cfg.dimensions,
-            profile=_legacy_default_profile_name(),
-        )
+    if mode not in ("local", "auto"):
+        raise RuntimeError(f"Unknown embed backend mode: {mode!r} (use auto or local)")
 
     cfg = local_config()
     quant = os.getenv("RAG_LOCAL_EMBED_QUANT", "").strip().lower() or None

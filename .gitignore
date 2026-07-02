@@ -10,3 +10,8 @@ __pycache__/
 # Transient debug/scratch logs anywhere in the tree (package data/*.log rules
 # only cover data/; these appear at package roots too, e.g. err.log, rem.log).
 *.log
+
+# Graphify
+graphify-out/cost.json
+graphify-out/cache/
+.env.graphify

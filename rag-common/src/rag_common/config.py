@@ -6,13 +6,6 @@ import threading
 from dataclasses import dataclass, field
 from typing import Literal
 
-# MLX 4-bit checkpoints for Qwen3 embedding models (Apple Silicon via mlx-embeddings).
-QWEN3_MLX_Q4_MODELS: dict[str, str] = {
-    "Qwen/Qwen3-Embedding-0.6B": "mlx-community/Qwen3-Embedding-0.6B-4bit-DWQ",
-    "Qwen/Qwen3-Embedding-4B": "majentik/Qwen3-Embedding-4B-MLX-4bit",
-    "Qwen/Qwen3-Embedding-8B": "mlx-community/Qwen3-Embedding-8B-4bit-DWQ",
-}
-
 
 def local_embed_quant(config: EmbedConfig | None = None) -> str | None:
     """Quantization mode: profile quant first, then RAG_LOCAL_EMBED_QUANT env."""
@@ -23,21 +16,6 @@ def local_embed_quant(config: EmbedConfig | None = None) -> str | None:
     if raw in ("", "none", "fp16", "bf16", "off", "false", "0"):
         return None
     return raw
-
-
-def mlx_q4_model_id(base_model: str) -> str | None:
-    return QWEN3_MLX_Q4_MODELS.get(base_model)
-
-
-def use_mlx_q4_embed(model_name: str, config: EmbedConfig | None = None) -> bool:
-    quant = local_embed_quant(config)
-    if quant not in ("4bit", "q4", "mlx"):
-        return False
-    if platform.system() != "Darwin":
-        return False
-    if "qwen" not in model_name.lower() or "embedding" not in model_name.lower():
-        return False
-    return mlx_q4_model_id(model_name) is not None
 
 
 def use_cuda_bnb_4bit(config: EmbedConfig | None = None) -> bool:
@@ -61,17 +39,10 @@ def resolved_embed_backend(
     """Concrete embed backend AS RESOLVED ON THIS HOST.
 
     The profile ``backend`` field is "local" for every Qwen rung regardless of whether
-    MLX (Apple Silicon) or bitsandbytes (CUDA) actually runs, so two different quant
-    stacks share a profile name. This returns a host-specific tag (``mlx-q4`` vs
-    ``cuda-bnb-4bit``) so a query host can be matched against the host that BUILT an
-    index (HG1): scoring MLX-quant queries against bnb-quant docs is silent garbage
-    that the existing model/dims/quant check does NOT catch (it sees "local"/"4bit" on
-    both sides). Host-dependent by design — the same config yields ``mlx-q4`` on a Mac
-    and ``cuda-bnb-4bit`` on a CUDA box.
+    bitsandbytes (CUDA) quantization actually runs, so multiple quant stacks can share
+    a profile name. This returns a host-specific tag (``cuda-bnb-4bit`` vs plain
+    ``local-fp``) so a query host can be matched against the host that BUILT an index.
     """
-    model = model_name if model_name is not None else (config.model if config else "")
-    if use_mlx_q4_embed(model, config):
-        return "mlx-q4"
     if use_cuda_bnb_4bit(config):
         return "cuda-bnb-4bit"
     backend = config.backend if config else "unknown"
@@ -81,18 +52,11 @@ def resolved_embed_backend(
     return backend
 
 
-EmbedBackend = Literal["openai", "local", "gemini"]
+EmbedBackend = Literal["local"]
 LocalEmbedMode = Literal["query", "document"]
 
-OPENAI_DEFAULT_MODEL = "text-embedding-3-large"
-OPENAI_DEFAULT_DIMS = 3072
-GEMINI_DEFAULT_MODEL = "gemini-embedding-001"
-GEMINI_DEFAULT_DIMS = 768
 LOCAL_DEFAULT_MODEL = "Qwen/Qwen3-Embedding-0.6B"
 LOCAL_DEFAULT_DIMS = 1024
-
-OPENAI_EMBED_COST_PER_MILLION = 0.13
-GEMINI_EMBED_COST_PER_MILLION = 0.008
 
 LOCAL_MODEL_DIMS: dict[str, int] = {
     "all-MiniLM-L6-v2": 384,
@@ -108,7 +72,7 @@ LOCAL_MODEL_DIMS: dict[str, int] = {
 
 
 def local_model_dimensions(model_name: str) -> int:
-    for key in ("RAG_LOCAL_EMBED_DIMS", "GRAPH_RAG_LOCAL_EMBED_DIMS", "REPO_RAG_LOCAL_EMBED_DIMS"):
+    for key in ("RAG_LOCAL_EMBED_DIMS", "GRAPH_RAG_LOCAL_EMBED_DIMS"):
         value = os.getenv(key)
         if value:
             return int(value)
@@ -124,12 +88,8 @@ class EmbedConfig:
     quant: str | None = None
 
     @property
-    def is_openai(self) -> bool:
-        return self.backend == "openai"
-
-    @property
     def is_remote(self) -> bool:
-        return self.backend in ("openai", "gemini")
+        return False
 
 
 @dataclass
@@ -149,14 +109,6 @@ class EmbedStats:
             self.effective_config = config
 
 
-def openai_config(*, model: str | None = None, dimensions: int | None = None) -> EmbedConfig:
-    return EmbedConfig(
-        backend="openai",
-        model=model or os.getenv("RAG_OPENAI_EMBED_MODEL", OPENAI_DEFAULT_MODEL),
-        dimensions=dimensions or int(os.getenv("RAG_OPENAI_EMBED_DIMS", str(OPENAI_DEFAULT_DIMS))),
-    )
-
-
 def local_config(*, model: str | None = None, profile: str | None = None) -> EmbedConfig:
     name = model or os.getenv("RAG_LOCAL_EMBED_MODEL", LOCAL_DEFAULT_MODEL)
     quant = os.getenv("RAG_LOCAL_EMBED_QUANT", "").strip().lower() or None
@@ -171,23 +123,5 @@ def local_config(*, model: str | None = None, profile: str | None = None) -> Emb
     )
 
 
-def gemini_config(
-    *,
-    model: str | None = None,
-    dimensions: int | None = None,
-    profile: str | None = None,
-) -> EmbedConfig:
-    return EmbedConfig(
-        backend="gemini",
-        model=model or os.getenv("RAG_GEMINI_EMBED_MODEL", GEMINI_DEFAULT_MODEL),
-        dimensions=dimensions or int(os.getenv("RAG_GEMINI_EMBED_DIMS", str(GEMINI_DEFAULT_DIMS))),
-        profile=profile,
-    )
-
-
 def embed_cost_per_million(backend: EmbedBackend) -> float:
-    if backend == "gemini":
-        return float(os.getenv("GEMINI_EMBED_COST_PER_MILLION", str(GEMINI_EMBED_COST_PER_MILLION)))
-    if backend == "openai":
-        return float(os.getenv("OPENAI_EMBED_COST_PER_MILLION", str(OPENAI_EMBED_COST_PER_MILLION)))
     return 0.0

@@ -3,9 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from rag_common.env import valid_openai_key
-
-from graph_layout_rag.paths import ENV_EXAMPLE_PATH, ENV_PATH, REPO_RAG_ENV_PATH
+from graph_layout_rag.paths import ENV_EXAMPLE_PATH, ENV_PATH
 
 
 def _load_env_path(env_path: Path) -> None:
@@ -31,7 +29,7 @@ def _load_env_path(env_path: Path) -> None:
 
 
 def load_env_file(path: Path | None = None) -> bool:
-    """Load KEY=VALUE pairs from .env, sibling repo-rag/.env, then .env.example."""
+    """Load KEY=VALUE pairs from .env, then .env.example."""
     if path is not None:
         if not path.is_file():
             return False
@@ -40,13 +38,7 @@ def load_env_file(path: Path | None = None) -> bool:
 
     if ENV_PATH.is_file():
         _load_env_path(ENV_PATH)
-        if valid_openai_key():
-            return True
-
-    if REPO_RAG_ENV_PATH.is_file():
-        _load_env_path(REPO_RAG_ENV_PATH)
-        if valid_openai_key():
-            return True
+        return True
 
     if ENV_EXAMPLE_PATH.is_file():
         _load_env_path(ENV_EXAMPLE_PATH)

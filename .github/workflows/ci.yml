@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [rag-common, repo-rag, graph-layout-rag, rag-literature-rag]
+        package: [rag-common, graph-layout-rag, rag-literature-rag]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -61,11 +61,6 @@ jobs:
           # --disable-socket makes any test that reaches the network fail loudly
           # (it should be marked @pytest.mark.integration instead).
           - package: rag-common
-            run: >
-              uv sync --frozen &&
-              uv run --with pytest-socket
-              pytest -m "not integration" --disable-socket --allow-unix-socket -q
-          - package: repo-rag
             run: >
               uv sync --frozen &&
               uv run --with pytest-socket

@@ -68,11 +68,3 @@ meta     = ["harvest.db", "manifest.json", "harvest_checkpoint.json"]
 [tool.rag-literature-rag.extracted]
 "docling-v1" = "extract_cache"
 "raptor-v1"  = "raptor_cache"
-
-# ---------------------------------------------------------------------------
-# repo-rag (~0.5 GB): code-ingested, no PDF corpus / no docling extract.
-# ---------------------------------------------------------------------------
-[tool.repo-rag]
-data_dir = "repo-rag/data"
-indexes  = ["indexes/*", "lancedb", "bm25"]
-meta     = ["graph.sqlite", "manifest.json", "ingest_state.json"]

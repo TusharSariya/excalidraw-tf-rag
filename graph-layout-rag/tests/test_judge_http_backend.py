@@ -16,7 +16,7 @@ def test_backend_order():
     assert judge._backend_order("opencode") == ["opencode"]
     assert judge._backend_order("deepseek") == ["deepseek"]
     assert judge._backend_order("") == []
-    assert judge._backend_order("gemini") == []
+    assert judge._backend_order("unknown") == []
 
 
 def test_judge_model_honors_http_backend(monkeypatch):

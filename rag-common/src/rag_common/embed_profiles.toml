@@ -1,55 +1,5 @@
-# Built-in embedding profiles for rag-common consumers (graph-layout-rag, repo-rag).
+# Built-in embedding profiles for rag-common consumers (graph-layout-rag, rag-literature-rag).
 # Override or extend via RAG_EMBED_PROFILES_PATH and/or tool-local embed_profiles.toml.
-
-[profiles.openai-large]
-backend = "openai"
-model = "text-embedding-3-large"
-dimensions = 1024
-
-[profiles.openai-small]
-backend = "openai"
-model = "text-embedding-3-small"
-dimensions = 1024
-
-[profiles.gemini]
-backend = "gemini"
-model = "gemini-embedding-001"
-dimensions = 768
-
-[profiles.gemini-2]
-backend = "gemini"
-model = "gemini-embedding-2-preview"
-dimensions = 3072
-
-[profiles.gemini-2-structure-v1]
-backend = "gemini"
-model = "gemini-embedding-2-preview"
-dimensions = 3072
-
-[profiles.gemini-2-code-3072]
-backend = "gemini"
-model = "gemini-embedding-2-preview"
-dimensions = 3072
-
-[profiles.mlx-qwen4b]
-backend = "local"
-model = "Qwen/Qwen3-Embedding-4B"
-dimensions = 1024
-quant = "4bit"
-
-[profiles."mlx-qwen0.6b"]
-backend = "local"
-model = "Qwen/Qwen3-Embedding-0.6B"
-dimensions = 1024
-quant = "4bit"
-
-# Apple-Silicon MLX 4-bit ladder, 8B rung (maps to mlx-community/Qwen3-Embedding-8B-4bit-DWQ).
-# Held at 1024 dims to match mlx-qwen0.6b / mlx-qwen4b for an apples-to-apples MLX ladder.
-[profiles."mlx-qwen8b"]
-backend = "local"
-model = "Qwen/Qwen3-Embedding-8B"
-dimensions = 1024
-quant = "4bit"
 
 [profiles.local-fp16-qwen4b]
 backend = "local"
@@ -59,7 +9,6 @@ dimensions = 1024
 # Code-specialized, max fidelity: Qwen3-Embedding-4B at native 2560 dims, full
 # precision (no Matryoshka truncation, no quant). Tops MTEB-Code (~80.7) — the
 # recommended local profile for code retrieval when quality matters over speed.
-# Free on Apple Silicon (MLX); slower + more memory than the 4-bit mlx-qwen4b.
 [profiles.qwen3-code]
 backend = "local"
 model = "Qwen/Qwen3-Embedding-4B"

@@ -9,12 +9,10 @@ from typing import Any, Literal
 
 import lancedb
 from rag_common.config import embed_cost_per_million, resolved_embed_backend
-from rag_common.gemini_embed import is_gemini_embedding_2
 
 from graph_layout_rag.ingest import bm25, embed_cache
 from graph_layout_rag.ingest.chunk import (
     TextChunk,
-    embed_body_text,
     embed_input_text,
     enrich_texts_for_section,
     is_section_enriched_profile,
@@ -236,14 +234,8 @@ def upsert_chunks(
     paths = _paths(profile)
     log = get_logger()
     cfg = config or embed_config_from_env()
-    if is_gemini_embedding_2(cfg.model):
-        # Title is supplied separately to the v2 task-prefix formatter; the body folds
-        # in Topics/Tags so that signal is still embedded.
-        texts = [embed_body_text(c) for c in chunks]
-        titles = [c.title for c in chunks]
-    else:
-        texts = [embed_input_text(c) for c in chunks]
-        titles = None
+    texts = [embed_input_text(c) for c in chunks]
+    titles = None
     if is_section_enriched_profile(cfg.profile):
         texts = enrich_texts_for_section(chunks, texts)
     # Contextual Retrieval (opt-in via a *contextual* embed profile): prepend an
@@ -294,7 +286,7 @@ def upsert_chunks(
             stats=stats,
             workers=workers,
             prefix=ENV_PREFIX,
-            allow_fallback=not is_gemini_embedding_2(cfg.model),
+            allow_fallback=True,
             probe=False,
             titles=[titles[i] for i in miss_idx] if titles else None,
         )

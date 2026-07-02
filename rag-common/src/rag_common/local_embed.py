@@ -15,7 +15,6 @@ from rag_common.config import (
     EmbedStats,
     LocalEmbedMode,
     use_cuda_bnb_4bit,
-    use_mlx_q4_embed,
 )
 
 if TYPE_CHECKING:
@@ -136,6 +135,30 @@ def _local_batch_size(device: str | None) -> int:
     return LOCAL_BATCH_SIZE
 
 
+def _preload_nvjitlink() -> None:
+    """Preload libnvJitLink from the venv's vendored NVIDIA wheels for bitsandbytes.
+
+    torch cu13 wheels vendor CUDA runtime libs under ``site-packages/nvidia/*/lib`` and
+    load their own copies via rpath, but bitsandbytes dlopens ``libnvJitLink.so.13`` by
+    soname — which fails unless the directory is on ``LD_LIBRARY_PATH``. Loading it here
+    with RTLD_GLOBAL (before the bnb native lib loads) satisfies that lookup without
+    requiring every caller to export the path. Best-effort: silently a no-op when the
+    wheel layout differs (non-CUDA hosts, MPS, system CUDA installs).
+    """
+    try:
+        import ctypes
+        from pathlib import Path
+
+        import nvidia
+
+        for base in nvidia.__path__:
+            for lib in sorted(Path(base).glob("*/lib/libnvJitLink.so*")):
+                ctypes.CDLL(str(lib), mode=ctypes.RTLD_GLOBAL)
+                return
+    except Exception:  # pragma: no cover - purely opportunistic
+        pass
+
+
 def _bnb_4bit_model_kwargs() -> dict | None:
     try:
         import torch
@@ -143,6 +166,7 @@ def _bnb_4bit_model_kwargs() -> dict | None:
     except ImportError as exc:
         log.warning("bitsandbytes 4-bit requested but import failed (%s); using FP16", exc)
         return None
+    _preload_nvjitlink()
 
     return {
         "quantization_config": BitsAndBytesConfig(
@@ -207,19 +231,6 @@ def embed_local_texts(
 ) -> list[list[float]]:
     if not texts:
         return []
-
-    if use_mlx_q4_embed(config.model, config):
-        try:
-            from rag_common.mlx_embed import embed_mlx_q4_texts
-
-            return embed_mlx_q4_texts(texts, config=config, stats=stats, mode=mode)
-        except ImportError as exc:
-            log.warning(
-                "RAG_LOCAL_EMBED_QUANT=%s but mlx-embeddings is not installed (%s); "
-                "falling back to sentence-transformers",
-                os.getenv("RAG_LOCAL_EMBED_QUANT"),
-                exc,
-            )
 
     model = _get_model_for_config(config)
     prepared = [

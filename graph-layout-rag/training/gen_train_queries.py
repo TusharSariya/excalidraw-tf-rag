@@ -2,8 +2,8 @@
 
 Each training query is grounded in ONE source chunk; that chunk IS the positive
 for contrastive training (no teacher, no cloud LLM). Generation uses a LOCAL model
-(Ollama gemma4:e4b on the desktop GPU) — never a cloud API (the gemini judge is
-reserved for GATE 3). Output namespace: ``train-v1:``.
+(Ollama gemma4:e4b on the desktop GPU) — never a cloud API. Output namespace:
+``train-v1:``.
 
 HARD DEDUP GATE (training-only; gold_synth's eval-facing filters are NOT touched):
 drop any training query whose token-Jaccard > ``JACCARD_MAX`` (0.45) OR whose
@@ -296,60 +296,6 @@ def _gen_one(client: httpx.Client, chunk: dict, style_name: str, style_instr: st
     }
 
 
-# --- Cloud generation (Gemini-3.5-Flash; ~$ — T2 query-quality A/B) -----------
-# Reuses gold_synth's gemini client (rag_common.gemini_embed) — same Vertex/ADC as
-# the judge. HARD COST CAP enforced by --target in main(). The SAME dedup gate runs
-# afterward, so contamination is impossible regardless of generator.
-def _gen_one_cloud(chunk: dict, style_name: str, style_instr: str, model: str) -> dict | None:
-    import time as _time
-
-    from rag_common.gemini_embed import (_client, _is_fatal, _is_rate_limit,
-                                          _parse_retry_after, llm_location)
-
-    prompt = _build_prompt(chunk, style_instr)
-    client = _client(location=llm_location())
-    config = None
-    try:
-        from google.genai import types
-        config = types.GenerateContentConfig(temperature=0.7)
-    except Exception:  # noqa: BLE001
-        config = None
-
-    text = ""
-    for attempt in range(4):
-        try:
-            if config is not None:
-                resp = client.models.generate_content(model=model, contents=prompt, config=config)
-            else:
-                resp = client.models.generate_content(model=model, contents=prompt)
-            text = (getattr(resp, "text", None) or "").strip()
-            break
-        except Exception as exc:  # noqa: BLE001
-            import httpx as _httpx
-            # Transient transport/network errors (server disconnect, conn reset,
-            # timeout) are RETRYABLE — a single blip must NOT kill the whole run.
-            # (A bare RemoteProtocolError once discarded a full 7.7k-query buffer.)
-            _transient = isinstance(exc, _httpx.TransportError) or _is_rate_limit(exc)
-            # Genuine fatal (ADC/auth/quota-exhausted) → propagate so main() STOPS and
-            # reports rather than silently burning retries (per the T2 contract).
-            if _is_fatal(exc) or not _transient:
-                raise
-            _time.sleep(min(_parse_retry_after(exc) or (2 ** attempt), 30))
-    q = _clean_query(text)
-    if not q or len(q) < 8 or len(q.split()) < 2 or len(q) > 240:
-        return None
-    return {
-        "id": f"{NAMESPACE}{chunk['id']}::{style_name}",
-        "query": q,
-        "source_chunk_id": chunk["id"],
-        "source_doc_id": chunk["doc_id"],
-        "style": style_name,
-        "title": chunk["title"],
-        "approx_prompt_chars": len(prompt),
-        "approx_out_chars": len(text),
-    }
-
-
 # --- Dedup gate ---------------------------------------------------------------
 def dedup_against_eval(
     records: list[dict], eval_queries: list[str], embedder,
@@ -408,11 +354,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--target", type=int, default=12000,
                     help="approx number of POST-dedup queries to aim for")
-    ap.add_argument("--method", choices=["extractive", "llm", "cloud"], default="extractive",
-                    help="extractive (instant, $0, no GPU; DEFAULT), llm (local Ollama, "
-                         "~0.5 q/s — slow), or cloud (Gemini via Vertex/ADC — COSTS $)")
-    ap.add_argument("--gen-model", default="gemini-3.5-flash",
-                    help="cloud generation model (only used with --method cloud)")
+    ap.add_argument("--method", choices=["extractive", "llm"], default="extractive",
+                    help="extractive (instant, $0, no GPU; DEFAULT) or llm (local Ollama, "
+                         "~0.5 q/s — slow)")
     ap.add_argument("--concurrency", type=int, default=8)
     ap.add_argument("--target-kept", type=int, default=0,
                     help="early-stop once this many KEPT queries collected (0=disabled)")
@@ -448,60 +392,6 @@ def main() -> int:
             if i % 2000 == 0:
                 log.info("extractive %d/%d (%d kept) %.0f q/s",
                          i, len(chunks), len(records), i / max(time.time() - t0, 1e-6))
-    elif args.method == "cloud":
-        # HARD COST CAP: only attempt --target jobs (no oversample) to bound spend.
-        jobs = []
-        for i, ch in enumerate(chunks[: args.target]):
-            style_name, style_instr = PROMPT_STYLES[i % len(PROMPT_STYLES)]
-            jobs.append((ch, style_name, style_instr))
-        log.info("CLOUD gen: model=%s, %d jobs (HARD CAP=%d) — COSTS $",
-                 args.gen_model, len(jobs), args.target)
-        # Incremental insurance: flush each kept record to a partial file as it
-        # arrives, so a hard crash/OOM can't discard the whole in-memory buffer.
-        from rag_common.gemini_embed import GeminiFatalError, _is_fatal as _fatal_check
-        partial_path = TRAIN_DATA_DIR / "queries.partial.jsonl"
-        partial_f = partial_path.open("w")
-        fail_streak = 0  # circuit breaker: a SYSTEMIC failure must abort, not skip 10k
-        with ThreadPoolExecutor(max_workers=args.concurrency) as ex:
-            futs = [ex.submit(_gen_one_cloud, ch, sn, si, args.gen_model)
-                    for ch, sn, si in jobs]
-            for n, fut in enumerate(as_completed(futs), 1):
-                try:
-                    rec = fut.result()
-                except Exception as exc:  # noqa: BLE001
-                    # Genuine fatal (ADC/auth/config) stops the run loudly; a lone
-                    # straggler exception is logged and skipped (never fatal). But a
-                    # RUN of consecutive failures is systemic (e.g. dead endpoint,
-                    # missing env) → abort loudly rather than "succeed" with 0 kept.
-                    if isinstance(exc, GeminiFatalError) or _fatal_check(exc):
-                        partial_f.close()
-                        raise
-                    fail_streak += 1
-                    if fail_streak >= 50:
-                        partial_f.close()
-                        raise RuntimeError(
-                            f"{fail_streak} consecutive gen failures "
-                            f"({type(exc).__name__}) — systemic, aborting") from exc
-                    log.warning("gen future skipped (%s)", type(exc).__name__)
-                    rec = None
-                if rec:
-                    fail_streak = 0
-                    records.append(rec)
-                    partial_f.write(json.dumps(rec) + "\n")
-                    partial_f.flush()
-                if n % 100 == 0:
-                    rate = n / max(time.time() - t0, 1e-6)
-                    log.info("cloud gen %d/%d (%d kept) %.2f q/s",
-                             n, len(futs), len(records), rate)
-                # Early-stop: once we have enough KEPT queries, cancel the
-                # dead-weight tail (late-run quota collapse → ~0 yield over ~hours).
-                if args.target_kept and len(records) >= args.target_kept:
-                    log.info("reached --target-kept=%d at %d completed; cancelling %d stragglers",
-                             args.target_kept, n, len(futs) - n)
-                    for f in futs:
-                        f.cancel()
-                    break
-        partial_f.close()
     else:
         jobs = []
         for i, ch in enumerate(chunks):
@@ -528,23 +418,11 @@ def main() -> int:
             f.write(json.dumps(r) + "\n")
     log.info("wrote %d queries -> %s", len(survivors), QUERIES_PATH)
 
-    if args.method == "cloud":
-        gen_backend = f"gemini:{args.gen_model}"
-    elif args.method == "llm":
-        gen_backend = f"ollama:{OLLAMA_MODEL}"
-    else:
-        gen_backend = "extractive"
-    # Rough token accounting for cloud (chars/4 heuristic; in+out summed over records).
-    approx_in_chars = sum(r.get("approx_prompt_chars", 0) for r in records)
-    approx_out_chars = sum(r.get("approx_out_chars", 0) for r in records)
+    gen_backend = f"ollama:{OLLAMA_MODEL}" if args.method == "llm" else "extractive"
     summary = {
         "namespace": NAMESPACE,
         "method": args.method,
         "gen_backend": gen_backend,
-        "gen_model": args.gen_model if args.method == "cloud" else None,
-        "cloud_api_used": args.method == "cloud",
-        "approx_input_tokens": approx_in_chars // 4 if args.method == "cloud" else 0,
-        "approx_output_tokens": approx_out_chars // 4 if args.method == "cloud" else 0,
         "raw_generated": len(records),
         "dedup": stats,
         "kept": len(survivors),

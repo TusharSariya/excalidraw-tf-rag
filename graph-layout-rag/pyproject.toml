@@ -9,13 +9,11 @@ dependencies = [
   "click>=8.1.0",
   "httpx>=0.27.0",
   "lancedb>=0.15.0",
-  "openai>=1.40.0",
   "patchright>=1.60.1",
   "pydantic>=2.7.0",
   "pymupdf>=1.24.0",
-  "rag-common[gemini]",
+  "rag-common",
   "tantivy>=0.22.0",
-  "tiktoken>=0.7.0",
   "torch>=2.0.0,<2.6",
 ]
 
@@ -34,7 +32,6 @@ rag-common = { path = "../rag-common", editable = true }
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0.0"]
-mlx = ["rag-common[mlx]"]
 docling = ["docling>=2.0.0"]
 retrieval-experiments = ["qdrant-client[fastembed]>=1.14.0"]
 retrieval-experiments-gpu = [

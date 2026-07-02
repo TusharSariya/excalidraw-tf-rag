@@ -62,7 +62,7 @@ def test_enrich_rows_classifies_existing_missing_and_metadata(tmp_path: Path, mo
     monkeypatch.setattr(
         fr,
         "reproduce_extractors",
-        lambda item, include_gemini=False: [
+        lambda item: [
             fr.BackendReproduction(
                 backend="pymupdf", available=True, pages=1, nonempty_pages=1, text_chars=10
             )
@@ -106,26 +106,36 @@ def test_enrich_rows_classifies_existing_missing_and_metadata(tmp_path: Path, mo
     assert rows[3]["classification"] == "missing_pdf"
 
 
-def test_reproduce_extractors_classifies_success_open_error_and_empty(monkeypatch):
+def test_reproduce_extractors_classifies_success_and_open_error(monkeypatch):
     item = _item("doc")
 
     def fake_extract(item, clean=True, backend="pymupdf"):
         if backend == "pymupdf":
             return PdfExtractResult(pages=[(1, "body text")])
-        if backend == "docling":
-            return PdfExtractResult(open_error="bad pdf")
-        return PdfExtractResult(pages=[(1, "   ")], failed_pages=[1])
+        return PdfExtractResult(open_error="bad pdf")
 
     monkeypatch.setattr(fr, "extract_pdf_result", fake_extract)
 
-    rows = fr.reproduce_extractors(item, backends=("pymupdf", "docling", "gemini"))
+    rows = fr.reproduce_extractors(item, backends=("pymupdf", "docling"))
 
     assert rows[0].extracts_text is True
     assert rows[0].text_quality["nonempty"] is True
     assert rows[1].open_error == "bad pdf"
     assert rows[1].extracts_text is False
-    assert rows[2].failed_pages == 1
-    assert rows[2].extracts_text is False
+
+
+def test_reproduce_extractors_classifies_empty_pages(monkeypatch):
+    item = _item("doc")
+
+    def fake_extract(item, clean=True, backend="pymupdf"):
+        return PdfExtractResult(pages=[(1, "   ")], failed_pages=[1])
+
+    monkeypatch.setattr(fr, "extract_pdf_result", fake_extract)
+
+    rows = fr.reproduce_extractors(item, backends=("pymupdf",))
+
+    assert rows[0].failed_pages == 1
+    assert rows[0].extracts_text is False
 
 
 def test_classify_image_or_corrupt_when_local_backends_empty():

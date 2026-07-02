@@ -5,8 +5,7 @@ from __future__ import annotations
 import os
 
 from rag_common.config import EmbedConfig, EmbedStats
-from rag_common.embed import embed_query, embed_texts, finalize_embed_config
-from rag_common.openai_embed import resolve_workers
+from rag_common.embed import embed_query, embed_texts, finalize_embed_config, resolve_workers
 from rag_common.profiles import list_profile_names, load_profiles
 from rag_common.resolve import resolve_embed_config
 

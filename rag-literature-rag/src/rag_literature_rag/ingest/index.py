@@ -9,12 +9,10 @@ from typing import Any, Literal
 
 import lancedb
 from rag_common.config import embed_cost_per_million
-from rag_common.gemini_embed import is_gemini_embedding_2
 
 from rag_literature_rag.ingest import bm25, embed_cache
 from rag_literature_rag.ingest.chunk import (
     TextChunk,
-    embed_body_text,
     embed_input_text,
     enrich_texts_for_section,
     is_section_enriched_profile,
@@ -225,12 +223,8 @@ def update_ingest_metadata(
 
 
 def _index_texts(chunks: list[TextChunk], cfg: EmbedConfig) -> tuple[list[str], list[str] | None]:
-    if is_gemini_embedding_2(cfg.model):
-        texts = [embed_body_text(c) for c in chunks]
-        titles: list[str] | None = [c.title for c in chunks]
-    else:
-        texts = [embed_input_text(c) for c in chunks]
-        titles = None
+    texts = [embed_input_text(c) for c in chunks]
+    titles: list[str] | None = None
     if is_section_enriched_profile(cfg.profile):
         texts = enrich_texts_for_section(chunks, texts)
     from rag_literature_rag.ingest.contextual import (
@@ -292,7 +286,7 @@ def _embed_index_texts(
         stats=stats,
         workers=workers,
         prefix=ENV_PREFIX,
-        allow_fallback=not is_gemini_embedding_2(cfg.model),
+        allow_fallback=True,
         probe=False,
         titles=missing_titles,
     )

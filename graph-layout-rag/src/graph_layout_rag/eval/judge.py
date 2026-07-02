@@ -31,10 +31,8 @@ from graph_layout_rag.paths import DATA_DIR
 
 log = logging.getLogger("graph_layout_rag.eval.judge")
 
-JUDGE_MODEL_ENV = "GRAPH_RAG_JUDGE_LLM_MODEL"
-DEFAULT_JUDGE_MODEL = "gemini-3.1-pro-preview"
 # Cache path is env-overridable so concurrent judge runs on different backends
-# (e.g. Mac MLX ‖ desktop CUDA, validated in parallel) write SEPARATE files and
+# (e.g. Mac ‖ desktop CUDA, validated in parallel) write SEPARATE files and
 # never lost-update each other — `_save_cache` rewrites the whole file, so two
 # writers sharing one path would clobber. Grades are model-keyed regardless.
 CACHE_PATH = Path(os.getenv("GRAPH_RAG_JUDGE_CACHE", str(DATA_DIR / "eval" / "judge_cache.json")))
@@ -121,13 +119,10 @@ def judge_model() -> str:
     """Resolve the judge model name for the *active* LLM backend.
 
     The judge transport dispatches through ``rag_common.local_llm`` and honors
-    ``RAG_LLM_BACKEND`` (``gemini`` default, or ``ollama``):
-
-    * ``gemini``  → ``GRAPH_RAG_JUDGE_LLM_MODEL`` (the validated cloud floor).
-    * ``ollama``  → ``RAG_OLLAMA_MODEL`` (a local model, runtime choice).
+    ``RAG_LLM_BACKEND`` (``ollama`` default, or ``opencode``/``gateway``).
 
     Returning the backend-correct name is what keeps the model-aware judge cache
-    key (``{model}:{case_id}:{doc_id}``) from colliding cloud and local grades.
+    key (``{model}:{case_id}:{doc_id}``) from colliding grades across backends.
 
     MODEL-SELECTION CONSTRAINT (rigor, not enforced in code — a runtime choice):
     the judge model MUST be **non-Qwen** — the embedder under test in this
@@ -142,16 +137,11 @@ def judge_model() -> str:
     if http_backend == "deepseek":
         return os.getenv("GRAPH_RAG_DEEPSEEK_JUDGE_MODEL", "deepseek-chat")
 
-    from rag_common.local_llm import llm_backend, mlx_model, ollama_model, opencode_model
+    from rag_common.local_llm import llm_backend, ollama_model, opencode_model
 
-    backend = llm_backend()
-    if backend == "ollama":
-        return ollama_model()
-    if backend == "mlx":
-        return mlx_model()
-    if backend == "opencode":
+    if llm_backend() == "opencode":
         return opencode_model()
-    return os.getenv(JUDGE_MODEL_ENV, DEFAULT_JUDGE_MODEL).strip() or DEFAULT_JUDGE_MODEL
+    return ollama_model()
 
 
 def _load_cache() -> dict[str, Any]:
@@ -220,7 +210,7 @@ def _parse_grade(text: str) -> tuple[int, str]:
 # credits. Opt in via GRAPH_RAG_JUDGE_BACKEND:
 #   "opencode" -> opencode-go only ; "deepseek" -> DeepSeek API only ;
 #   "auto"     -> opencode-go, fail over to DeepSeek on credit exhaustion.
-# Unset keeps the legacy local_llm/gemini dispatch below untouched.
+# Unset keeps the local_llm dispatch below untouched.
 _OPENCODE_URL = "https://opencode.ai/zen/go/v1/chat/completions"
 _OPENCODE_UA = "opencode/1.17.11"  # non-empty UA required; Cloudflare 403s urllib's default
 _DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
@@ -359,41 +349,18 @@ def _judge_one_http(query: str, doc: dict[str, Any], model: str, backend: str) -
 def _judge_one(query: str, doc: dict[str, Any], model: str) -> tuple[int, str]:
     """Grade one (query, doc) pair via the active ``local_llm`` backend.
 
-    Transport only — the prompt and the 0-3 parsing are backend-identical. The
-    Gemini path is preserved exactly (validated floor / fallback): a direct
-    deterministic ``temperature=0.0`` client call. The Ollama path dispatches
-    through ``rag_common.local_llm.generate_text`` at ``temperature=0.0``.
+    Transport only — the prompt and the 0-3 parsing are backend-identical.
+    Dispatches through ``rag_common.local_llm.generate_text`` at ``temperature=0.0``.
     """
     http_backend = _http_judge_backend()
     if http_backend:
         return _judge_one_http(query, doc, model, http_backend)
 
-    from rag_common.local_llm import llm_backend
+    from rag_common.local_llm import generate_text
 
     prompt = build_judge_prompt(query, doc)
-
-    if llm_backend() in ("ollama", "mlx", "opencode"):
-        from rag_common.local_llm import generate_text
-
-        text = generate_text(prompt, model=model, temperature=0.0, max_tokens=128)
-        return _parse_grade(text or "")
-
-    # Gemini (default): keep the validated deterministic client call verbatim.
-    from rag_common.gemini_embed import _client, llm_location
-
-    client = _client(location=llm_location())
-    config: Any = None
-    try:  # deterministic if the genai types are importable
-        from google.genai import types
-
-        config = types.GenerateContentConfig(temperature=0.0)
-    except Exception:  # noqa: BLE001
-        config = None
-    if config is not None:
-        response = client.models.generate_content(model=model, contents=prompt, config=config)
-    else:
-        response = client.models.generate_content(model=model, contents=prompt)
-    return _parse_grade(getattr(response, "text", None) or "")
+    text = generate_text(prompt, model=model, temperature=0.0, max_tokens=128)
+    return _parse_grade(text or "")
 
 
 def _judge_workers() -> int:

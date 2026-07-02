@@ -8,7 +8,7 @@
 # instead of re-uploading). See backup-manifest.toml for the key layout.
 #
 #   ./backup_to_s3.sh                      # every tool, everything present locally
-#   ./backup_to_s3.sh --tool repo-rag      # one tool
+#   ./backup_to_s3.sh --tool rag-literature-rag      # one tool
 #   ./backup_to_s3.sh --only mlx           # only artifacts whose key matches a substring
 #   ./backup_to_s3.sh --dry-run            # print the plan, touch nothing
 #   ./backup_to_s3.sh --no-dedup           # re-upload even unchanged artifacts

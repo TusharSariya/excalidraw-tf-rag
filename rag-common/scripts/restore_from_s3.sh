@@ -7,12 +7,12 @@
 # before --as-of. Each tar object carries its data/-relative path in metadata, so a
 # wiped machine lands files in the right place. Corpus is synced as-is.
 #
-#   ./restore_from_s3.sh repo-rag                      # latest run of everything
-#   ./restore_from_s3.sh repo-rag mlx-qwen4b           # only artifacts matching a substring
+#   ./restore_from_s3.sh rag-literature-rag                      # latest run of everything
+#   ./restore_from_s3.sh rag-literature-rag mlx-qwen4b           # only artifacts matching a substring
 #   ./restore_from_s3.sh graph-layout-rag corpus       # just the corpus
-#   ./restore_from_s3.sh repo-rag --as-of 20260630T0400Z   # latest run at/before a time
-#   ./restore_from_s3.sh repo-rag --dry-run            # list, touch nothing
-#   ./restore_from_s3.sh repo-rag mlx-qwen4b --force   # rm target dir before extract
+#   ./restore_from_s3.sh rag-literature-rag --as-of 20260630T0400Z   # latest run at/before a time
+#   ./restore_from_s3.sh rag-literature-rag --dry-run            # list, touch nothing
+#   ./restore_from_s3.sh rag-literature-rag mlx-qwen4b --force   # rm target dir before extract
 set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 export LC_ALL=C   # byte-wise string compare so run-id ordering is deterministic
