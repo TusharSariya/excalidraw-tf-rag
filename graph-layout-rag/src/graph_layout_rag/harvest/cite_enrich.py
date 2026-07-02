@@ -1,22 +1,27 @@
 """Citation-graph enrichment: persist the edges the harvest already touches.
 
-For every corpus paper with a DOI, fetch its OpenAlex record (references out, citations
-in, citation count, authors) and write nodes + edges into `citations.sqlite`. Optionally
-overlay Semantic Scholar's `isInfluential` flag on the edges. Idempotent: re-running skips
-papers already enriched unless ``force`` is set.
+For every corpus paper, resolve its OpenAlex record — by DOI first, falling back to an
+arXiv-id lookup and then a conservative normalized-title search when there's no DOI or
+the DOI lookup 404s (`_resolve_work`, backed by `rag_common.citation_matching`) — and
+write nodes + edges into `citations.sqlite`. Optionally overlay Semantic Scholar's
+`isInfluential` flag on the edges. Idempotent: re-running skips papers already enriched
+(by doc_id) unless ``force`` is set.
 
-Reuses the existing OpenAlex client (`harvest/openalex._fetch_by_doi`), the throttled
-thread pool (`harvest/parallel.parallel_map`), and the manifest loader. SQLite writes run
-on the main thread; only the network fetches are parallel.
+Reuses the existing OpenAlex client (`harvest/openalex._fetch_by_doi/_fetch_by_arxiv/
+_search_by_title`), the throttled thread pool (`harvest/parallel.parallel_map`), and the
+manifest loader. SQLite writes run on the main thread; only the network fetches are
+parallel.
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
 
+from rag_common.citation_matching import best_title_match, extract_arxiv_id
+
 from graph_layout_rag import citation_store as cs
 from graph_layout_rag.harvest.log import get_logger
-from graph_layout_rag.harvest.openalex import _fetch_by_doi
+from graph_layout_rag.harvest.openalex import _fetch_by_arxiv, _fetch_by_doi, _search_by_title
 from graph_layout_rag.harvest.parallel import parallel_map, streaming_parallel_map
 from graph_layout_rag.harvest.providers import (
     SEMANTIC_SCHOLAR,
@@ -55,16 +60,47 @@ def _citer_node_id(
     return None
 
 
-def _fetch_work_by_doi(doi: str) -> dict | None:
-    return _fetch_by_doi(doi)
-
-
 def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _resolve_work(spec: dict) -> tuple[dict | None, str | None]:
+    """Resolve a manifest spec to an OpenAlex work, trying DOI, then arXiv id, then a
+    conservative normalized-title search, in that order (cheapest/most-precise first).
+
+    Returns ``(work, match_method)``; ``match_method`` is one of "doi"/"arxiv"/"title"
+    (for logging/debugging) or ``None`` when nothing resolved.
+    """
+    doi = spec.get("doi")
+    if doi:
+        work = _fetch_by_doi(doi)
+        if work:
+            return work, "doi"
+
+    arxiv_id = spec.get("arxiv_id")
+    if arxiv_id:
+        work = _fetch_by_arxiv(arxiv_id)
+        if work:
+            return work, "arxiv"
+
+    title = spec.get("title")
+    if title:
+        candidates = _search_by_title(title)
+        matched = best_title_match(
+            candidates,
+            target_title=title,
+            target_year=spec.get("year"),
+            title_key="display_name",
+            year_key="publication_year",
+        )
+        if matched:
+            return matched, "title"
+
+    return None, None
+
+
 def _fetch_record(spec: dict) -> dict | None:
-    work = _fetch_work_by_doi(spec["doi"])
+    work, match_method = _resolve_work(spec)
     if not work:
         return None
     oa_id = cs.normalize_oa_id(work.get("id"))
@@ -73,15 +109,20 @@ def _fetch_record(spec: dict) -> dict | None:
     refs = [r for r in (cs.normalize_oa_id(x) for x in work.get("referenced_works") or []) if r]
     # OpenAlex gives us outgoing references + counts for free. Incoming citations (the other
     # half of co-citation) come from Semantic Scholar in `_s2_incoming_pass`, because
-    # OpenAlex meters its `cites:` filter ($0 budget for anonymous callers).
+    # OpenAlex meters its `cites:` filter ($0 budget for anonymous callers). Note: incoming
+    # only fires for DOI-keyed papers (S2's citations endpoint is DOI-keyed) — arXiv/title
+    # matches without a DOI get outgoing references + coupling/PPR but not the S2 backfill.
+    doi = cs.normalize_doi(work.get("doi")) or spec.get("doi")
     return {
         "doc_id": spec["doc_id"],
-        "doi": spec["doi"],
+        "doi": doi,
+        "arxiv_id": spec.get("arxiv_id"),
         "oa_id": oa_id,
         "title": work.get("display_name") or spec.get("title"),
         "year": work.get("publication_year") or spec.get("year"),
         "cbc": work.get("cited_by_count") or 0,
         "refs": refs,
+        "match_method": match_method,
     }
 
 
@@ -98,7 +139,10 @@ def _write_record(db, rec: dict, ts: str) -> None:
         enriched_at=ts,
     )
     cs.upsert_alias(db, provider="openalex", external_id=rec["oa_id"], oa_id=rec["oa_id"])
-    cs.upsert_alias(db, provider="doi", external_id=rec["doi"], oa_id=rec["oa_id"])
+    if rec["doi"]:
+        cs.upsert_alias(db, provider="doi", external_id=rec["doi"], oa_id=rec["oa_id"])
+    if rec.get("arxiv_id"):
+        cs.upsert_alias(db, provider="arxiv", external_id=rec["arxiv_id"], oa_id=rec["oa_id"])
     # Outgoing references: minimal external nodes + edges (corpus refs already keyed by oa_id).
     for ref in rec["refs"]:
         cs.upsert_paper(db, oa_id=ref)
@@ -289,7 +333,12 @@ def enrich_citations(
     log = get_logger()
     manifest = load_manifest()
 
-    # Corpus papers with a usable DOI (dedup by DOI; first doc_id wins).
+    # Every corpus item gets a spec now (DOI-only used to skip anything without one — the
+    # ~77% of the corpus that left unkeyed, per docs/research-tool-decisions-log-2026-07.md
+    # #27). `_fetch_record`/`_resolve_work` tries DOI, then arXiv id, then a conservative
+    # title match, so items with no DOI (or a DOI that 404s against OpenAlex) still get a
+    # shot. `doi_to_doc` stays DOI-only (dedup by DOI; first doc_id wins) — it's only used
+    # below to scope the DOI-keyed S2 passes.
     doi_to_doc: dict[str, str] = {}
     specs: list[dict] = []
     db = cs.connect()
@@ -303,24 +352,35 @@ def enrich_citations(
             ak = cs.author_key(name)
             if ak:
                 author_pairs.append((ak, item.id))
-        if not doi or doi in doi_to_doc:
-            continue
-        doi_to_doc[doi] = item.id
-        specs.append({"doi": doi, "doc_id": item.id, "title": item.title, "year": item.year})
+        if doi and doi not in doi_to_doc:
+            doi_to_doc[doi] = item.id
+        arxiv_id = extract_arxiv_id(doi=item.doi, external_ids=item.externalIds, url=item.url)
+        specs.append(
+            {
+                "doi": doi,
+                "arxiv_id": arxiv_id,
+                "doc_id": item.id,
+                "title": item.title,
+                "year": item.year,
+            }
+        )
     cs.add_authorships(db, author_pairs)
     db.commit()
 
     all_specs = list(specs)  # incoming pass runs over every corpus DOI (own resumption marker)
     if not force:
+        # doc_id-keyed (not DOI-keyed) so arXiv/title-matched items without a DOI also get
+        # skipped on re-runs once successfully enriched.
         done = {
             r[0]
             for r in db.execute(
-                "SELECT doi FROM papers WHERE in_corpus=1 AND enriched_at IS NOT NULL AND doi IS NOT NULL"
+                "SELECT doc_id FROM papers WHERE in_corpus=1 AND enriched_at IS NOT NULL "
+                "AND doc_id IS NOT NULL"
             )
         }
-        specs = [s for s in specs if s["doi"] not in done]
+        specs = [s for s in specs if s["doc_id"] not in done]
 
-    log.info("cite enrich: %d corpus DOIs to fetch (workers=%d)", len(specs), workers)
+    log.info("cite enrich: %d corpus items to resolve (workers=%d)", len(specs), workers)
 
     records = parallel_map(
         _fetch_record,

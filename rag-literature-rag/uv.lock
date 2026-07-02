@@ -2515,11 +2515,13 @@ name = "rag-common"
 version = "0.1.0"
 source = { editable = "../rag-common" }
 dependencies = [
+    { name = "accelerate" },
     { name = "sentence-transformers" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "accelerate", specifier = ">=0.30.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "sentence-transformers", specifier = ">=3.0.0" },
 ]

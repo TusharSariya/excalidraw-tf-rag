@@ -135,6 +135,30 @@ def _local_batch_size(device: str | None) -> int:
     return LOCAL_BATCH_SIZE
 
 
+def _preload_nvjitlink() -> None:
+    """Preload libnvJitLink from the venv's vendored NVIDIA wheels for bitsandbytes.
+
+    torch cu13 wheels vendor CUDA runtime libs under ``site-packages/nvidia/*/lib`` and
+    load their own copies via rpath, but bitsandbytes dlopens ``libnvJitLink.so.13`` by
+    soname — which fails unless the directory is on ``LD_LIBRARY_PATH``. Loading it here
+    with RTLD_GLOBAL (before the bnb native lib loads) satisfies that lookup without
+    requiring every caller to export the path. Best-effort: silently a no-op when the
+    wheel layout differs (non-CUDA hosts, MPS, system CUDA installs).
+    """
+    try:
+        import ctypes
+        from pathlib import Path
+
+        import nvidia
+
+        for base in nvidia.__path__:
+            for lib in sorted(Path(base).glob("*/lib/libnvJitLink.so*")):
+                ctypes.CDLL(str(lib), mode=ctypes.RTLD_GLOBAL)
+                return
+    except Exception:  # pragma: no cover - purely opportunistic
+        pass
+
+
 def _bnb_4bit_model_kwargs() -> dict | None:
     try:
         import torch
@@ -142,6 +166,7 @@ def _bnb_4bit_model_kwargs() -> dict | None:
     except ImportError as exc:
         log.warning("bitsandbytes 4-bit requested but import failed (%s); using FP16", exc)
         return None
+    _preload_nvjitlink()
 
     return {
         "quantization_config": BitsAndBytesConfig(

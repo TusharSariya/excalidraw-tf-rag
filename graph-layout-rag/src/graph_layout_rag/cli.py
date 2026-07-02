@@ -143,11 +143,16 @@ def cite_group() -> None:
 def cite_enrich_cmd(
     force: bool, workers: int, no_s2: bool, incoming: bool, incoming_cap: int, incoming_workers: int
 ) -> None:
-    """Build/refresh data/citations.sqlite from the manifest DOIs.
+    """Build/refresh data/citations.sqlite from the manifest.
 
-    OpenAlex supplies outgoing references + counts; Semantic Scholar supplies incoming
-    citations (the half OpenAlex meters) so co-citation and the backward PPR signal work.
-    The incoming pass resumes on its own marker — safe to re-run without --force.
+    Each item is resolved by DOI first, falling back to an arXiv-id lookup and then a
+    conservative normalized-title match when there's no DOI or the DOI lookup 404s — see
+    `harvest/cite_enrich._resolve_work`. This keying upgrade is automatic: no separate
+    flag needed, and it's safe to re-run without --force (resumption is doc_id-keyed, so
+    it also covers items a previous run never resolved). OpenAlex supplies outgoing
+    references + counts; Semantic Scholar supplies incoming citations (the half OpenAlex
+    meters) so co-citation and the backward PPR signal work. The incoming pass resumes on
+    its own marker — safe to re-run without --force.
     """
     from graph_layout_rag.harvest.cite_enrich import enrich_citations
 
@@ -173,6 +178,52 @@ def cite_stats_cmd() -> None:
     db = cs.connect()
     click.echo(json.dumps(cs.counts(db), indent=2))
     db.close()
+
+
+@cite_group.command("coverage")
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+def cite_coverage_cmd(as_json: bool) -> None:
+    """Audit how much of the corpus is actually keyed into the citation graph.
+
+    The re-runnable E0 audit artifact: % of corpus docs with a keyed doc_id, % of edges
+    with both endpoints keyed (the "citation signal is dense enough to use" check), a
+    keyed-by-decade histogram (systematic-missingness check), and any duplicate doc_id
+    keyings (a keying bug, not an expected state).
+    """
+    from rag_common.citation_coverage import compute_coverage
+
+    from graph_layout_rag import citation_store as cs
+    from graph_layout_rag.manifest import load_manifest
+
+    if not cs.CITATIONS_DB_PATH.exists():
+        click.echo("No citation store yet. Run: graph-layout-rag cite enrich", err=True)
+        sys.exit(1)
+
+    manifest = load_manifest()
+    db = cs.connect()
+    stats = compute_coverage(db, total_corpus_docs=len(manifest.items))
+    db.close()
+
+    if as_json:
+        click.echo(json.dumps(stats.to_dict(), indent=2))
+        return
+
+    click.echo(
+        f"Corpus docs keyed: {stats.keyed_docs}/{stats.total_corpus_docs} ({stats.keyed_pct:.1f}%)"
+    )
+    click.echo(
+        f"Edges with both endpoints keyed: {stats.both_endpoint_keyed_edges}/"
+        f"{stats.total_edges} ({stats.both_endpoint_keyed_pct:.1f}%)"
+    )
+    click.echo("Keyed docs by decade:")
+    for decade, n in stats.keyed_by_decade.items():
+        click.echo(f"   {decade}: {n}")
+    if stats.duplicate_doc_ids:
+        click.echo(f"Duplicate doc_id keyings ({len(stats.duplicate_doc_ids)}):")
+        for doc_id, n in stats.duplicate_doc_ids.items():
+            click.echo(f"   {doc_id}: {n} oa_ids")
+    else:
+        click.echo("Duplicate doc_id keyings: none")
 
 
 @cite_group.command("neighbors")
