@@ -265,3 +265,32 @@ command, not to reconciling it with the plan's headline figure.
   `gemini-2-structure-v1` directory left over from the removed Gemini provider), so the
   ambiguous-error path is what actually fires there today, not the silent single-fallback —
   still strictly better than the prior unconditional error with no listed alternatives.
+
+## Next steps (state as of 2026-07-02 end-of-session)
+
+Branch `research-tool-e0-e1`, 8 commits, push blocked on GitHub token scoping (fine-grained
+PAT is personal-scoped; needs Resource owner = TusharSariyaOrg or a classic `repo`-scope
+token). In priority order:
+
+1. **Push + PR to master** once the token can write to the org repo.
+2. **After midnight UTC (OpenAlex quota reset):** one `cite enrich` pass per tool — both API
+   keys now round-robin (`OPENALEX_API_KEYS` in each `.env`), so headroom is doubled. Then
+   `cite coverage` (target ≥80% docs; today 75.9% GLR / 71.3% RLR) and, more importantly,
+   check the **edge**-keying rate — 3.4%/5.2% both-endpoints-keyed is the binding constraint
+   on the citation signal.
+3. **Re-run `eval map-gate --alpha-sweep` on both tools** after the re-key. Two live
+   hypotheses: (a) fuller edge keying differentiates hybrid from text-only; (b) GLR's
+   α=0.75 > α=0.5 paired win (CI excluding 0) replicates — if so, bump GLR's default alpha.
+4. **User labels the judge-calibration sheets** (`data/eval/judge_calibration/…` in each
+   tool), then `eval judge-calibrate --score <sheet>`; κ ≥ 0.7 unlocks judge-gated metrics
+   (needed for lineage spot-eval at scale and everything in E2).
+5. **E2 go/no-go** (cluster summaries + `synthesize`): decision input = post-rekey gate
+   verdicts. Note the E1 map layer's *commands* are shipped and useful regardless of the
+   TIE — the gate governs whether hybrid clustering is promoted as the default map, not
+   whether `map` exists. If TIE persists, ship `map clusters` with `--alpha` documented and
+   move on to E2 with text-only clusters as the summary substrate (they tie hybrid at far
+   lower dependency on citation coverage).
+6. Parked: `cuda-qwen4b-contextual-v1` benchmark (TODOS.md); RLR `.env` default profile still
+   points at the index-less `contextual-v1` (footgun now errors helpfully; consider rebuilding
+   that index or changing the default); stale `gemini-2-structure-v1` index dirs could be
+   deleted.

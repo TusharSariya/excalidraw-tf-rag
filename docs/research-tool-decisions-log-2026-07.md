@@ -85,3 +85,40 @@ Chronological record of every decision behind the plan in
 29. **Execution style (user): sonnet subagents run the plan** to keep the orchestrator's context
     clean; sequential dispatch (shared files: cli.py, rag-common/pyproject.toml), citation
     enrichment runs in background throughout.
+
+## Phase 5 — Execution decisions (2026-07-02, during the run)
+
+30. **Chain restructure for speed (user asked "can it be done faster?")** — killed the 45-min
+    OpenAlex cooldown, ran re-keys at `--workers 4` (~4 rps, under the 10 rps limit) and
+    chained the final map-gates directly on. Verdict on the gamble: GLR's resolution pass ran
+    clean until the *key's own daily quota* died — throttling was never about the cooldown.
+31. **OpenAlex key rotation = round-robin, not just failover** (user request). GLR's
+    first-available selection replaced with round-robin over non-depleted keys; RLR ported
+    from single-key to the full multi-key policy. `OPENALEX_API_KEYS` comma list in each
+    gitignored `.env`; both user keys (hotmail + gmail) configured. Commit `dc457cc`.
+32. **Keying stopped at 75.9% (GLR) / 71.3% (RLR), not the 80% target** — both keys' OpenAlex
+    daily quotas exhausted (429 storms with 0 successes), plus the client-side $1/run spend
+    cap drains on retries. Decision: accept today's coverage, re-run after midnight UTC.
+    The doc-level residual matters less than the **edge-keying gap** (3.4%/5.2%
+    both-endpoints-keyed), which caps the citation-coupling signal itself.
+33. **Map-gate profile footgun fixed** — RLR's gate initially crashed because `.env` defaults
+    to index-less `contextual-v1`. Now: silent-with-warning fallback when exactly one other
+    index exists, explicit listing error when several do.
+34. **Gate methodology superseded (the big one).** The first final verdicts (BLOCK on both
+    tools, citation-only "winning") were a granularity artifact — citation-only fragmented
+    into 1,762 micro-clusters on 5.8k docs and micro-clusters game concentration even against
+    size-matched nulls (exactly the codex-review warning, in a form the D10 hardening hadn't
+    fully covered). Fix: per-arm Leiden resolution sweep to a matched target K, coverage /
+    singleton-share diagnostics, common-support scoring, paired bootstrap-CI + sign-test
+    verdicts (PROMOTE/TIE/BLOCK). Commit `bb2dccd`. **Hardened verdicts: TIE on both tools** —
+    the earlier BLOCKs were measurement, not reality.
+35. **Live signal worth chasing:** GLR α=0.75 (citation-leaning fusion) beats α=0.5 with
+    paired CI excluding 0; RLR hybrid clearly beats citation-only but ties text-only.
+    Interpretation: citation signal is real but starved by edge keying (see 32).
+36. **E1 disposition:** the `map` command family ships regardless of the gate — the gate
+    governs whether *hybrid clustering* becomes the default map substrate, not whether the
+    tools exist. E2's substrate defaults to text-only clusters if the post-rekey gate still
+    ties.
+37. **Push blocked at session end** — user's new fine-grained PAT is personal-scoped and
+    cannot see `TusharSariyaOrg/excalidraw-tf-rag`; needs org resource-owner or classic
+    `repo`-scope token. PR deferred until then.
