@@ -46,6 +46,50 @@ def test_bm25_missing_index_returns_empty(tmp_path: Path):
     assert bm25.search_bm25("anything", index_dir=tmp_path / "nope", limit=5) == []
 
 
+def test_bm25_search_survives_schema_drift(tmp_path: Path, monkeypatch):
+    """Search must read the persisted schema, not impose the current write schema.
+
+    Regression for the silent-hybrid-collapse bug: an index built before a field
+    was added to ``_build_schema`` made ``_open_or_create_index`` raise
+    'schema does not match', which ``search_bm25`` swallowed → BM25 returned []
+    and every hybrid query degraded to dense-only. ``_open_for_search`` uses
+    ``Index.open`` (persisted schema), so search keeps working until a rebuild.
+    """
+    import tantivy
+
+    index_dir = tmp_path / "bm25"
+    chunks = [_chunk("a", 0, "network simplex rank assignment in layered drawing")]
+    bm25.upsert_chunks(chunks, [chunks[0].text], index_dir=index_dir, rebuild=True)
+
+    # Simulate schema drift: the code now builds a schema with an EXTRA field the
+    # on-disk index never had. The old open path would raise here.
+    original = bm25._build_schema()
+
+    def _drifted_schema():
+        sb = tantivy.SchemaBuilder()
+        # Rebuild every field the real schema has, then add a new one.
+        sb.add_text_field("id", stored=True)
+        sb.add_text_field("doc_id", stored=True)
+        sb.add_text_field("title", stored=True)
+        sb.add_text_field("text", stored=True)
+        sb.add_text_field("tags", stored=True)
+        sb.add_text_field("pipeline_categories", stored=True)
+        sb.add_text_field("section_path", stored=True)
+        sb.add_text_field("brand_new_field_added_later", stored=True)  # drift
+        return sb.build()
+
+    monkeypatch.setattr(bm25, "_build_schema", _drifted_schema)
+    # The write-schema open now mismatches on disk...
+    import pytest
+
+    with pytest.raises(ValueError, match="[Ss]chema"):
+        bm25._open_or_create_index(index_dir)
+    # ...but search still works because it opens with the persisted schema.
+    hits = bm25.search_bm25("network simplex", index_dir=index_dir, limit=5)
+    assert hits and hits[0]["id"] == "a:0"
+    assert original is not None  # sanity: real schema builds
+
+
 def test_bm25_special_chars_query_does_not_raise(tmp_path: Path):
     index_dir = tmp_path / "bm25"
     chunks = [_chunk("a", 0, "VPSC separation constraints overlap removal")]

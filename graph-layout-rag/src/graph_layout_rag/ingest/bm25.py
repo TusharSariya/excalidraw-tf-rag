@@ -57,6 +57,25 @@ def _open_or_create_index(index_dir: Path) -> tantivy.Index:
     return tantivy.Index(_build_schema(), path=str(index_dir))
 
 
+def _open_for_search(index_dir: Path) -> tantivy.Index:
+    """Open an existing lexical index using its **persisted** schema.
+
+    Search must not impose the current write schema: when ``_build_schema`` has
+    gained fields since the index was built (e.g. the venue/genre/retracted
+    filter columns), ``tantivy.Index(_build_schema(), path=...)`` raises
+    ``Schema error: ... does not match`` — which ``search_bm25`` used to swallow,
+    silently disabling BM25 and collapsing every hybrid query to dense-only until
+    a full rebuild. ``tantivy.Index.open`` reads whatever schema is on disk; the
+    core ``_QUERY_FIELDS`` (title/text/tags/pipeline_categories/section_path)
+    exist in every schema version, so parsing/searching stays valid. Falls back
+    to the create path only if ``open`` is unavailable (very old tantivy).
+    """
+    opener = getattr(tantivy.Index, "open", None)
+    if opener is not None:
+        return opener(str(index_dir))
+    return tantivy.Index(_build_schema(), path=str(index_dir))
+
+
 def delete_doc_ids(index: tantivy.Index, doc_ids: set[str]) -> None:
     """Delete complete document rows so shorter replacements cannot leave stale tails."""
     if not doc_ids:
@@ -124,10 +143,10 @@ def search_bm25(query: str, *, index_dir: Path, limit: int = 40) -> list[dict[st
     if not index_dir.exists() or not (index_dir / "meta.json").exists():
         return []
     try:
-        index = _open_or_create_index(index_dir)
+        index = _open_for_search(index_dir)
     except Exception:
-        # Older profile indexes may predate fields added to the lexical schema.
-        # Dense retrieval remains valid; the next rebuild creates the new schema.
+        # Truly unreadable index (corrupt / incompatible tantivy format). Dense
+        # retrieval remains valid; a rebuild recreates the lexical index.
         return []
     index.reload()
     searcher = index.searcher()

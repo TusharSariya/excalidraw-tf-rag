@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import pytest
 import tantivy
 from rag_literature_rag.ingest import bm25
 from rag_literature_rag.ingest.chunk import TextChunk
@@ -45,6 +46,34 @@ def test_bm25_roundtrip_and_term_match(tmp_path: Path):
 
 def test_bm25_missing_index_returns_empty(tmp_path: Path):
     assert bm25.search_bm25("anything", index_dir=tmp_path / "nope", limit=5) == []
+
+
+def test_bm25_search_survives_schema_drift(tmp_path: Path, monkeypatch):
+    """Search must read the persisted schema, not impose the current write schema.
+
+    Regression for the silent-hybrid-collapse bug: an index built before a field
+    was added to ``_build_schema`` makes the write-schema open raise 'schema does
+    not match', which ``search_bm25`` swallowed → BM25 returned [] and hybrid
+    degraded to dense-only. ``_open_for_search`` (Index.open) keeps search working.
+    (Sibling of the graph-layout-rag regression.)
+    """
+    index_dir = tmp_path / "bm25"
+    chunks = [_chunk("a", 0, "retrieval augmented generation reranking pipeline")]
+    bm25.upsert_chunks(chunks, [chunks[0].text], index_dir=index_dir, rebuild=True)
+
+    # Simulate drift: the current code builds a schema that no longer matches disk.
+    def _drifted_schema():
+        sb = tantivy.SchemaBuilder()
+        sb.add_text_field("id", stored=True)
+        sb.add_text_field("brand_new_field_added_later", stored=True)
+        return sb.build()
+
+    monkeypatch.setattr(bm25, "_build_schema", _drifted_schema)
+    with pytest.raises(ValueError, match="[Ss]chema"):
+        bm25._open_or_create_index(index_dir)
+    # Search still works because it opens with the persisted schema.
+    hits = bm25.search_bm25("retrieval augmented", index_dir=index_dir, limit=5)
+    assert hits and hits[0]["id"] == "a:0"
 
 
 def test_bm25_special_chars_query_does_not_raise(tmp_path: Path):
