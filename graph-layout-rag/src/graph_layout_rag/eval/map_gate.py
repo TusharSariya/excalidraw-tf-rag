@@ -54,6 +54,20 @@ def _run_dir() -> Path:
     is_flag=True,
     help="Widen survey detection to handbook/monograph/chapter if <5 surveys qualify.",
 )
+@click.option(
+    "--target-k",
+    default=None,
+    type=int,
+    help="Granularity target (>=2-doc cluster count) every arm is resolution-swept to "
+    "match, for a valid cross-arm comparison. Default: the hybrid arm's natural "
+    "(resolution=1.0) >=2-doc cluster count.",
+)
+@click.option(
+    "--alpha-sweep",
+    is_flag=True,
+    help="Also run alpha in {0.25, 0.75} (in addition to 0.0/0.5/1.0) at matched K and "
+    "report the best-scoring interior alpha.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Print JSON payload to stdout.")
 def map_gate_cmd(
     profile: str | None,
@@ -62,12 +76,16 @@ def map_gate_cmd(
     n_random: int,
     seed: int,
     fallback_keywords: bool,
+    target_k: int | None,
+    alpha_sweep: bool,
     as_json: bool,
 ) -> None:
     """E1 promotion gate: hybrid vs text-only vs citation-only clustering, scored by
-    reference-concentration on the corpus's in-corpus surveys."""
+    reference-concentration on the corpus's in-corpus surveys, at a granularity-matched
+    cluster count (see `rag_common.evals.ablation` docstring for why raw cross-arm
+    comparison at mismatched cluster counts is invalid)."""
     from rag_common.evals import survey_gold as sg
-    from rag_common.evals.ablation import render_markdown_report, run_ablation
+    from rag_common.evals.ablation import ALPHA_SWEEP_VARIANTS, render_markdown_report, run_ablation
 
     from graph_layout_rag import citation_store as cs
     from graph_layout_rag.manifest import load_manifest
@@ -109,11 +127,22 @@ def map_gate_cmd(
         click.echo(f"Index for profile {paths.profile!r} has no chunks.", err=True)
         sys.exit(1)
 
-    payload = run_ablation(vectors, adj, gold, top_k=top_k, seed=seed, n_random=n_random)
+    variants = ALPHA_SWEEP_VARIANTS if alpha_sweep else None
+    payload = run_ablation(
+        vectors,
+        adj,
+        gold,
+        top_k=top_k,
+        seed=seed,
+        n_random=n_random,
+        target_k=target_k,
+        **({"variants": variants} if variants is not None else {}),
+    )
     payload["embed_profile"] = paths.profile
     payload["qualifying_survey_count"] = len(surveys)
     payload["min_refs"] = min_refs
     payload["provisional"] = not cs.CITATIONS_DB_PATH.exists()
+    payload["alpha_sweep"] = alpha_sweep
 
     run_dir = _run_dir()
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -131,12 +160,26 @@ def map_gate_cmd(
     )
     if payload["provisional"]:
         click.echo("PROVISIONAL: no citation store yet.")
+    click.echo(f"target_k (granularity-matched >=2-doc clusters): {payload.get('target_k')}")
     for name, arm in payload["arms"].items():
         z = arm.get("mean_z_size_matched")
+        cov = arm.get("coverage")
         click.echo(
-            f"  {name:14s} alpha={arm['alpha']:.2f} clusters={arm['cluster_count']:4d} "
+            f"  {name:14s} alpha={arm['alpha']:.2f} resolution={arm.get('resolution', 1.0):.3f} "
+            f"clusters={arm['cluster_count']:4d} clusters(>=2)={arm.get('cluster_count_min2'):4} "
+            f"coverage={'n/a' if cov is None else f'{cov:.3f}'} "
             f"z(size-matched)={'n/a' if z is None else f'{z:.3f}'}"
         )
+    for name, pc in payload.get("paired", {}).items():
+        md = pc.get("mean_diff")
+        lo, hi = pc.get("ci_low"), pc.get("ci_high")
+        click.echo(
+            f"  paired vs {name:14s} mean_diff={'n/a' if md is None else f'{md:.4f}'} "
+            f"CI={'n/a' if lo is None else f'[{lo:.4f}, {hi:.4f}]'} "
+            f"(n={pc.get('n_surveys')})"
+        )
+    if payload.get("best_alpha"):
+        click.echo(f"Best alpha variant: {payload['best_alpha']}")
     click.echo(f"VERDICT: {payload['gate']['gate']}")
     for reason in payload["gate"]["reasons"]:
         click.echo(f"  - {reason}")

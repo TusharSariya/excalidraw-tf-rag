@@ -9,12 +9,13 @@ enough that this module only ever imports through those, never anything GLR-spec
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from graph_layout_rag.manifest import load_manifest
-from graph_layout_rag.paths import ProfileIndexPaths, profile_index_paths
+from graph_layout_rag.paths import ProfileIndexPaths, list_profile_indexes, profile_index_paths
 from graph_layout_rag.query.citation_rank import CitationGraph, load_graph_cached
 from rag_common.litmap import doc_vectors as dv
 from rag_common.litmap.types import CitationAdjacency
@@ -39,6 +40,47 @@ def litmap_dir(paths: ProfileIndexPaths) -> Path:
     return paths.root / "litmap"
 
 
+def _resolve_paths_with_fallback(profile: str | None) -> ProfileIndexPaths:
+    """`profile_index_paths`, but with the default-profile footgun closed: if `profile`
+    wasn't given explicitly and the *default* profile (env/`.env`-resolved) has no built
+    index, and exactly one *other* profile index is built, warn and use that one instead
+    of raising. An explicit `profile` argument is never silently overridden — a user who
+    names a profile that has no index should still see the current clear error. Ambiguous
+    cases (zero or >1 other built indexes) also fall through to the current error, now
+    listing the built profiles when there's more than one so the fix (`--profile ...`) is
+    obvious."""
+    paths = profile_index_paths(profile)
+    if paths.lance_dir.exists():
+        return paths
+    if profile is not None:
+        raise FileNotFoundError(
+            f"No index for profile {paths.profile!r} at {paths.lance_dir}. "
+            f"Run: graph-layout-rag ingest --profile {paths.profile}"
+        )
+
+    built = [p for p in list_profile_indexes() if p.lance_dir.exists()]
+    if len(built) == 1:
+        fallback = built[0]
+        print(
+            f"warning: default profile {paths.profile!r} has no index at {paths.lance_dir}; "
+            f"falling back to the only built profile index, {fallback.profile!r} "
+            f"(pass --profile to silence this).",
+            file=sys.stderr,
+        )
+        return fallback
+    if len(built) > 1:
+        names = ", ".join(repr(p.profile) for p in built)
+        raise FileNotFoundError(
+            f"No index for default profile {paths.profile!r} at {paths.lance_dir}, and "
+            f"{len(built)} other profile indexes are built ({names}) — ambiguous, pass "
+            f"--profile to pick one."
+        )
+    raise FileNotFoundError(
+        f"No index for profile {paths.profile!r} at {paths.lance_dir}. "
+        f"Run: graph-layout-rag ingest --profile {paths.profile}"
+    )
+
+
 def load_or_build_doc_vectors(
     profile: str | None = None,
     *,
@@ -49,14 +91,11 @@ def load_or_build_doc_vectors(
     champion LanceDB chunk index if missing or stale (profile/index-fingerprint mismatch).
 
     Raises `FileNotFoundError` (caller renders the "no index" message) if the profile has
-    no LanceDB index at all — mirrors the existing error style used by `embed indexes`.
+    no LanceDB index at all, *and* no unambiguous fallback exists — see
+    `_resolve_paths_with_fallback`. Mirrors the existing error style used by `embed
+    indexes`.
     """
-    paths = profile_index_paths(profile)
-    if not paths.lance_dir.exists():
-        raise FileNotFoundError(
-            f"No index for profile {paths.profile!r} at {paths.lance_dir}. "
-            f"Run: graph-layout-rag ingest --profile {paths.profile}"
-        )
+    paths = _resolve_paths_with_fallback(profile)
     fingerprint = _index_fingerprint(paths.lance_dir)
     out_dir = litmap_dir(paths)
     if not rebuild:

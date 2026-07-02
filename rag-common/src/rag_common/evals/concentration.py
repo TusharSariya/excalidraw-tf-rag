@@ -213,6 +213,66 @@ class ConcentrationReport:
         }
 
 
+@dataclass
+class CoverageStats:
+    """Granularity/pathology diagnostics for one partition (D-hardening: the citation-only
+    micro-cluster pathology — a sparse citation graph fragments unkeyed docs into many
+    ~singleton clusters that game raw concentration against a same-partition null without
+    encoding any real topical coherence). Computed over the *whole corpus*, not just gold
+    survey refs, so a partition that "wins" by refusing to cluster most of the corpus is
+    visible in the report even if its scored surveys happen to land in real clusters."""
+
+    doc_count: int
+    covered_count: int  # docs in a >=2-doc cluster
+    singleton_count: int  # docs alone in their own (1-doc) cluster
+    coverage: float  # covered_count / doc_count
+    singleton_share: float  # singleton_count / doc_count
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "doc_count": self.doc_count,
+            "covered_count": self.covered_count,
+            "singleton_count": self.singleton_count,
+            "coverage": round(self.coverage, 6),
+            "singleton_share": round(self.singleton_share, 6),
+        }
+
+
+def cluster_count_min2(partition: dict[str, int]) -> int:
+    """Number of clusters with >=2 members — the granularity figure to match across arms
+    for a valid cross-arm comparison (a raw `len(set(partition.values()))` count is
+    dominated by singleton noise on a sparse/unkeyed citation graph)."""
+    sizes = Counter(partition.values())
+    return sum(1 for c in sizes.values() if c >= 2)
+
+
+def cluster_coverage(partition: dict[str, int], doc_ids: Any) -> CoverageStats:
+    """Fraction of ``doc_ids`` (the full corpus, not just gold refs) that land in a
+    >=2-doc cluster under ``partition``. Docs missing from ``partition`` entirely count as
+    uncovered (neither covered nor a counted singleton) but still count toward
+    ``doc_count`` — the denominator is always the full corpus passed in."""
+    sizes = Counter(partition.values())
+    doc_ids = list(doc_ids)
+    covered = 0
+    singleton = 0
+    for d in doc_ids:
+        cid = partition.get(d)
+        if cid is None:
+            continue
+        if sizes[cid] >= 2:
+            covered += 1
+        else:
+            singleton += 1
+    total = len(doc_ids)
+    return CoverageStats(
+        doc_count=total,
+        covered_count=covered,
+        singleton_count=singleton,
+        coverage=(covered / total) if total else 0.0,
+        singleton_share=(singleton / total) if total else 0.0,
+    )
+
+
 def concentration_report(
     gold: dict[str, dict[str, list[str]]],
     partition: dict[str, int],
