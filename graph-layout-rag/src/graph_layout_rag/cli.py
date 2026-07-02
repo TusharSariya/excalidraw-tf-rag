@@ -37,6 +37,7 @@ from graph_layout_rag.eval.benchmark import benchmark_cmd  # noqa: E402
 from graph_layout_rag.eval.commands import validate_gold_cmd  # noqa: E402
 from graph_layout_rag.eval.coverage import coverage_cmd  # noqa: E402
 from graph_layout_rag.eval.experimental_index import build_retrieval_index_cmd  # noqa: E402
+from graph_layout_rag.eval.map_gate import judge_calibrate_cmd, map_gate_cmd  # noqa: E402
 from graph_layout_rag.eval.pool_commands import (  # noqa: E402
     corpus_health_cmd,
     diagnostics_cmd,
@@ -62,6 +63,8 @@ eval_group.add_command(judge_validate_cmd, name="judge-validate")
 eval_group.add_command(diagnostics_cmd, name="diagnostics")
 eval_group.add_command(corpus_health_cmd, name="corpus-health")
 eval_group.add_command(gate_cmd, name="gate")
+eval_group.add_command(map_gate_cmd, name="map-gate")
+eval_group.add_command(judge_calibrate_cmd, name="judge-calibrate")
 
 from graph_layout_rag.query.litmap_cli import map_group  # noqa: E402
 

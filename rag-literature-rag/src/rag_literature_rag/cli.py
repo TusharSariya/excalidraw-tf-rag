@@ -35,6 +35,7 @@ from rag_literature_rag.eval.benchmark import benchmark_cmd  # noqa: E402
 from rag_literature_rag.eval.commands import validate_gold_cmd  # noqa: E402
 from rag_literature_rag.eval.experimental_index import build_retrieval_index_cmd  # noqa: E402
 from rag_literature_rag.eval.fallback_repair import fallback_audit_cmd  # noqa: E402
+from rag_literature_rag.eval.map_gate import judge_calibrate_cmd, map_gate_cmd  # noqa: E402
 from rag_literature_rag.eval.performance_campaign import performance_campaign_cmd  # noqa: E402
 from rag_literature_rag.eval.pool_commands import (  # noqa: E402
     corpus_health_cmd,
@@ -60,6 +61,8 @@ eval_group.add_command(fallback_audit_cmd, name="fallback-audit")
 eval_group.add_command(performance_campaign_cmd, name="performance-campaign")
 eval_group.add_command(gen_gold_cmd, name="gen-gold")
 eval_group.add_command(gen_gold_split_cmd, name="gen-gold-split")
+eval_group.add_command(map_gate_cmd, name="map-gate")
+eval_group.add_command(judge_calibrate_cmd, name="judge-calibrate")
 
 from rag_literature_rag.query.litmap_cli import map_group  # noqa: E402
 
