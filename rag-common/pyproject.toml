@@ -6,6 +6,11 @@ requires-python = ">=3.11"
 dependencies = [
   "sentence-transformers>=3.0.0",
   "accelerate>=0.30.0",
+  # litmap knowledge-map layer: Leiden community detection over the fused
+  # similarity graph. Both are native-extension packages (no pure-Python
+  # fallback) — flagged in the E1 plan as a lock-file risk to watch.
+  "python-igraph>=0.11.0",
+  "leidenalg>=0.10.0",
 ]
 
 [project.optional-dependencies]

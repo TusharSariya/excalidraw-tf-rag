@@ -63,6 +63,10 @@ eval_group.add_command(diagnostics_cmd, name="diagnostics")
 eval_group.add_command(corpus_health_cmd, name="corpus-health")
 eval_group.add_command(gate_cmd, name="gate")
 
+from graph_layout_rag.query.litmap_cli import map_group  # noqa: E402
+
+main.add_command(map_group, name="map")
+
 
 @eval_group.command("related")
 @click.option(

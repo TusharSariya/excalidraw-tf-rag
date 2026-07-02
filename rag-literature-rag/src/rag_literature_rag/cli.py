@@ -61,6 +61,10 @@ eval_group.add_command(performance_campaign_cmd, name="performance-campaign")
 eval_group.add_command(gen_gold_cmd, name="gen-gold")
 eval_group.add_command(gen_gold_split_cmd, name="gen-gold-split")
 
+from rag_literature_rag.query.litmap_cli import map_group  # noqa: E402
+
+main.add_command(map_group, name="map")
+
 
 @eval_group.command("related")
 @click.option(
