@@ -104,16 +104,23 @@ Full JSON/markdown reports:
 | RLR | catalog | hybrid | 0.5315 | 0.4162 | 0.8929 | 0.881 | 4 |
 | RLR | pdf-deep-read | hybrid | 0.5327 | 0.4104 | 0.9146 | 0.878 | 3 |
 
-**Deviation noted, not fixed (out of scope for this workstream):** every run above logged
-`4-bit load failed for Qwen/Qwen3-Embedding-0.6B ... falling back to FP16` — the venvs this
-ran in do not actually have `bitsandbytes` installed (`accelerate` is in `rag-common`'s base
-deps per Workstream A's A1, but the tool venvs weren't re-synced with `--extra
-retrieval-experiments-gpu --extra dev` before this run). A1's acceptance bar ("a query run
-no longer prints the 4-bit fallback warning") is therefore not yet met in these venvs; the
-numbers above are still valid FP16 nDCG@10 baselines (same regression-floor purpose either
-way), but re-running `uv sync --extra retrieval-experiments-gpu --extra dev` in each tool
-before the *next* regression-floor run would both fix the warning and is worth a quick
-re-check that FP16 vs 4-bit doesn't shift these numbers outside the +/-0.005 tolerance.
+**Resolved deviation:** the runs above accidentally executed under FP16 fallback (tool venvs
+had been re-synced without `--extra retrieval-experiments-gpu`, dropping bitsandbytes). Both
+venvs were re-synced with the GPU extra and the floor re-run under a verified clean 4-bit load
+(zero fallback warnings in the log). **The 4-bit numbers below are the official regression
+floor**; FP16 vs 4-bit shifts every metric by ≤0.007 nDCG@10, i.e. quantization does not move
+the floor.
+
+### Official baseline — 4-bit, re-recorded 2026-07-02
+
+| Tool | Track | Strategy | nDCG@10 | MRR | Recall@5 | HR@5 | Failures |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |
+| GLR | catalog | hybrid | 0.858 | 0.935 | 0.795 | 1.000 | 0 |
+| GLR | catalog-nl | hybrid | 0.774 | 0.969 | 0.208 | 1.000 | 0 |
+| RLR | catalog | hybrid | 0.539 | 0.423 | 0.857 | 0.881 | 4 |
+| RLR | pdf-deep-read | hybrid | 0.531 | 0.414 | 0.854 | 0.878 | 4 |
+
+("Failures" = eval cases with hit_rate@10 < 1.0, a quality stat, not runtime errors.)
 
 **RLR's ~0.53 nDCG@10 vs. the plan's cited "RLR 0.942 nDCG@10"**: this floor run uses the
 plain hand-curated gold set with no `--qrels` overlay (as specified — the plan's A3 command
