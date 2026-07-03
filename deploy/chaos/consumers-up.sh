@@ -33,7 +33,7 @@ echo "applying work_state schema to in-cluster CNPG..."
 
 # --- per-(stage,corpus) memory limits: extract loads docling (heaviest);
 #     embed is a thin HTTP client; indexer writes Lance/tantivy. ---
-declare -A MEM=( [extract]=3Gi [embed]=1Gi [indexer]=2Gi )
+declare -A MEM=( [extract]=3Gi [embed]=1Gi [indexer]=3Gi )
 declare -A REQ=( [extract]=1Gi [embed]=256Mi [indexer]=512Mi )
 
 gen() {  # stage corpus
