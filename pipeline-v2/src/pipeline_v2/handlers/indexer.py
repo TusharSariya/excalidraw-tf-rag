@@ -81,6 +81,19 @@ def _chunk_row(doc_id: str, corpus: str, record: dict[str, Any]) -> dict[str, An
         "page_end": record.get("page_end") if record.get("page_end") is not None else _NO_PAGE,
         "section_path": str(record.get("section_path") or ""),
         "source_url": str(record.get("source_url") or ""),
+        # v1-eval schema-compat metadata columns. The v1 retrieve path emits a
+        # LanceDB WHERE prefilter over year/venue/arxiv_category/genre/is_retracted
+        # when a RetrieveFilters is set, and reads tags/pipeline_categories into
+        # hit metadata. The SOTA benchmark runs UNFILTERED (the research found
+        # metadata filters overfit/harmful), so these carry safe defaults — they
+        # exist only so a filtered query cannot error on a missing column.
+        "year": int(record["year"]) if str(record.get("year") or "").strip().isdigit() else 0,
+        "venue": str(record.get("venue") or ""),
+        "arxiv_category": str(record.get("arxiv_category") or ""),
+        "genre": str(record.get("genre") or ""),
+        "is_retracted": bool(record.get("is_retracted") or False),
+        "tags": str(record.get("tags") or ""),
+        "pipeline_categories": str(record.get("pipeline_categories") or ""),
         "vector": record["vector"],
     }
 
@@ -117,6 +130,12 @@ def _build_bm25_schema() -> tantivy.Schema:
     builder.add_text_field("text", stored=True)
     builder.add_text_field("section_path", stored=True)
     builder.add_text_field("source_url", stored=True)
+    # v1's BM25 query parser uses _QUERY_FIELDS = [title, text, tags,
+    # pipeline_categories, section_path]; tantivy.parse_query RAISES on a field
+    # absent from the schema (regardless of any filter), so these MUST exist even
+    # when empty, or every hybrid/sparse query against a v2 index crashes.
+    builder.add_text_field("tags", stored=True)
+    builder.add_text_field("pipeline_categories", stored=True)
     builder.add_integer_field("chunk_index", stored=True)
     builder.add_integer_field("page", stored=True)
     return builder.build()
@@ -137,6 +156,8 @@ def _bm25_add(writer: tantivy.IndexWriter, row: dict[str, Any]) -> None:
             text=row["text"],
             section_path=row["section_path"],
             source_url=row["source_url"],
+            tags=row.get("tags", ""),
+            pipeline_categories=row.get("pipeline_categories", ""),
             chunk_index=row["chunk_index"],
             page=row["page"],
         )

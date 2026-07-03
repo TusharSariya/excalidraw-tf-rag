@@ -51,3 +51,21 @@ def test_write_bm25_reraises_non_corruption(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(ix, "_open_or_create_bm25", boom)
     with pytest.raises(ValueError, match="unrelated"):
         ix._write_bm25(tmp_path / "b", "d", "glr", [_row(0)], lance_dir=tmp_path / "l")
+
+
+def test_bm25_schema_supports_v1_query_fields(tmp_path: Path):
+    """v1 retrieve parses queries over _QUERY_FIELDS = [title, text, tags,
+    pipeline_categories, section_path]; tantivy raises on a field absent from the
+    schema, so the v2 index must carry tags + pipeline_categories or every hybrid
+    query crashes. This asserts a v1-style parse_query succeeds."""
+    import tantivy
+
+    bm25 = tmp_path / "bm25"
+    ix._write_bm25(bm25, "d1", "glr", [_row(0), _row(1)], lance_dir=tmp_path / "l")
+    index = tantivy.Index(ix._build_bm25_schema(), path=str(bm25))
+    index.reload()
+    # exactly v1's rag_literature_rag/graph_layout_rag ingest.bm25._QUERY_FIELDS
+    query = index.parse_query("hello world", ["title", "text", "tags",
+                                             "pipeline_categories", "section_path"])
+    hits = index.searcher().search(query, 5).hits
+    assert len(hits) == 2
