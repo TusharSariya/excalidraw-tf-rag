@@ -26,7 +26,7 @@ No sudo (root steps → BLOCKED + note the command). No AskUserQuestion. OOM is 
 - [x] E3 — kill embed consumer
 - [x] E4 — kill gpu-gateway mid-embed
 - [x] E5 — kill Kafka broker
-- [ ] E6 — kill CNPG instance
+- [x] E6 — kill CNPG instance
 - [ ] E7 — kill SeaweedFS mid-write
 - [ ] E8 — poison flood → DLQ
 - [ ] E9 — duplicate flood → idempotent
@@ -82,3 +82,6 @@ Force-killed the gateway pod with 60 embeds in flight. Recovery: fresh gateway p
 
 ### 2026-07-03T09:47:24Z — E5 kill Kafka broker (full bus outage): PASS
 Force-killed the single broker pipeline-v2-single-node-0 with 70 docs enqueued. Broker recovered 1/1 in ~23s (Strimzi recreate, PVC persisted the log). **Consumers did NOT crash (0 restarts) — reconnected gracefully and resumed.** All 70 docs (35 glr + 35 rlr) reached extract=ok: messages enqueued pre-kill survived in Kafka and processed post-reconnect. Zero loss, well under 3-min bound, memory stable ~17.6GB, v1 no drift.
+
+### 2026-07-03T09:53:18Z — E6 kill CNPG instance: PASS
+Force-killed pipeline-v2-pg-1 under 80-doc load. CNPG operator recovered the instance (PVC-backed). Consumers did NOT crash (0 restarts) — work-state writes survived the DB blip. Post-recovery: extract ok=80, NO silent stubs (the v1 2,266-doc bug class did not recur — degraded never stamped as done). Zero loss, memory stable ~17.6GB, v1 no drift.
