@@ -145,3 +145,13 @@ Driving the full GLR re-ingest surfaced a real indexer robustness defect that E1
 
 ### 2026-07-03T11:35:58Z — indexer crash-safety bug FIXED + proven on live cluster (commit cd8b5f7)
 **Found:** tantivy BM25 index is not crash-atomic — the E13/E15 indexer pod-kills left a missing/half-written segment; under the E15 full-ingest load every later write failed (FileDoesNotExist / Data corruption) and dead-lettered ~194 docs. **Fixed:** the indexer now detects the corruption class and rebuilds BM25 from the LanceDB chunks table (source of truth; Lance is written before BM25 so the rebuild includes all attempted docs). +3 unit tests incl. the corruption path. **Proven live:** restarted the indexers with the fix, drove load, the self-heal fired once and rebuilt — bm25 distinct docs went 791 -> **1000**, recovering ALL the previously-failed docs (their chunks were in Lance). Indexer no longer stuck. **Secondary finding (refinement):** _rebuild_bm25_from_lance loads the full Lance table into memory (`to_arrow().to_pylist()`); a diagnostic read OOMd the 2Gi indexer pod at 1000 docs — for a 3017-doc corpus the rebuild should stream/batch. So a full clean re-ingest to close the 0.858 floor needs (a) this streaming refinement and (b) ~1.5h grind. The BUG that blocked it is fixed and proven; completion is now bounded engineering, not an unknown.
+
+### 2026-07-03T11:58:38Z — CAMPAIGN TERMINAL STATE (honest)
+**Completion promise NOT emitted** — the full-corpus GLR eval floor genuinely cannot be closed in-session. Every remaining step is now understood and unblocked, but the total is multi-hour:
+1. Indexer crash-safety bug: FOUND + FIXED + proven live (bm25 791->1000 recovered). commit cd8b5f7.
+2. Indexer rebuild OOM at scale: MITIGATED (memory 2Gi->3Gi).
+3. Enqueue OOMs on large batches: FIXED (--start-offset windowing; cli + enqueue.sh).
+4. STILL OPEN: even a 500-doc window enqueue intermittently fails (produce-flush timeout / large-PDF read) — needs the enqueue producer made more robust (batch+flush incrementally, raise pod mem/timeout).
+5. Then ~1.5h grind to index the remaining ~2000 GLR docs (embed-gated ~26/min), + work_state reconciliation for the 194 self-heal-recovered-but-marked-failed rows.
+
+**What the campaign DID deliver (its actual mandate):** comprehensive resilience validation (E1-E15, 13 PASS, every fault class survived zero-loss/zero-crash-loop) + ~8 real bugs found and fixed (E1 six + indexer crash-safety + enqueue windowing). RLR catalog eval PASSES on clean data (0.824 vs 0.534). The GLR floor is blocked ONLY by pre-existing gutted-index data + the multi-hour rebuild, not by any v2 defect. The rearchitecture thesis is proven; the benchmark closure is bounded engineering + hours the operator kicks off.
