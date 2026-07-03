@@ -213,8 +213,26 @@ def _iter_manifest_enqueue_items(manifest: dict) -> list[dict]:
     return out
 
 
+def _sha256_file(path: Path, *, block_size: int = 1 << 20) -> str:
+    """Stream-hash a file in ``block_size`` (default 1 MiB) chunks.
+
+    ``Path.read_bytes()`` loads the whole file into memory; the GLR corpus holds
+    a 1.1 GB PDF (plus several >50 MB), which OOMs the 1 Gi enqueue pod. Streaming
+    keeps peak memory at one block regardless of file size, while producing the
+    identical digest to a whole-file hash.
+    """
+    digest = hashlib.sha256()
+    with path.open("rb") as fh:
+        for block in iter(lambda: fh.read(block_size), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
 def _iter_glob_enqueue_items(
-    pattern: str, limit: int | None = None, start_offset: int = 0
+    pattern: str,
+    limit: int | None = None,
+    start_offset: int = 0,
+    max_file_mb: float | None = None,
 ) -> list[dict]:
     """Build enqueue items directly from PDFs on disk, doc_id = filename stem.
 
@@ -227,9 +245,15 @@ def _iter_glob_enqueue_items(
     (offset 0/limit 500, offset 500/limit 500, ...) that each stay within the
     enqueue pod's memory + the producer flush window — the single full-corpus
     enqueue OOMs the pod hashing thousands of PDFs at once.
+
+    ``max_file_mb`` skips (and logs) any PDF larger than the cap by ``stat`` size
+    BEFORE opening it — a handful of pathological multi-hundred-MB / 1.1 GB PDFs
+    would otherwise OOM both this hash and downstream docling extraction. A
+    skipped file does NOT consume the ``limit`` budget.
     """
     import glob as glob_module
 
+    cap_bytes = int(max_file_mb * 1024 * 1024) if max_file_mb else None
     out: list[dict] = []
     for idx, raw_path in enumerate(sorted(glob_module.glob(pattern))):
         if idx < start_offset:
@@ -239,12 +263,18 @@ def _iter_glob_enqueue_items(
         pdf_path = Path(raw_path)
         if not pdf_path.is_file():
             continue
-        sha256 = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+        if cap_bytes is not None and pdf_path.stat().st_size > cap_bytes:
+            click.echo(
+                f"enqueue: skipping oversized PDF {pdf_path.name} "
+                f"({pdf_path.stat().st_size / 1024 / 1024:.0f} MB > cap {max_file_mb:.0f} MB)",
+                err=True,
+            )
+            continue
         out.append(
             {
                 "doc_id": pdf_path.stem,
                 "pdf_path": str(pdf_path),
-                "sha256": sha256,
+                "sha256": _sha256_file(pdf_path),
                 "title": pdf_path.stem,
                 "source_url": "",
             }
@@ -295,6 +325,14 @@ def _iter_glob_enqueue_items(
     "large corpus in bounded windows (e.g. --start-offset 500 --limit 500). The single "
     "full-corpus enqueue OOMs the enqueue pod hashing thousands of PDFs at once.",
 )
+@click.option(
+    "--max-file-mb",
+    default=None,
+    type=float,
+    help="Skip (and log to stderr) any PDF larger than this many MB before hashing it. "
+    "A handful of pathological multi-hundred-MB / 1.1 GB PDFs otherwise OOM the enqueue "
+    "pod's hash and downstream docling extraction. Only applies to --pdf-glob.",
+)
 def enqueue_cmd(
     corpus: str,
     limit: int | None,
@@ -306,6 +344,7 @@ def enqueue_cmd(
     queue_backend: str,
     group_id: str | None,
     start_offset: int,
+    max_file_mb: float | None,
 ) -> None:
     """Produce docs.enriched (or another topic's) messages for a slice of a v1 manifest or PDFs.
 
@@ -329,7 +368,7 @@ def enqueue_cmd(
         # bounded window [start_offset, start_offset+limit) instead of reading
         # the whole corpus then truncating.
         items = _iter_glob_enqueue_items(  # type: ignore[arg-type]
-            pdf_glob, limit=limit, start_offset=start_offset
+            pdf_glob, limit=limit, start_offset=start_offset, max_file_mb=max_file_mb
         )
 
     if not items:

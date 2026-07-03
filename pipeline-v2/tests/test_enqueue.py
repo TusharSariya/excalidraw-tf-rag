@@ -274,3 +274,24 @@ def test_enqueue_cli_round_trips_n_well_formed_messages(
         assert message.stage_fingerprint == cli_module.DEFAULT_ENQUEUE_STAGE_FINGERPRINT
         assert message.payload["pdf_path"].endswith(".pdf")
         assert len(message.content_sha256) == 64
+
+
+def test_sha256_file_matches_whole_file_hash(tmp_path):
+    import hashlib as _h
+
+    from pipeline_v2.cli import _sha256_file
+
+    data = b"pipeline-v2 streaming hash" * 100000  # ~2.5 MB, spans many 1 MiB blocks
+    p = tmp_path / "big.pdf"
+    p.write_bytes(data)
+    assert _sha256_file(p, block_size=4096) == _h.sha256(data).hexdigest()
+
+
+def test_iter_glob_skips_oversized(tmp_path):
+    from pipeline_v2.cli import _iter_glob_enqueue_items
+
+    (tmp_path / "small.pdf").write_bytes(b"x" * 1024)
+    (tmp_path / "huge.pdf").write_bytes(b"x" * (3 * 1024 * 1024))
+    items = _iter_glob_enqueue_items(str(tmp_path / "*.pdf"), max_file_mb=1.0)
+    ids = {i["doc_id"] for i in items}
+    assert ids == {"small"}  # huge (>1 MB) skipped, did not consume limit budget
