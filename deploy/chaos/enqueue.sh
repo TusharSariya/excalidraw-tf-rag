@@ -5,7 +5,7 @@
 # Usage: enqueue.sh <corpus> <limit>   (glr|rlr)
 set -euo pipefail
 KC="${KUBECTL:-$HOME/.local/bin/kubectl}"
-CORPUS="$1"; LIMIT="${2:-5}"
+CORPUS="$1"; LIMIT="${2:-5}"; OFFSET="${3:-0}"
 case "$CORPUS" in
   glr) GLOB='/repo/graph-layout-rag/data/raw/pdf/*.pdf' ;;
   rlr) GLOB='/repo/rag-literature-rag/data/raw/pdf/*.pdf' ;;
@@ -22,7 +22,7 @@ spec:
   containers:
   - name: enq
     image: python:3.11-slim
-    command: ["python","-m","pipeline_v2.cli","enqueue","--corpus","${CORPUS}","--limit","${LIMIT}","--pdf-glob","${GLOB}","--bootstrap-servers","${BOOTSTRAP}"]
+    command: ["python","-m","pipeline_v2.cli","enqueue","--corpus","${CORPUS}","--limit","${LIMIT}","--start-offset","${OFFSET}","--pdf-glob","${GLOB}","--bootstrap-servers","${BOOTSTRAP}"]
     env:
     - {name: PYTHONPATH, value: "/repo/pipeline-v2/src:/repo/pipeline-v2/.venv/lib/python3.11/site-packages"}
     - {name: PYTHONUNBUFFERED, value: "1"}
