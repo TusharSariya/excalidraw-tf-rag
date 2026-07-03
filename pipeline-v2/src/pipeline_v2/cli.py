@@ -213,12 +213,19 @@ def _iter_manifest_enqueue_items(manifest: dict) -> list[dict]:
     return out
 
 
-def _iter_glob_enqueue_items(pattern: str) -> list[dict]:
-    """Build enqueue items directly from PDFs on disk, doc_id = filename stem."""
+def _iter_glob_enqueue_items(pattern: str, limit: int | None = None) -> list[dict]:
+    """Build enqueue items directly from PDFs on disk, doc_id = filename stem.
+
+    ``limit`` short-circuits BEFORE hashing: a glob over a full corpus can match
+    thousands of PDFs, and sha256-ing every one only to truncate afterwards
+    reads (and can OOM on) the entire corpus for an ``--limit 5`` request.
+    """
     import glob as glob_module
 
     out: list[dict] = []
     for raw_path in sorted(glob_module.glob(pattern)):
+        if limit is not None and len(out) >= limit:
+            break
         pdf_path = Path(raw_path)
         if not pdf_path.is_file():
             continue
@@ -297,11 +304,12 @@ def enqueue_cmd(
     if manifest_path is not None:
         manifest = manifest_migrate.load_v1_manifest_json(manifest_path)
         items = _iter_manifest_enqueue_items(manifest)
+        if limit is not None:
+            items = items[:limit]
     else:
-        items = _iter_glob_enqueue_items(pdf_glob)  # type: ignore[arg-type]
-
-    if limit is not None:
-        items = items[:limit]
+        # Pass limit INTO the glob iterator so it stops hashing after `limit`
+        # files instead of reading the whole corpus then truncating.
+        items = _iter_glob_enqueue_items(pdf_glob, limit=limit)  # type: ignore[arg-type]
 
     if not items:
         click.echo("no enqueueable items found (nothing produced)")

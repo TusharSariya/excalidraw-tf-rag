@@ -68,7 +68,7 @@ spec:
         image: python:3.11-slim
         command: ["python","-m","pipeline_v2.cli","consume","--stage","${stage}","--corpus","${corpus}","--queue","share","--bootstrap-servers","${BOOTSTRAP}"]
         env:
-        - {name: PYTHONPATH, value: "/repo/pipeline-v2/src:/repo/pipeline-v2/.venv/lib/python3.11/site-packages"}
+        - {name: PYTHONPATH, value: "/repo/pipeline-v2/src:/repo/pipeline-v2/.venv/lib/python3.11/site-packages:/repo/rag-common/src:/repo/graph-layout-rag/src:/repo/rag-literature-rag/src"}
         - {name: PYTHONUNBUFFERED, value: "1"}
         - {name: PIPELINE_V2_METRICS_PORT, value: "9464"}
         - {name: PIPELINE_V2_ARTIFACT_BACKEND, value: "s3"}

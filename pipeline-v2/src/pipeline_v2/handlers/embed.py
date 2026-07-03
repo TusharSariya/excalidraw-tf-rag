@@ -46,7 +46,11 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_GATEWAY_URL = "http://127.0.0.1:8000"
 DEFAULT_MODEL = "cuda-qwen4b-1024"
-DEFAULT_TIMEOUT_S = 30.0
+# The gateway lazy-loads a 4-bit model on the first embed after it (re)starts;
+# that cold start (CUDA init + quant) legitimately takes >30s, so a 30s client
+# timeout dead-lettered every doc during a gateway restart (found during E1).
+# 180s covers a cold start with headroom; env-overridable for tuning.
+DEFAULT_TIMEOUT_S = float(os.getenv("PIPELINE_GATEWAY_TIMEOUT_S", "180"))
 DEFAULT_MAX_RETRIES = 3
 BASE_BACKOFF_S = 0.5
 MAX_BACKOFF_S = 5.0

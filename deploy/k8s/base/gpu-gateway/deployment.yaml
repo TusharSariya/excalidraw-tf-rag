@@ -56,18 +56,29 @@ spec:
               cpu: "4"
               memory: 8Gi
               nvidia.com/gpu: 1
+          # /health can block for tens of seconds while the gateway lazy-loads
+          # a 4-bit model (CUDA init + quant). The k8s default timeoutSeconds
+          # is 1s, so under any real inference load the liveness probe timed
+          # out and SIGTERM-killed the container in a restart loop (found
+          # during E1). Generous timeouts + failureThreshold keep a busy GPU
+          # server alive; readiness just pulls it from the (single-replica)
+          # Service while loading.
           readinessProbe:
             httpGet:
               path: /health
               port: http
             initialDelaySeconds: 30
             periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /health
               port: http
             initialDelaySeconds: 60
             periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 6
       # Only schedulable on the (single) GPU-bearing node; on a one-node
       # cluster this is redundant with reality but documents intent.
       runtimeClassName: nvidia
