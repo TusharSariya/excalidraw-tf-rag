@@ -136,3 +136,6 @@ Resilience: 13/15 experiments PASS (E1-E10, E12-E15), E11 BLOCKED (flannel CNI l
 
 ### 2026-07-03T11:02:41Z — GLR full re-ingest STARTED (closing the eval floor)
 Full v2 GLR ingest kicked off to rebuild the gutted index. Rate observed: extract ~200 docs/min, indexer (embed-gated via gateway 0.6B) ~44 docs/min. GLR indexer_ok climbing (146 ->  -> ...). Memory bounded (15-16GB avail, mem-guard floor 3GB, no OOM, swap flat). ETA ~1-1.5h for ~2870 remaining docs. Batched enqueue (500/1000/... — full-3017 enqueue OOMs the enqueue pod hashing all PDFs; bounded batches are safe). Loop continues grinding batches until the GLR index is complete, then re-eval to meet the 0.858 floor.
+
+### 2026-07-03T11:18:46Z — GLR re-ingest healthy, grinding (checkpoint)
+GLR indexer_ok: 146 -> 743 and climbing. Memory STABILIZED ~13.5GB (recovered from a 12.7GB dip; not a leak — extract buffering ahead of the embed-gated indexer). Rate ~26 docs/min (indexer/gateway-gated). 0 consumer restarts, mem-guard never near its 3GB floor, swap flat. ~2000-doc backlog enqueued and draining autonomously; ETA ~1.5h to full corpus. Loop advances it per iteration (check progress, enqueue next bounded batch when backlog low, verify memory), then re-eval GLR catalog to close the 0.858 floor. Full-corpus single enqueue OOMs the enqueue pod (hashes all PDFs); bounded <=2000 batches are safe.
