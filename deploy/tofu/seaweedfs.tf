@@ -78,11 +78,17 @@ resource "helm_release" "seaweedfs" {
     }
     volume = {
       replicas = 1
+      # The chart's per-dataDir `maxVolumes` sets the volume server's `-max`.
+      # Default 7 was fully consumed by the cnpg-backups collection, so a NEW
+      # collection (S3 artifact buckets) failed volume-grow with "Not enough
+      # data nodes". `maxVolumes: 0` = auto-configure the cap from free disk
+      # (per the chart's own docs) — lifts the count limit without hardcoding.
       dataDirs = [{
         name         = "data"
         type         = "persistentVolumeClaim"
         size         = var.seaweedfs_volume_size
         storageClass = "local-path"
+        maxVolumes   = 50
       }]
     }
     filer = { replicas = 1 }
