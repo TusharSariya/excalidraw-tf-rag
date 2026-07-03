@@ -28,7 +28,7 @@ No sudo (root steps → BLOCKED + note the command). No AskUserQuestion. OOM is 
 - [x] E5 — kill Kafka broker
 - [x] E6 — kill CNPG instance
 - [x] E7 — kill SeaweedFS mid-write
-- [ ] E8 — poison flood → DLQ
+- [x] E8 — poison flood → DLQ
 - [ ] E9 — duplicate flood → idempotent
 - [ ] E10 — Kafka +2s latency (≥40% baseline)
 - [ ] E11 — partition consumer↔gateway 90s
@@ -91,3 +91,6 @@ Force-killed seaweedfs-volume-0 under 90-doc load (artifacts writing to S3). Rec
 
 ### 2026-07-03T09:59:47Z — MILESTONE: E2-E7 all PASS
 Every single-component infra fault (extract/embed consumer, gpu-gateway, Kafka broker, CNPG, SeaweedFS) recovered with ZERO data loss and ZERO consumer crashes. The rearchitecture thesis — failures become normal operational states — validated under real chaos.
+
+### 2026-07-03T10:02:48Z — E8 poison flood: PASS
+Injected 10 malformed messages (5 invalid-JSON bytes + 5 valid-JSON-missing-contract-fields) to docs.enriched. All routed to deadletter.extract; extract consumers held 0 restarts (no crash-loop). StageConsumer contract-validation rejects poison to DLQ and keeps polling. (Observed: per-corpus consumers are separate share groups on the shared docs.enriched topic, so each poison is DLQd by both groups = 20 DLQ records for 10 inputs — noted, not a correctness issue.)
