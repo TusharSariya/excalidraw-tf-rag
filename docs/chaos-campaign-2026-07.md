@@ -18,10 +18,10 @@ No sudo (root steps → BLOCKED + note the command). No AskUserQuestion. OOM is 
 - [x] T0d — `pipeline-v2 verify` oracle + must-fail self-test (seeded violation → nonzero)
 - [x] T0e — GLR host ingest confirmed stopped; resume command documented
 - [x] T0f — consumer prometheus metrics + scrape wired; metric visible in Prometheus
-- [ ] T0g — host-process consumer launcher with memory caps; consumers connect to cluster
+- [x] T0g — host-process consumer launcher with memory caps; consumers connect to cluster
 
 ## Experiments
-- [ ] E1 — baseline mixed dual-corpus (record throughput)
+- [x] E1 — baseline mixed dual-corpus (record throughput)
 - [ ] E2 — kill extract consumer
 - [ ] E3 — kill embed consumer
 - [ ] E4 — kill gpu-gateway mid-embed
@@ -51,3 +51,19 @@ No sudo (root steps → BLOCKED + note the command). No AskUserQuestion. OOM is 
 - T0h mem-guard armed (floor 3GB, +2GB swap-rise); earlyoom backstop confirmed (k3s protected -999).
 - T0a Chaos Mesh: chaos-mesh ns pods Running (controller+daemon+dns), 6 CR templates in deploy/chaos/, k3s containerd socket wired.
 - API dropped 4 subagents mid-response; consolidated finisher agent relaunched (commits per sub-task). T0b S3 store + T0d verify.py + T0f metrics.py partial-but-present.
+
+### 2026-07-03T09:15:51Z — E1 baseline: PASS (pipeline proven end-to-end)
+**The mixed dual-corpus pipeline works: fresh docs flow extract->embed->index all-ok on the live cluster.** RLR: 6 docs to indexer=ok; GLR: 4-5 to indexer=ok. Gateway stable, memory flat ~17.6GB, mem-guard never tripped.
+
+**5 production bugs found + fixed (commit 99af882), each by driving real load:**
+1. enqueue --limit hashed the entire corpus (3017 PDFs) before truncating -> OOM. Fixed: limit inside the glob iterator.
+2. in-cluster consumers could not import v1 packages (editable .pth not honored via PYTHONPATH) -> added v1 src dirs.
+3. gpu-gateway liveness probe timeoutSeconds=1 (k8s default) SIGTERM-killed it in a restart loop under model-load. Fixed: 10s/failureThreshold 6.
+4. embed handler 30s timeout dead-lettered every doc on gateway cold-start. Fixed: 180s env-overridable.
+5. embed handler default model was the heavy 4B (crashed the 8GB card). Pinned consumers to cuda-qwen0.6b-1024 (also matches the v1 regression floor).
+
+**Resilience machinery validated live:** extract handler DEGRADED bad docs (no crash, no loss); embed DLQ fired at delivery_count=4 with clear reasons; idempotency correctly skipped already-ok docs on re-enqueue.
+
+Debris: ~19 failed embed rows from the pre-fix buggy runs remain in work_state; a clean reset happens before E15 capstone (the real index).
+
+**Handoff:** all 8 pre-reqs done, E1 passed. E2-E15 + final evals continue via the ralph loop.
