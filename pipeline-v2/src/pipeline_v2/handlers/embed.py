@@ -159,9 +159,19 @@ def _augment_contextual(
     unchanged rather than aborting the embed.
     """
     try:
+        from pathlib import Path
         from types import SimpleNamespace
 
+        from rag_literature_rag.ingest import contextual as _ctx
         from rag_literature_rag.ingest.contextual import augment_texts_for_context
+
+        # Opt-in override to a merged cache (original + legacy/gemini key aliases
+        # rewritten to the current ollama-key format) so a rebuild reuses ~1.6k
+        # extra already-generated context lines instead of losing them. The
+        # original contextual_cache.json is left byte-identical (read-only).
+        merged = os.getenv("PIPELINE_V2_CONTEXTUAL_CACHE", "").strip()
+        if merged:
+            _ctx.CACHE_PATH = Path(merged)
 
         adapters = [
             SimpleNamespace(
