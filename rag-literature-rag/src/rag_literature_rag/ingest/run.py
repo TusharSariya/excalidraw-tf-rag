@@ -4,6 +4,7 @@ import logging
 import os
 import queue
 import signal
+import socket
 import sys
 import threading
 import time
@@ -235,6 +236,43 @@ def _metadata_outcome(
     return ExtractionOutcome(item, chunks, aliases=aliases, reason=reason, error=error)
 
 
+def _extract_worker_init() -> None:
+    """Guard extraction-pool workers against unbounded network hangs.
+
+    A fresh docling extraction lazily loads its models on first use inside
+    the worker process, which can trigger a HuggingFace-CDN download. If
+    that HTTPS connection stalls (observed: CLOSE-WAIT, no client timeout),
+    the worker blocks forever with zero CPU and the whole ProcessPoolExecutor
+    deadlocks permanently.
+
+    Two independent guards, both scoped to extraction workers only:
+      - HF_HUB_ETAG_TIMEOUT / HF_HUB_DOWNLOAD_TIMEOUT: the env vars actually
+        read by the installed huggingface_hub (verified via
+        ``huggingface_hub.constants`` source for the pinned version this repo
+        uses). Best-effort: huggingface_hub reads these once at import time,
+        so this only takes effect if huggingface_hub has not already been
+        imported in the parent process before the pool forks.
+      - socket.setdefaulttimeout(60): a per-process runtime default applied
+        at connect time regardless of import order, so it also catches any
+        other forgotten/unguarded network call in a worker, not just
+        huggingface_hub's.
+
+    Do NOT set a global socket timeout in the main process — long-running
+    LanceDB/model operations there could get spuriously cut off. This
+    initializer only ever runs inside a worker of the extraction pool.
+    """
+    os.environ.setdefault("HF_HUB_ETAG_TIMEOUT", "60")
+    os.environ.setdefault("HF_HUB_DOWNLOAD_TIMEOUT", "60")
+    socket.setdefaulttimeout(60)
+    # Extraction workers must not touch the GPU: docling's layout/table models
+    # default to CUDA, and N workers x ~1.5 GiB VRAM starves the main process'
+    # embedding model into a permanent OOM-retry stall on an 8 GiB card
+    # (observed 2026-07-02: 6 workers -> zero free VRAM, CUDA OOM storm).
+    # CPU extraction is slightly slower per doc; the GPU belongs to embedding.
+    # Must be set before torch/docling first initialize CUDA in this worker.
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
+
+
 def _extract_pdf_task(task: ExtractionTask) -> ExtractionOutcome:
     """Extract and chunk one PDF. This top-level worker is process-pool picklable."""
     from rag_literature_rag.ingest.extract_cache import (
@@ -360,17 +398,61 @@ def _future_outcome(future: Future[ExtractionOutcome], task: ExtractionTask) -> 
         )
 
 
+def _extract_timeout_s() -> float:
+    """Wall-clock budget per submitted PDF extraction; 0 disables."""
+    raw = os.getenv("RAG_LIT_EXTRACT_TIMEOUT_S", "300")
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        logging.getLogger("rag_literature_rag.ingest").warning(
+            "invalid RAG_LIT_EXTRACT_TIMEOUT_S=%r; using 300", raw
+        )
+        return 300.0
+
+
 def _drain_one(
     pending: dict[Future[ExtractionOutcome], ExtractionTask],
     stop_event: threading.Event | None = None,
+    deadlines: dict[Future[ExtractionOutcome], float] | None = None,
+    timeout_s: float = 0.0,
 ) -> Iterator[ExtractionOutcome]:
-    if stop_event is None:
+    if stop_event is None and deadlines is None:
         done, _ = wait(pending, return_when=FIRST_COMPLETED)
     else:
         done, _ = wait(pending, timeout=0.1, return_when=FIRST_COMPLETED)
     for future in done:
         task = pending.pop(future)
+        if deadlines is not None:
+            deadlines.pop(future, None)
         yield _future_outcome(future, task)
+    if deadlines is None or done:
+        return
+    # Nothing completed this poll. The wall-clock budget starts only once a
+    # worker actually picks the task up (queued-but-not-started tasks must not
+    # expire — the pool serializes them behind slow docs).
+    now = time.monotonic()
+    for future in pending:
+        if future not in deadlines and future.running():
+            deadlines[future] = now + timeout_s
+    # Abandon any running task past its budget. A lost/hung future would
+    # otherwise wedge the whole run (seen with docling workers whose result
+    # never resolves even after the worker goes idle).
+    expired = [future for future, deadline in deadlines.items() if now > deadline]
+    for future in expired:
+        task = pending.pop(future)
+        del deadlines[future]
+        future.cancel()
+        logging.getLogger("rag_literature_rag.ingest").warning(
+            "extraction timed out for %s; abandoning future and using metadata fallback",
+            task.item.id,
+        )
+        yield _metadata_outcome(
+            task.item,
+            task.pipeline_categories,
+            reason="extraction_timeout_metadata_fallback",
+            error="extraction exceeded RAG_LIT_EXTRACT_TIMEOUT_S budget",
+            aliases=task.aliases,
+        )
 
 
 def _iter_extraction_outcomes(
@@ -423,7 +505,9 @@ def _iter_extraction_outcomes(
         return
 
     pending: dict[Future[ExtractionOutcome], ExtractionTask] = {}
-    executor = ProcessPoolExecutor(max_workers=extract_workers)
+    timeout_s = _extract_timeout_s()
+    deadlines: dict[Future[ExtractionOutcome], float] | None = {} if timeout_s > 0 else None
+    executor = ProcessPoolExecutor(max_workers=extract_workers, initializer=_extract_worker_init)
     try:
         for raw_document in items:
             if stop_event is not None and stop_event.is_set():
@@ -448,11 +532,16 @@ def _iter_extraction_outcomes(
                     chunk_profile,
                 )
                 pending[executor.submit(_extract_pdf_task, task)] = task
-                if len(pending) >= max_pending:
-                    yield from _drain_one(pending, stop_event)
+                # "while", not "if": _drain_one can return empty on its 0.1s
+                # poll; without re-draining, pending grows unboundedly whenever
+                # extraction is slower than manifest iteration.
+                while len(pending) >= max_pending and not (
+                    stop_event is not None and stop_event.is_set()
+                ):
+                    yield from _drain_one(pending, stop_event, deadlines, timeout_s)
 
         while pending and not (stop_event is not None and stop_event.is_set()):
-            yield from _drain_one(pending, stop_event)
+            yield from _drain_one(pending, stop_event, deadlines, timeout_s)
     finally:
         interrupted = stop_event is not None and stop_event.is_set()
         for future in pending:
@@ -1298,6 +1387,11 @@ def ingest_group(
 ) -> None:
     """Extract, chunk, embed, and index manifest documents."""
     if ctx.invoked_subcommand is None:
+        # `kill -USR1 <pid>` dumps every thread's Python stack to stderr — the
+        # only way to diagnose a wedged long ingest without sudo/ptrace.
+        import faulthandler
+
+        faulthandler.register(signal.SIGUSR1, all_threads=True)
         try:
             _execute_ingest(
                 force=force,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 
 from graph_layout_rag.harvest.doi_resolver import resolve_doi_with_fallbacks
@@ -768,14 +769,20 @@ def _download_pdf_seed(spec: dict, *, dry_run: bool) -> ManifestItem:
         insecure = any(h in url for h in ("infotech.monash.edu", "marvl.", "rtsys.informatik"))
         try:
             dl = download_to_file(dest, url, verify=not insecure)
-            if dl.get("ok") and dest.exists() and dest.read_bytes()[:4] == b"%PDF":
-                item.status = "ok"
-                item.url = url
-                item.sha256 = dl.get("sha256")
-                item.localPath = relative_local_path(dest)
-                return item
-            dest.unlink(missing_ok=True)
         except Exception:
+            # download_to_file writes the file to disk *before* it logs the
+            # attempt to the harvest ledger; a failure in that logging step
+            # (e.g. a sqlite hiccup) must never be mistaken for a failed
+            # download and destroy bytes that already landed successfully.
+            dl = None
+        valid_pdf = dest.exists() and dest.read_bytes()[:4] == b"%PDF"
+        if valid_pdf and (dl is None or dl.get("ok")):
+            item.status = "ok"
+            item.url = url
+            item.sha256 = (dl or {}).get("sha256") or hashlib.sha256(dest.read_bytes()).hexdigest()
+            item.localPath = relative_local_path(dest)
+            return item
+        if not valid_pdf:
             dest.unlink(missing_ok=True)
     return item
 

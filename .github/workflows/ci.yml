@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [rag-common, graph-layout-rag, rag-literature-rag]
+        package: [rag-common, graph-layout-rag, rag-literature-rag, pipeline-v2]
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
@@ -71,6 +71,15 @@ jobs:
               uv run --with pytest-socket
               pytest -m "not integration" --disable-socket --allow-unix-socket -q
           - package: rag-literature-rag
+            run: >
+              uv sync --frozen &&
+              uv run --with pytest-socket
+              pytest -m "not integration" --disable-socket --allow-unix-socket -q
+          # pipeline-v2: same offline-only pattern. Its integration tests (real
+          # postgres:16 + Kafka 4.x via docker, gated on RUN_INTEGRATION=1 in
+          # tests/conftest.py) stay excluded here just like the other packages'
+          # @pytest.mark.integration suites.
+          - package: pipeline-v2
             run: >
               uv sync --frozen &&
               uv run --with pytest-socket

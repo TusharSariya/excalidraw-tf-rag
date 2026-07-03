@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.venv/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Generated data: harvested corpora, indexes, lancedb, caches. Some of this is
+# written by Docker containers running as root — never track it.
+data/
+src/data/

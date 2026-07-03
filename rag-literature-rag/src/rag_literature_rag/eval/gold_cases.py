@@ -35,7 +35,7 @@ GOLD_CASES: tuple[EvalCase, ...] = (
     EvalCase(
         id="foundations-dpr",
         query="dense passage retrieval open domain question answering bi-encoder",
-        relevant_doc_ids=frozenset({"arxiv-2004-04906", "arxiv-2005-11401"}),
+        relevant_doc_ids=frozenset({"arxiv-2004-04906v3", "arxiv-2005-11401"}),
         category="dense-retrieval",
     ),
     EvalCase(
@@ -59,7 +59,7 @@ GOLD_CASES: tuple[EvalCase, ...] = (
     EvalCase(
         id="self-rag-reflection-tokens",
         query="Self-RAG reflection tokens retrieve critique on demand",
-        relevant_doc_ids=frozenset({"doi-10-48550-arxiv-2310-11511"}),
+        relevant_doc_ids=frozenset({"arxiv-2310-11511v1"}),
         category="self-correcting",
         pdf_only=True,
     ),
@@ -72,7 +72,7 @@ GOLD_CASES: tuple[EvalCase, ...] = (
     EvalCase(
         id="raptor-hierarchical",
         query="RAPTOR recursive abstractive tree organized retrieval",
-        relevant_doc_ids=frozenset({"doi-10-48550-arxiv-2401-18059"}),
+        relevant_doc_ids=frozenset({"arxiv-2401-18059v1"}),
         category="chunking",
     ),
     EvalCase(
@@ -120,7 +120,7 @@ GOLD_CASES: tuple[EvalCase, ...] = (
     EvalCase(
         id="agentic-rag-survey",
         query="agentic retrieval augmented generation survey planning tool use",
-        relevant_doc_ids=frozenset({"doi-10-48550-arxiv-2501-09136"}),
+        relevant_doc_ids=frozenset({"arxiv-2501-09136v4"}),
         category="agentic",
     ),
     EvalCase(
@@ -138,13 +138,13 @@ GOLD_CASES: tuple[EvalCase, ...] = (
     EvalCase(
         id="engineering-rag-stack",
         query="engineering RAG stack trust frameworks systematic review",
-        relevant_doc_ids=frozenset({"doi-10-48550-arxiv-2601-05264"}),
+        relevant_doc_ids=frozenset({"arxiv-2601-05264v1"}),
         category="engineering",
     ),
     EvalCase(
         id="ragas-metrics",
         query="RAGAS automated evaluation faithfulness answer relevance",
-        relevant_doc_ids=frozenset({"doi-10-48550-arxiv-2309-15217"}),
+        relevant_doc_ids=frozenset({"arxiv-2309-15217v2"}),
         category="evaluation",
     ),
     EvalCase(
@@ -180,7 +180,7 @@ GOLD_CASES: tuple[EvalCase, ...] = (
     EvalCase(
         id="seakr-adaptive",
         query="SeaKR self-aware knowledge retrieval uncertainty adaptive RAG",
-        relevant_doc_ids=frozenset({"doi-10-48550-arxiv-2406-19215"}),
+        relevant_doc_ids=frozenset({"arxiv-2406-19215v1"}),
         category="agentic",
     ),
     EvalCase(
@@ -285,7 +285,7 @@ GOLD_CASES: tuple[EvalCase, ...] = (
         query="why does my RAG pipeline need iterative agentic retrieval loop",
         relevant_doc_ids=frozenset(
             {
-                "doi-10-48550-arxiv-2501-09136",
+                "arxiv-2501-09136v4",
                 "doi-10-48550-arxiv-2603-07379",
             }
         ),

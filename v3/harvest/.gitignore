@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+
+# uv / build
+.venv/
+*.egg-info/
+dist/
+build/
+
+# Secrets & local config
+.env
+.env.*
+!.env.example
+
+# Harvester output — ignore all of data/ so fetched papers, caches, ledgers,
+# and sqlite state can never be accidentally committed. Add !data/<file> to
+# un-ignore anything that should be tracked (e.g. an example manifest).
+data/
