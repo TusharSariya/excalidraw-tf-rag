@@ -213,17 +213,27 @@ def _iter_manifest_enqueue_items(manifest: dict) -> list[dict]:
     return out
 
 
-def _iter_glob_enqueue_items(pattern: str, limit: int | None = None) -> list[dict]:
+def _iter_glob_enqueue_items(
+    pattern: str, limit: int | None = None, start_offset: int = 0
+) -> list[dict]:
     """Build enqueue items directly from PDFs on disk, doc_id = filename stem.
 
     ``limit`` short-circuits BEFORE hashing: a glob over a full corpus can match
     thousands of PDFs, and sha256-ing every one only to truncate afterwards
     reads (and can OOM on) the entire corpus for an ``--limit 5`` request.
+
+    ``start_offset`` skips the first N globbed (sorted) files WITHOUT hashing
+    them, so a large corpus can be enqueued in bounded windows
+    (offset 0/limit 500, offset 500/limit 500, ...) that each stay within the
+    enqueue pod's memory + the producer flush window — the single full-corpus
+    enqueue OOMs the pod hashing thousands of PDFs at once.
     """
     import glob as glob_module
 
     out: list[dict] = []
-    for raw_path in sorted(glob_module.glob(pattern)):
+    for idx, raw_path in enumerate(sorted(glob_module.glob(pattern))):
+        if idx < start_offset:
+            continue
         if limit is not None and len(out) >= limit:
             break
         pdf_path = Path(raw_path)
@@ -277,6 +287,14 @@ def _iter_glob_enqueue_items(pattern: str, limit: int | None = None) -> list[dic
     "for a produce-only run).",
 )
 @click.option("--group-id", default=None, help="Queue group id (default: pipeline-v2.enqueue).")
+@click.option(
+    "--start-offset",
+    default=0,
+    type=int,
+    help="Skip the first N globbed (sorted) PDFs without hashing them, for enqueuing a "
+    "large corpus in bounded windows (e.g. --start-offset 500 --limit 500). The single "
+    "full-corpus enqueue OOMs the enqueue pod hashing thousands of PDFs at once.",
+)
 def enqueue_cmd(
     corpus: str,
     limit: int | None,
@@ -287,6 +305,7 @@ def enqueue_cmd(
     topic: str,
     queue_backend: str,
     group_id: str | None,
+    start_offset: int,
 ) -> None:
     """Produce docs.enriched (or another topic's) messages for a slice of a v1 manifest or PDFs.
 
@@ -304,12 +323,14 @@ def enqueue_cmd(
     if manifest_path is not None:
         manifest = manifest_migrate.load_v1_manifest_json(manifest_path)
         items = _iter_manifest_enqueue_items(manifest)
-        if limit is not None:
-            items = items[:limit]
+        items = items[start_offset : (start_offset + limit) if limit is not None else None]
     else:
-        # Pass limit INTO the glob iterator so it stops hashing after `limit`
-        # files instead of reading the whole corpus then truncating.
-        items = _iter_glob_enqueue_items(pdf_glob, limit=limit)  # type: ignore[arg-type]
+        # Pass limit + offset INTO the glob iterator so it only hashes the
+        # bounded window [start_offset, start_offset+limit) instead of reading
+        # the whole corpus then truncating.
+        items = _iter_glob_enqueue_items(  # type: ignore[arg-type]
+            pdf_glob, limit=limit, start_offset=start_offset
+        )
 
     if not items:
         click.echo("no enqueueable items found (nothing produced)")
