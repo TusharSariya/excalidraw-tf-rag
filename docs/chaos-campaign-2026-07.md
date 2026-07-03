@@ -27,7 +27,7 @@ No sudo (root steps → BLOCKED + note the command). No AskUserQuestion. OOM is 
 - [x] E4 — kill gpu-gateway mid-embed
 - [x] E5 — kill Kafka broker
 - [x] E6 — kill CNPG instance
-- [ ] E7 — kill SeaweedFS mid-write
+- [x] E7 — kill SeaweedFS mid-write
 - [ ] E8 — poison flood → DLQ
 - [ ] E9 — duplicate flood → idempotent
 - [ ] E10 — Kafka +2s latency (≥40% baseline)
@@ -85,3 +85,9 @@ Force-killed the single broker pipeline-v2-single-node-0 with 70 docs enqueued. 
 
 ### 2026-07-03T09:53:18Z — E6 kill CNPG instance: PASS
 Force-killed pipeline-v2-pg-1 under 80-doc load. CNPG operator recovered the instance (PVC-backed). Consumers did NOT crash (0 restarts) — work-state writes survived the DB blip. Post-recovery: extract ok=80, NO silent stubs (the v1 2,266-doc bug class did not recur — degraded never stamped as done). Zero loss, memory stable ~17.6GB, v1 no drift.
+
+### 2026-07-03T09:59:47Z — E7 kill SeaweedFS mid-write: PASS
+Force-killed seaweedfs-volume-0 under 90-doc load (artifacts writing to S3). Recovered 1/1 in ~20s (PVC-backed). Consumers 0 restarts. Post-recovery: extract ok=90, zero degraded/failed — content-addressed keys mean no partial artifact is readable as valid; extract retried cleanly through the outage. Zero loss, memory stable, v1 no drift.
+
+### 2026-07-03T09:59:47Z — MILESTONE: E2-E7 all PASS
+Every single-component infra fault (extract/embed consumer, gpu-gateway, Kafka broker, CNPG, SeaweedFS) recovered with ZERO data loss and ZERO consumer crashes. The rearchitecture thesis — failures become normal operational states — validated under real chaos.
