@@ -52,7 +52,7 @@ import uuid
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -186,7 +186,9 @@ def check_indexable_present_in_index(
         bm25_ids = bm25_doc_ids(bm25_dir)
     except Exception as exc:  # noqa: BLE001 - tantivy read is best-effort
         outcomes.append(
-            CheckOutcome("data", "ok-rows-present-in-tantivy", "SKIP", f"tantivy read failed: {exc}")
+            CheckOutcome(
+                "data", "ok-rows-present-in-tantivy", "SKIP", f"tantivy read failed: {exc}"
+            )
         )
     else:
         missing_bm25 = sorted(ok_doc_ids - bm25_ids)
@@ -336,14 +338,19 @@ def check_dlq_reconciliation(
     for stage in stages:
         topic = deadletter_topic(stage)
         failed_doc_ids = {
-            r.doc_id for r in repo.get_dead_letters(stage=stage, corpus=corpus) if r.state == "failed"
+            r.doc_id
+            for r in repo.get_dead_letters(stage=stage, corpus=corpus)
+            if r.state == "failed"
         }
         try:
             depth = _topic_depth(bootstrap_servers, topic, timeout=timeout)
         except Exception as exc:  # noqa: BLE001 - treat any kafka client error as SKIP
             outcomes.append(
                 CheckOutcome(
-                    "data", f"dlq-reconciliation:{stage}", "SKIP", f"could not read {topic!r}: {exc}"
+                    "data",
+                    f"dlq-reconciliation:{stage}",
+                    "SKIP",
+                    f"could not read {topic!r}: {exc}",
                 )
             )
             continue
@@ -454,7 +461,9 @@ def run_runtime_checks(
             continue
         items = data.get("items", [])
         if not items:
-            outcomes.append(CheckOutcome("runtime", f"pods:{namespace}", "PASS", "no pods in namespace"))
+            outcomes.append(
+                CheckOutcome("runtime", f"pods:{namespace}", "PASS", "no pods in namespace")
+            )
             continue
         bad: list[str] = []
         detail_lines: list[str] = []
@@ -514,7 +523,9 @@ def _recovery_window(
                 continue
             window = _iso_seconds_between(last_restart, ready_time)
             window_str = f"{window:.1f}s" if window is not None else "unparseable timestamps"
-            lines.append(f"{namespace}/{name}: restart->ready in {window_str} (restart={last_restart}, ready={ready_time})")
+            lines.append(
+                f"{namespace}/{name}: restart->ready in {window_str} (restart={last_restart}, ready={ready_time})"
+            )
     detail = "; ".join(lines) if lines else f"no pod restarts observed since {since}"
     return CheckOutcome("runtime", "recovery-window", "PASS", detail)
 

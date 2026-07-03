@@ -7,7 +7,7 @@ from pathlib import Path
 
 import click
 
-from pipeline_v2 import manifest_migrate
+from pipeline_v2 import manifest_migrate, verify
 from pipeline_v2.workstate import PostgresWorkStateRepository
 
 
@@ -167,6 +167,106 @@ def consume_cmd(
         click.echo(f"processed {processed} record(s) for stage={stage!r} corpus={corpus!r}")
     finally:
         queue.close()
+
+
+@main.command("verify")
+@click.option(
+    "--corpus", default=None, help="Corpus namespace to check (DATA layer). Omit to skip it."
+)
+@click.option(
+    "--database-url", default=None, help="Postgres DSN (default: $PIPELINE_V2_DATABASE_URL)."
+)
+@click.option(
+    "--indexes-root",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="v2 indexes root (default: $PIPELINE_V2_INDEXES_DIR).",
+)
+@click.option(
+    "--bootstrap-servers", default="localhost:9092", help="Kafka bootstrap servers (DLQ check)."
+)
+@click.option("--skip-dlq", is_flag=True, default=False, help="Skip the DLQ topic-depth check.")
+@click.option("--kubectl", default=verify.DEFAULT_KUBECTL, help="Path to kubectl binary.")
+@click.option(
+    "--namespace",
+    "namespaces",
+    multiple=True,
+    default=verify.DEFAULT_NAMESPACES,
+    help="Namespace(s) for the RUNTIME layer (repeatable).",
+)
+@click.option(
+    "--since", default=None, help="ISO timestamp; report restart->Ready recovery windows since it."
+)
+@click.option(
+    "--skip-runtime", is_flag=True, default=False, help="Skip the RUNTIME (kubectl) layer."
+)
+@click.option(
+    "--snapshot-path",
+    default=None,
+    type=click.Path(path_type=Path),
+    help="v1-integrity snapshot file (default: pipeline-v2/data/v1-snapshot.txt).",
+)
+@click.option(
+    "--v1-snapshot-init",
+    is_flag=True,
+    default=False,
+    help="Write a new v1-integrity baseline and exit.",
+)
+@click.option(
+    "--v1-check",
+    is_flag=True,
+    default=False,
+    help="Run ONLY the v1-integrity diff against the baseline.",
+)
+def verify_cmd(
+    corpus: str | None,
+    database_url: str | None,
+    indexes_root: Path | None,
+    bootstrap_servers: str,
+    skip_dlq: bool,
+    kubectl: str,
+    namespaces: tuple[str, ...],
+    since: str | None,
+    skip_runtime: bool,
+    snapshot_path: Path | None,
+    v1_snapshot_init: bool,
+    v1_check: bool,
+) -> None:
+    """Steady-state invariant oracle: DATA + RUNTIME + V1-INTEGRITY checks."""
+    resolved_snapshot_path = snapshot_path or verify.default_snapshot_path()
+
+    if v1_snapshot_init:
+        verify.write_v1_snapshot(resolved_snapshot_path)
+        click.echo(f"wrote v1-integrity baseline snapshot to {resolved_snapshot_path}")
+        return
+
+    if v1_check:
+        outcome = verify.check_v1_integrity(resolved_snapshot_path)
+        click.echo(f"[{outcome.status}] {outcome.check}: {outcome.detail}")
+        if outcome.status == "FAIL":
+            sys.exit(1)
+        return
+
+    if corpus is None and skip_runtime:
+        raise click.UsageError(
+            "verify needs --corpus and/or the RUNTIME/V1 layers; nothing to check."
+        )
+
+    report = verify.run_verify(
+        corpus=corpus,
+        database_url=database_url,
+        indexes_root=indexes_root,
+        bootstrap_servers=bootstrap_servers,
+        check_dlq=not skip_dlq,
+        kubectl=kubectl,
+        namespaces=list(namespaces),
+        since=since,
+        skip_runtime=skip_runtime,
+        snapshot_path=resolved_snapshot_path,
+    )
+    click.echo(report.render())
+    if not report.ok:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
