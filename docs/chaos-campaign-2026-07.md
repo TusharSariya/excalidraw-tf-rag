@@ -22,7 +22,7 @@ No sudo (root steps → BLOCKED + note the command). No AskUserQuestion. OOM is 
 
 ## Experiments
 - [x] E1 — baseline mixed dual-corpus (record throughput)
-- [ ] E2 — kill extract consumer
+- [x] E2 — kill extract consumer
 - [ ] E3 — kill embed consumer
 - [ ] E4 — kill gpu-gateway mid-embed
 - [ ] E5 — kill Kafka broker
@@ -67,3 +67,6 @@ No sudo (root steps → BLOCKED + note the command). No AskUserQuestion. OOM is 
 Debris: ~19 failed embed rows from the pre-fix buggy runs remain in work_state; a clean reset happens before E15 capstone (the real index).
 
 **Handoff:** all 8 pre-reqs done, E1 passed. E2-E15 + final evals continue via the ralph loop.
+
+### 2026-07-03T09:31:39Z — E2 kill extract consumer: PASS
+Killed pv2-extract-glr mid-slice (force delete) under a 20+20 doc load. Recovery: pod recreated, unacked message redelivered to the new pod. Result: glr extract ok=20 max_attempt=3 (redelivered, stayed BELOW the DLQ threshold of 4 = no false dead-letter); rlr extract ok=20 max_attempt=1 (uncontaminated). Zero loss, no duplicates, memory stable ~17.9GB, v1 no drift. Share-group redelivery validated under a real consumer kill.
