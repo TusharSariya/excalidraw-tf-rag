@@ -155,6 +155,16 @@ def consume_cmd(
     config = STAGE_CONFIG_BUILDERS[stage](repo)
     resolved_group_id = group_id or f"pipeline-v2.{stage}.{corpus}"
 
+    if queue_backend == "share":
+        # KIP-932 share groups capture `share.auto.offset.reset` at the group's
+        # FIRST attach; the default is `latest`, so without this a fresh
+        # consumer silently skips every already-enqueued record (the spike
+        # gotcha, docs/rearchitecture-v2-decision-log.md A4). Set earliest
+        # BEFORE build_queue creates the first consumer.
+        from pipeline_v2.messaging import ensure_share_group_earliest_reset
+
+        ensure_share_group_earliest_reset(bootstrap_servers, resolved_group_id)
+
     queue = build_queue(
         queue_backend,
         bootstrap_servers=bootstrap_servers,
