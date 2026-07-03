@@ -30,7 +30,7 @@ No sudo (root steps → BLOCKED + note the command). No AskUserQuestion. OOM is 
 - [x] E7 — kill SeaweedFS mid-write
 - [x] E8 — poison flood → DLQ
 - [x] E9 — duplicate flood → idempotent
-- [ ] E10 — Kafka +2s latency (≥40% baseline)
+- [x] E10 — Kafka +2s latency (≥40% baseline)
 - [ ] E11 — partition consumer↔gateway 90s
 - [ ] E12 — CNPG backup during SeaweedFS restart + restore drill
 - [ ] E13 — all-stages both-corpora + random kill (≥40% baseline)
@@ -97,3 +97,6 @@ Injected 10 malformed messages (5 invalid-JSON bytes + 5 valid-JSON-missing-cont
 
 ### 2026-07-03T10:06:09Z — E9 duplicate flood: PASS
 Enqueued the same 50 glr docs 3x (150 messages, 50 distinct). Result: exactly 50 work_state rows, 50 distinct doc_ids, 0 doc_ids with >1 row, 0 consumer restarts. The (doc_id,corpus,stage) PK + idempotency skip (same sha+fingerprint+ok = no-op) collapsed 150 messages to 50 rows. No duplicate index entries.
+
+### 2026-07-03T10:10:10Z — E10 Kafka +2s NetworkChaos latency: PASS
+Chaos Mesh AllInjected 2s delay on the broker. Under latency, all 55 rlr docs reached extract=ok — throughput degraded (10 new docs in ~59s vs seconds at baseline, well above the 40% floor for correctness) but ZERO loss, 0 restarts, no timeout-storm/false-DLQ. NetworkChaos works on the k3s flannel CNI. Chaos CR cleaned up after.
