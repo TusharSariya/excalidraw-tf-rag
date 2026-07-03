@@ -1,0 +1,30 @@
+# PodChaos: kill the sole gpu-gateway pod (inference namespace) and verify
+# it restarts cleanly and comes back Ready + serving /health.
+#
+# gpu-gateway is the sole GPU owner in this cluster (deploy/tofu/namespaces.tf
+# gpu-zero quota) — this experiment proves a pod-kill doesn't strand VRAM or
+# leave the Deployment unable to reschedule the container, before any
+# workload pipeline is allowed to depend on gpu-gateway's uptime.
+#
+# Selector matches the live label set on the gpu-gateway Deployment/pod
+# (deploy/k8s/base/gpu-gateway, kustomize-managed):
+#   app.kubernetes.io/name=gpu-gateway
+# NOT "app=gpu-gateway" — that key doesn't exist on this pod, verified via
+# `kubectl get pod -n inference --show-labels` on 2026-07-03.
+#
+# Usage: kubectl apply -f podchaos-kill-gateway.yaml
+#        (watch restart count increment in `kubectl get pods -n inference`)
+#        kubectl delete -f podchaos-kill-gateway.yaml
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: kill-gpu-gateway
+  namespace: inference
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - inference
+    labelSelectors:
+      app.kubernetes.io/name: gpu-gateway

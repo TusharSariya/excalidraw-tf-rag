@@ -1,0 +1,28 @@
+# PodChaos: kill the single Strimzi Kafka broker pod (kafka namespace) and
+# verify Strimzi's StrimziPodSet controller recreates it and the broker
+# rejoins the KRaft quorum (single-node cluster: controller+broker are the
+# same pod, pipeline-v2-single-node-0 — there is no separate controller to
+# fail over to, so recovery is "the one pod comes back", not leader
+# election).
+#
+# Selector matches the live label set on the broker pod (verified via
+# `kubectl get pods -n kafka --show-labels` on 2026-07-03):
+#   strimzi.io/cluster=pipeline-v2
+#   strimzi.io/component-type=kafka
+#
+# Usage: kubectl apply -f podchaos-kill-kafka.yaml
+#        kubectl delete -f podchaos-kill-kafka.yaml
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: kill-kafka-broker
+  namespace: kafka
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - kafka
+    labelSelectors:
+      strimzi.io/cluster: pipeline-v2
+      strimzi.io/component-type: kafka

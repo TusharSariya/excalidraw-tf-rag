@@ -1,0 +1,16 @@
+# deploy/k8s/overlays/dev/kustomization.yaml
+#
+# Single-desktop "dev" overlay — for this project, dev IS the only
+# environment (one operator, one machine). Kept as an overlay (rather than
+# applying deploy/k8s/base directly) so a future second overlay (e.g. a
+# CI smoke-test namespace) doesn't require restructuring base/.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# Placeholder for dev-only patches (e.g. lower replicas, debug env vars,
+# image tag overrides once real images exist). Empty for now — nothing to
+# diverge from base yet since base itself is all placeholders.
+patches: []

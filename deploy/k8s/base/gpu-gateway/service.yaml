@@ -1,0 +1,17 @@
+# deploy/k8s/base/gpu-gateway/service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: gpu-gateway
+  labels:
+    app.kubernetes.io/name: gpu-gateway
+    app.kubernetes.io/part-of: excalidraw-tf-rag
+spec:
+  selector:
+    app.kubernetes.io/name: gpu-gateway
+  ports:
+    - name: http
+      # 8765 matches config/serve_config.yaml's http_options.port (the gateway's
+      # actual listen port — see deployment.yaml's containerPort/image comment).
+      port: 8765
+      targetPort: http

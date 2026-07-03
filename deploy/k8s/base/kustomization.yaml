@@ -1,0 +1,12 @@
+# deploy/k8s/base/kustomization.yaml
+#
+# Top-level base: aggregates all in-repo service stubs. Namespaces
+# themselves are NOT created here — they're owned by the OpenTofu platform
+# layer (deploy/tofu/namespaces.tf) since they carry ResourceQuotas that
+# kustomize has no equivalent concept for. Apply tofu first, then this.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - gpu-gateway
+  - pipeline-v2

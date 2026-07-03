@@ -1,0 +1,40 @@
+# deploy/k8s/base/pipeline-v2/embed-deployment.yaml
+#
+# Placeholder Deployment for the pipeline-v2 "embed" consumer. Calls
+# gpu-gateway over HTTP for embeddings — does NOT request nvidia.com/gpu
+# itself (the `pipeline` namespace ResourceQuota forbids it; gpu-gateway is
+# the sole GPU-requesting pod in the cluster, see
+# deploy/tofu/namespaces.tf).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pipeline-v2-embed
+  labels:
+    app.kubernetes.io/name: pipeline-v2-embed
+    app.kubernetes.io/part-of: excalidraw-tf-rag
+    app.kubernetes.io/component: embed
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pipeline-v2-embed
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pipeline-v2-embed
+    spec:
+      containers:
+        - name: embed
+          image: pipeline-v2-embed:placeholder # TODO: replace once tools/pipeline-v2/embed is built + pushed
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: pipeline-v2-kafka-bootstrap.kafka.svc.cluster.local:9092
+            - name: GPU_GATEWAY_URL
+              value: http://gpu-gateway.inference.svc.cluster.local:8000
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

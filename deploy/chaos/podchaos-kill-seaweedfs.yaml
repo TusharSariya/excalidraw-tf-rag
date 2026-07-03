@@ -1,0 +1,29 @@
+# PodChaos: kill the SeaweedFS volume server pod (storage namespace) and
+# verify the StatefulSet recreates it, its PVC on local-path reattaches, and
+# the S3 gateway (seaweedfs-s3) resumes serving reads/writes. Single
+# replica, single dataDir (deploy/tofu/seaweedfs.tf) — this proves the
+# volume server survives a restart without losing its backing PVC data, not
+# distributed-replica failover.
+#
+# Selector matches the live label set on the volume pod (verified via
+# `kubectl get pod -n storage seaweedfs-volume-0 --show-labels` on
+# 2026-07-03):
+#   app.kubernetes.io/name=seaweedfs
+#   app.kubernetes.io/component=volume
+#
+# Usage: kubectl apply -f podchaos-kill-seaweedfs.yaml
+#        kubectl delete -f podchaos-kill-seaweedfs.yaml
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: kill-seaweedfs-volume
+  namespace: storage
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - storage
+    labelSelectors:
+      app.kubernetes.io/name: seaweedfs
+      app.kubernetes.io/component: volume

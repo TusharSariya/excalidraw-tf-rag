@@ -1,0 +1,15 @@
+# Provider plugins downloaded by `tofu init` — reproducible from
+# .terraform.lock.hcl (which IS committed), no need to track the binaries.
+.terraform/
+
+# Local state (this is a single-operator, single-machine setup — no remote
+# backend is configured; state stays local and out of git deliberately,
+# since it will contain generated S3/Kafka credentials in plaintext).
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+
+# Local variable overrides (e.g. a real kube_context) — never commit
+# machine-specific overrides.
+*.auto.tfvars
+terraform.tfvars

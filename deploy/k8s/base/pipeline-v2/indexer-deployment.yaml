@@ -1,0 +1,38 @@
+# deploy/k8s/base/pipeline-v2/indexer-deployment.yaml
+#
+# Placeholder Deployment for the pipeline-v2 "indexer" consumer. Writes
+# embedded chunks to the vector/metadata store (CloudNativePG cluster,
+# deploy/tofu/cnpg.tf). No GPU.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pipeline-v2-indexer
+  labels:
+    app.kubernetes.io/name: pipeline-v2-indexer
+    app.kubernetes.io/part-of: excalidraw-tf-rag
+    app.kubernetes.io/component: indexer
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pipeline-v2-indexer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pipeline-v2-indexer
+    spec:
+      containers:
+        - name: indexer
+          image: pipeline-v2-indexer:placeholder # TODO: replace once tools/pipeline-v2/indexer is built + pushed
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: pipeline-v2-kafka-bootstrap.kafka.svc.cluster.local:9092
+            - name: POSTGRES_HOST
+              value: pipeline-v2-pg-rw.storage.svc.cluster.local
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi

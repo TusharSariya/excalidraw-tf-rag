@@ -1,0 +1,73 @@
+# deploy/k8s/base/gpu-gateway/deployment.yaml
+#
+# gpu-gateway is the ONLY workload anywhere in the cluster allowed to
+# request nvidia.com/gpu — every other namespace carries a
+# requests.nvidia.com/gpu=0 ResourceQuota (deploy/tofu/namespaces.tf).
+# Lives in the `inference` namespace, the one namespace without that quota.
+#
+# Image: gpu-gateway/Containerfile builds `gpu-gateway:dev` locally (docker build
+# -f gpu-gateway/Containerfile -t gpu-gateway:dev gpu-gateway/). No registry push
+# wired up yet — `gpu-gateway:dev` below is a local tag, not a registry reference.
+# k3s' containerd can't see the host docker daemon's image store, so before
+# applying this manifest against a k3s cluster, load the image directly into
+# k3s' containerd (skip a registry round-trip entirely):
+#
+#   docker save gpu-gateway:dev | sudo k3s ctr images import -
+#
+# (or, for a multi-node / longer-lived setup, run a local registry — e.g.
+# `docker run -d -p 5000:5000 registry:2` — push `localhost:5000/gpu-gateway:dev`
+# to it, and reference that address here instead; k3s can then pull it directly.)
+# Port/health path below are confirmed against the actual OpenAI-compatible HTTP
+# surface: config/serve_config.yaml binds Ray Serve to 0.0.0.0:8765, and
+# src/gpu_gateway/main.py's GatewayHTTP.__call__ serves GET /health there
+# (smoke-tested via `docker run` — see Containerfile build notes).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gpu-gateway
+  labels:
+    app.kubernetes.io/name: gpu-gateway
+    app.kubernetes.io/part-of: excalidraw-tf-rag
+spec:
+  replicas: 1 # single 8GB GPU: never more than one replica, ever.
+  strategy:
+    type: Recreate # a second replica would double-request the only GPU in the cluster.
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: gpu-gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: gpu-gateway
+    spec:
+      containers:
+        - name: gpu-gateway
+          image: gpu-gateway:dev # local tag — see image-loading note above; swap for a registry ref once one exists
+          imagePullPolicy: IfNotPresent # required for a locally-imported/local-tag image — k3s must not try to pull it
+          ports:
+            - name: http
+              containerPort: 8765
+          resources:
+            requests:
+              cpu: "1"
+              memory: 4Gi
+              nvidia.com/gpu: 1
+            limits:
+              cpu: "4"
+              memory: 8Gi
+              nvidia.com/gpu: 1
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      # Only schedulable on the (single) GPU-bearing node; on a one-node
+      # cluster this is redundant with reality but documents intent.
+      runtimeClassName: nvidia

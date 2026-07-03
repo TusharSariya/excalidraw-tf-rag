@@ -1,0 +1,41 @@
+[project]
+name = "pipeline-v2"
+version = "0.1.0"
+description = "Distributed rearchitecture v2 pipeline: work-state ledger + manifest migration (P1)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "click>=8.1.0",
+  "psycopg[binary]>=3.1.0",
+  "pydantic>=2.7.0",
+  "confluent-kafka==2.15.0",
+  "httpx>=0.28.1",
+  "graph-layout-rag",
+  "lancedb==0.33.0",
+  "tantivy==0.26.0",
+  "boto3>=1.43.40",
+  "prometheus-client>=0.20.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pymupdf>=1.27.0",
+    "moto[s3]>=5.2.2",
+]
+
+[project.scripts]
+pipeline-v2 = "pipeline_v2.cli:main"
+
+[tool.uv.sources]
+graph-layout-rag = { path = "../graph-layout-rag", editable = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pipeline_v2"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

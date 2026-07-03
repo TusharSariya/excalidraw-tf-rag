@@ -1,0 +1,38 @@
+# deploy/k8s/base/pipeline-v2/extract-deployment.yaml
+#
+# Placeholder Deployment for the pipeline-v2 "extract" consumer
+# (tools/pipeline-v2, not yet built as of this file's authoring — see
+# decision log D3/lane A2). Consumes from Kafka share groups
+# (deploy/tofu/kafka-strimzi.tf), produces extracted-page artifacts.
+# No GPU: extraction is CPU-bound PDF/document parsing.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pipeline-v2-extract
+  labels:
+    app.kubernetes.io/name: pipeline-v2-extract
+    app.kubernetes.io/part-of: excalidraw-tf-rag
+    app.kubernetes.io/component: extract
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pipeline-v2-extract
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pipeline-v2-extract
+    spec:
+      containers:
+        - name: extract
+          image: pipeline-v2-extract:placeholder # TODO: replace once tools/pipeline-v2/extract is built + pushed
+          env:
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: pipeline-v2-kafka-bootstrap.kafka.svc.cluster.local:9092
+          resources:
+            requests:
+              cpu: "1"
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 1Gi

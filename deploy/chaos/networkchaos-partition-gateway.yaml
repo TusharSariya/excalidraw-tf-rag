@@ -1,0 +1,30 @@
+# NetworkChaos: fully partition the gpu-gateway pod's network for 90s (no
+# target selector = isolate from all other pods/hosts in both directions)
+# to verify that clients calling gpu-gateway's OpenAI-compatible HTTP
+# surface fail fast/retry sanely during an outage, and that gpu-gateway
+# itself recovers cleanly (no wedged in-flight request state) once the
+# partition self-heals at spec.duration.
+#
+# .spec.duration triggers Chaos Mesh's built-in auto-recovery (verified in
+# NetworkChaos CRD schema via `kubectl explain networkchaos.spec.duration`
+# on 2026-07-03) — unlike networkchaos-kafka-latency.yaml (deliberately
+# left standing for manual bounded control), this one self-terminates so an
+# unattended partition test can't strand the gateway partitioned.
+#
+# Usage: kubectl apply -f networkchaos-partition-gateway.yaml
+#        (auto-recovers after 90s; or kubectl delete -f ... to cut it short)
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: partition-gpu-gateway
+  namespace: inference
+spec:
+  action: partition
+  mode: one
+  selector:
+    namespaces:
+      - inference
+    labelSelectors:
+      app.kubernetes.io/name: gpu-gateway
+  direction: both
+  duration: "90s"
