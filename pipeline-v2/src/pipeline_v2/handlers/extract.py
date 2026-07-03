@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 
 from pipeline_v2.artifacts import ArtifactStore, artifact_store_from_env
@@ -51,7 +52,19 @@ from pipeline_v2.contracts import StageMessage
 
 logger = logging.getLogger(__name__)
 
-PDF_BACKEND = "pymupdf"
+# PDF extraction backend is a deliberate, swappable choice — set per run via the
+# PIPELINE_V2_PDF_BACKEND env (same container, different flag). "docling" gives
+# the full-text markdown structure the research found load-bearing; "pymupdf" is
+# the fast plain-text fallback. The chosen backend also selects which
+# extract_cache namespace we read/write, so a docling run reuses v1's docling
+# cache and (re)populates it for the uncached tail.
+DEFAULT_PDF_BACKEND = "pymupdf"
+_VALID_PDF_BACKENDS = ("docling", "pymupdf")
+
+
+def _pdf_backend() -> str:
+    raw = os.getenv("PIPELINE_V2_PDF_BACKEND", DEFAULT_PDF_BACKEND).strip().lower()
+    return raw if raw in _VALID_PDF_BACKENDS else DEFAULT_PDF_BACKEND
 
 
 class ExtractCudaGuardError(RuntimeError):
@@ -101,32 +114,26 @@ def make_extract_handler(store: ArtifactStore | None = None):
 _CORPUS_PKG = {"glr": "graph_layout_rag", "rlr": "rag_literature_rag"}
 
 
-def _load_cached_docling_chunks(corpus: str, content_sha256: str) -> list[dict] | None:
-    """Return v2 chunk records from v1's cached docling chunks, or None on miss.
+def _corpus_modules(corpus: str):
+    """Import the per-corpus v1 ingest modules (GLR vs RLR use different chunkers).
 
-    v1 built every production index with the ``docling`` backend + the default
-    chunk profile; those chunks are cached at ``<tool>/data/extract_cache`` keyed
-    by (pdf_sha256, "docling", default-profile). Reusing them gives byte-identical
-    ``chunk_index`` + ``canonical_sha256`` to v1 (so the contextual cache hits) and
-    the full-text docling structure the research found load-bearing — with no
-    docling runtime dependency in this CPU-only stage. Empty sha or cache miss
-    (~1–3% of docs) returns None so the caller falls back to PyMuPDF.
+    Using the RIGHT tool's modules is what makes v2 chunk_index/canonical_sha256
+    match v1 (the precondition for the extract + contextual caches to line up).
     """
-    pkg = _CORPUS_PKG.get(corpus)
-    if not pkg or not content_sha256:
-        return None
-    try:
-        import importlib
+    import importlib
 
-        extract_cache = importlib.import_module(f"{pkg}.ingest.extract_cache")
-        chunk_mod = importlib.import_module(f"{pkg}.ingest.chunk")
-        cached = extract_cache.get(content_sha256, "docling", None)
-    except Exception as exc:  # noqa: BLE001 — cache reuse is best-effort
-        logger.debug("extract cache reuse unavailable for %s: %s", corpus, exc)
-        return None
-    if not cached:
-        return None
-    embed_input_text = chunk_mod.embed_input_text
+    pkg = _CORPUS_PKG[corpus]
+    return {
+        "extract_cache": importlib.import_module(f"{pkg}.ingest.extract_cache"),
+        "chunk": importlib.import_module(f"{pkg}.ingest.chunk"),
+        "extract": importlib.import_module(f"{pkg}.ingest.extract"),
+        "manifest": importlib.import_module(f"{pkg}.manifest"),
+        "pdf_text": importlib.import_module(f"{pkg}.pdf_text"),
+        "docling_text": importlib.import_module(f"{pkg}.docling_text"),
+    }
+
+
+def _records_from_chunks(chunks, embed_input_text) -> list[dict]:
     return [
         {
             "doc_id": c.doc_id,
@@ -139,7 +146,7 @@ def _load_cached_docling_chunks(corpus: str, content_sha256: str) -> list[dict] 
             "section_path": c.section_path,
             "source_url": c.source_url,
         }
-        for c in cached
+        for c in chunks
     ]
 
 
@@ -154,60 +161,67 @@ def _extract_one(message: StageMessage, store: ArtifactStore) -> HandlerResult:
     if not pdf_path.is_file():
         return HandlerResult(state="degraded", reason=f"pdf_path does not exist: {pdf_path}")
 
-    # Cache-first: reuse v1's cached docling chunks so chunk_index/canonical_sha256
-    # match v1 (contextual cache hits) and we get docling full-text without running
-    # docling here. Falls through to PyMuPDF on a cache miss.
-    cached_records = _load_cached_docling_chunks(message.corpus, message.content_sha256)
+    if message.corpus not in _CORPUS_PKG:
+        return HandlerResult(state="degraded", reason=f"unknown corpus: {message.corpus}")
 
-    # Lazily imported: keeps `import pipeline_v2.handlers.extract` cheap for
-    # callers (tests included) that never actually exercise the PDF path.
-    from graph_layout_rag.ingest.chunk import chunk_pages, chunking_fingerprint, embed_input_text
-    from graph_layout_rag.ingest.extract import PageText
-    from graph_layout_rag.manifest import ManifestItem
-    from graph_layout_rag.pdf_text import extract_pages_from_path
+    backend = _pdf_backend()
+    mods = _corpus_modules(message.corpus)
+    extract_cache = mods["extract_cache"]
+    chunk_pages = mods["chunk"].chunk_pages
+    embed_input_text = mods["chunk"].embed_input_text
+    chunking_fingerprint = mods["chunk"].chunking_fingerprint
+    sha = message.content_sha256
 
-    if cached_records is not None:
+    # 1. Cache-first for the CHOSEN backend: a docling run reuses v1's docling
+    #    chunks (byte-identical chunk_index → contextual cache hits); a pymupdf
+    #    run reuses pymupdf chunks. Cheap and gives v1 fidelity for free.
+    try:
+        cached = extract_cache.get(sha, backend, None) if sha else None
+    except Exception as exc:  # noqa: BLE001 — cache read is best-effort
+        logger.debug("extract cache read failed (%s/%s): %s", message.corpus, backend, exc)
+        cached = None
+    if cached:
         return _emit_chunks(
-            message, store, cached_records, pdf_backend="docling", chunking_fingerprint=None
+            message, store, _records_from_chunks(cached, embed_input_text),
+            pdf_backend=backend, chunking_fingerprint=chunking_fingerprint(),
         )
 
-    result = extract_pages_from_path(pdf_path, clean=True)
+    # 2. Cache miss → extract with the chosen backend. docling gives the full-text
+    #    markdown structure the research found load-bearing (heavier, CPU); pymupdf
+    #    is the fast plain-text path.
+    if backend == "docling":
+        result = mods["docling_text"].extract_pages_docling(pdf_path, clean=True)
+    else:
+        result = mods["pdf_text"].extract_pages_from_path(pdf_path, clean=True)
     if not result.ok:
         reason = result.open_error or "no extractable text (empty/corrupt PDF)"
-        return HandlerResult(state="degraded", reason=f"pdf extraction failed: {reason}")
+        return HandlerResult(state="degraded", reason=f"{backend} extraction failed: {reason}")
 
+    PageText = mods["extract"].PageText
     pages = [PageText(page=page_no, text=text) for page_no, text in result.pages]
-
-    item = ManifestItem(
+    item = mods["manifest"].ManifestItem(
         id=message.doc_id,
         title=str(message.payload.get("title") or message.doc_id),
         source="pipeline-v2",
         url=str(message.payload.get("source_url") or ""),
         status="ok",
-        sha256=message.content_sha256,
+        sha256=sha,
     )
-
-    chunks = chunk_pages(item, pages, canonical_sha256=message.content_sha256)
+    chunks = chunk_pages(item, pages, canonical_sha256=sha)
     if not chunks:
-        return HandlerResult(state="degraded", reason="pdf extracted but produced zero chunks")
+        return HandlerResult(state="degraded", reason=f"{backend} extracted but produced zero chunks")
 
-    chunk_records = [
-        {
-            "doc_id": chunk.doc_id,
-            "chunk_index": chunk.chunk_index,
-            "title": chunk.title,
-            "text": chunk.text,
-            "embed_text": embed_input_text(chunk),
-            "page": chunk.page,
-            "page_end": chunk.page_end,
-            "section_path": chunk.section_path,
-            "source_url": chunk.source_url,
-        }
-        for chunk in chunks
-    ]
+    # 3. Populate the extract_cache so the (expensive) docling tail is reused on
+    #    any re-run — mirrors v1 ingest/run._extract_pdf_task.
+    if sha:
+        try:
+            extract_cache.put(sha, backend, chunks, None)
+        except Exception as exc:  # noqa: BLE001 — caching is best-effort
+            logger.debug("extract cache write failed (%s/%s): %s", message.corpus, backend, exc)
+
     return _emit_chunks(
-        message, store, chunk_records, pdf_backend=PDF_BACKEND,
-        chunking_fingerprint=chunking_fingerprint(),
+        message, store, _records_from_chunks(chunks, embed_input_text),
+        pdf_backend=backend, chunking_fingerprint=chunking_fingerprint(),
     )
 
 

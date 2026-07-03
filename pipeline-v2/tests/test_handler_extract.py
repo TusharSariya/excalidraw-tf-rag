@@ -8,6 +8,17 @@ from pipeline_v2.contracts import StageMessage
 from pipeline_v2.handlers.extract import make_extract_handler
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_extract_cache(monkeypatch):
+    """Isolate the shared v1 extract_cache: never read a real entry, never write
+    one (the handler populates the docling cache in prod, which would pollute the
+    on-disk cache and cross-contaminate tests that reuse a doc sha)."""
+    from graph_layout_rag.ingest import extract_cache as ec
+
+    monkeypatch.setattr(ec, "get", lambda *a, **k: None)
+    monkeypatch.setattr(ec, "put", lambda *a, **k: None)
+
+
 def _make_pdf(tmp_path, *, text: str = "Hello pipeline-v2. This is page one.") -> str:
     fitz = pytest.importorskip("fitz")
     path = tmp_path / "sample.pdf"
@@ -22,7 +33,7 @@ def _make_pdf(tmp_path, *, text: str = "Hello pipeline-v2. This is page one.") -
 def _message(**payload) -> StageMessage:
     return StageMessage(
         doc_id="doc-1",
-        corpus="test-corpus",
+        corpus="glr",  # per-corpus module dispatch requires a known corpus
         content_sha256="deadbeef",
         stage_fingerprint="fp-1",
         payload=payload,
