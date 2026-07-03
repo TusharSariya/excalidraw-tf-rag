@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import sys
 import uuid
@@ -9,6 +10,8 @@ import click
 
 from pipeline_v2 import manifest_migrate, verify
 from pipeline_v2.workstate import PostgresWorkStateRepository
+
+DEFAULT_ENQUEUE_STAGE_FINGERPRINT = "enqueue-v1"
 
 
 @click.group()
@@ -167,6 +170,160 @@ def consume_cmd(
         click.echo(f"processed {processed} record(s) for stage={stage!r} corpus={corpus!r}")
     finally:
         queue.close()
+
+
+def _iter_manifest_enqueue_items(manifest: dict) -> list[dict]:
+    """Extract (doc_id, pdf_path, sha256, title, source_url) tuples from a v1 manifest dict.
+
+    Only items that carry a ``localPath`` (the on-disk PDF, per the v1
+    manifest shape documented in :mod:`pipeline_v2.manifest_migrate`) are
+    enqueueable -- metadata-only/failed items have nothing for the extract
+    stage to read. ``sha256`` prefers the v1-computed content hash already
+    stored on the item (identical semantics to what v1 used for the same
+    file) and falls back to hashing the PDF on disk if that field is absent.
+    """
+    out: list[dict] = []
+    for item in manifest.get("items", []):
+        local_path = item.get("localPath")
+        if not local_path:
+            continue
+        pdf_path = Path(local_path)
+        sha256 = item.get("sha256")
+        if not sha256 and pdf_path.is_file():
+            sha256 = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+        out.append(
+            {
+                "doc_id": item["id"],
+                "pdf_path": local_path,
+                "sha256": sha256 or "",
+                "title": item.get("title") or item["id"],
+                "source_url": item.get("url") or "",
+            }
+        )
+    return out
+
+
+def _iter_glob_enqueue_items(pattern: str) -> list[dict]:
+    """Build enqueue items directly from PDFs on disk, doc_id = filename stem."""
+    import glob as glob_module
+
+    out: list[dict] = []
+    for raw_path in sorted(glob_module.glob(pattern)):
+        pdf_path = Path(raw_path)
+        if not pdf_path.is_file():
+            continue
+        sha256 = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+        out.append(
+            {
+                "doc_id": pdf_path.stem,
+                "pdf_path": str(pdf_path),
+                "sha256": sha256,
+                "title": pdf_path.stem,
+                "source_url": "",
+            }
+        )
+    return out
+
+
+@main.command("enqueue")
+@click.option("--corpus", required=True, help="Corpus namespace for the enqueued docs.")
+@click.option(
+    "--limit", default=None, type=int, help="Max number of docs to enqueue (omit for all)."
+)
+@click.option(
+    "--manifest",
+    "manifest_path",
+    default=None,
+    type=click.Path(exists=True, path_type=Path),
+    help="v1 manifest.json to read PDF paths from (mutually exclusive with --pdf-glob).",
+)
+@click.option(
+    "--pdf-glob",
+    default=None,
+    help="Glob pattern of PDFs to enqueue directly, doc_id = filename stem "
+    "(mutually exclusive with --manifest).",
+)
+@click.option(
+    "--stage-fingerprint",
+    default=DEFAULT_ENQUEUE_STAGE_FINGERPRINT,
+    help="stage_fingerprint stamped on every produced message (same value across a run "
+    "makes re-enqueues idempotent no-ops at the extract stage).",
+)
+@click.option("--bootstrap-servers", default="localhost:9092", help="Kafka bootstrap servers.")
+@click.option("--topic", default="docs.enriched", help="Topic to produce to.")
+@click.option(
+    "--queue",
+    "queue_backend",
+    default="classic",
+    type=click.Choice(["share", "classic"]),
+    help="Queue backend used to produce (default: classic -- no share-group side effects "
+    "for a produce-only run).",
+)
+@click.option("--group-id", default=None, help="Queue group id (default: pipeline-v2.enqueue).")
+def enqueue_cmd(
+    corpus: str,
+    limit: int | None,
+    manifest_path: Path | None,
+    pdf_glob: str | None,
+    stage_fingerprint: str,
+    bootstrap_servers: str,
+    topic: str,
+    queue_backend: str,
+    group_id: str | None,
+) -> None:
+    """Produce docs.enriched (or another topic's) messages for a slice of a v1 manifest or PDFs.
+
+    Exactly one of --manifest / --pdf-glob selects the source. Each item
+    becomes one StageMessage with payload {"pdf_path", "title",
+    "source_url"} -- the shape the extract stage handler
+    (:mod:`pipeline_v2.handlers.extract`) expects.
+    """
+    from pipeline_v2.contracts import StageMessage
+    from pipeline_v2.messaging import build_queue
+
+    if bool(manifest_path) == bool(pdf_glob):
+        raise click.UsageError("enqueue needs exactly one of --manifest or --pdf-glob")
+
+    if manifest_path is not None:
+        manifest = manifest_migrate.load_v1_manifest_json(manifest_path)
+        items = _iter_manifest_enqueue_items(manifest)
+    else:
+        items = _iter_glob_enqueue_items(pdf_glob)  # type: ignore[arg-type]
+
+    if limit is not None:
+        items = items[:limit]
+
+    if not items:
+        click.echo("no enqueueable items found (nothing produced)")
+        return
+
+    resolved_group_id = group_id or "pipeline-v2.enqueue"
+    queue = build_queue(
+        queue_backend,
+        bootstrap_servers=bootstrap_servers,
+        group_id=resolved_group_id,
+        topics=[topic],
+    )
+    try:
+        for item in items:
+            message = StageMessage(
+                doc_id=item["doc_id"],
+                corpus=corpus,
+                content_sha256=item["sha256"],
+                stage_fingerprint=stage_fingerprint,
+                attempt=1,
+                payload={
+                    "pdf_path": item["pdf_path"],
+                    "title": item["title"],
+                    "source_url": item["source_url"],
+                },
+            )
+            queue.produce(topic, message.model_dump_json().encode("utf-8"))
+        queue.flush(timeout=30.0)
+    finally:
+        queue.close()
+
+    click.echo(f"enqueued {len(items)} message(s) to topic={topic!r} corpus={corpus!r}")
 
 
 @main.command("verify")
