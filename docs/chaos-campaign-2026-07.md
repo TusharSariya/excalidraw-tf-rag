@@ -133,3 +133,6 @@ RLR catalog PASS is decisive: on a clean index the full stack (v2 gateway embedd
 
 ## CAMPAIGN SUMMARY
 Resilience: 13/15 experiments PASS (E1-E10, E12-E15), E11 BLOCKED (flannel CNI limit; property covered by E4). Every fault class survived with zero silent loss + zero crash-loops. ~6 production bugs found+fixed. OOM never recurred. v1 data byte-identical throughout. FINAL EVALS: RLR catalog PASS; GLR + RLR-pdf misses fully diagnosed as pre-existing data conditions, not v2 defects. Completion promise NOT emitted (floors not all met as literally stated). Remaining: full clean re-index (multi-hour) to close GLR floor — operator decision.
+
+### 2026-07-03T11:02:41Z — GLR full re-ingest STARTED (closing the eval floor)
+Full v2 GLR ingest kicked off to rebuild the gutted index. Rate observed: extract ~200 docs/min, indexer (embed-gated via gateway 0.6B) ~44 docs/min. GLR indexer_ok climbing (146 ->  -> ...). Memory bounded (15-16GB avail, mem-guard floor 3GB, no OOM, swap flat). ETA ~1-1.5h for ~2870 remaining docs. Batched enqueue (500/1000/... — full-3017 enqueue OOMs the enqueue pod hashing all PDFs; bounded batches are safe). Loop continues grinding batches until the GLR index is complete, then re-eval to meet the 0.858 floor.
