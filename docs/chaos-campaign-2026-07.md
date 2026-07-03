@@ -23,7 +23,7 @@ No sudo (root steps → BLOCKED + note the command). No AskUserQuestion. OOM is 
 ## Experiments
 - [x] E1 — baseline mixed dual-corpus (record throughput)
 - [x] E2 — kill extract consumer
-- [ ] E3 — kill embed consumer
+- [x] E3 — kill embed consumer
 - [ ] E4 — kill gpu-gateway mid-embed
 - [ ] E5 — kill Kafka broker
 - [ ] E6 — kill CNPG instance
@@ -70,3 +70,9 @@ Debris: ~19 failed embed rows from the pre-fix buggy runs remain in work_state; 
 
 ### 2026-07-03T09:31:39Z — E2 kill extract consumer: PASS
 Killed pv2-extract-glr mid-slice (force delete) under a 20+20 doc load. Recovery: pod recreated, unacked message redelivered to the new pod. Result: glr extract ok=20 max_attempt=3 (redelivered, stayed BELOW the DLQ threshold of 4 = no false dead-letter); rlr extract ok=20 max_attempt=1 (uncontaminated). Zero loss, no duplicates, memory stable ~17.9GB, v1 no drift. Share-group redelivery validated under a real consumer kill.
+
+### 2026-07-03T09:37:07Z — E3 kill embed consumer: PASS (clean cohort)
+Killed pv2-embed-glr mid-batch under load. Pod recovered; new embeds reached ok (glr embed ok max_attempt=2, BELOW the DLQ threshold of 4 — bounded redelivery, no new loss). rlr uncontaminated by the glr-only fault. Memory stable ~17.5GB, v1 no drift. Note: pre-existing failed rows (attempt=12) are E1-era debris from the 4B/gateway-probe bugs, NOT caused by E3 — reset below so E4+ measure cleanly.
+
+### 2026-07-03T09:37:07Z — work_state debris reset (pre-E4)
+Cleared E1-era failed/degraded debris + the small test docs so remaining experiments assert against a clean slate; the real corpus + index come from the E15 full-ingest capstone. v2 indexes/artifacts left in place (rebuilt at E15).
