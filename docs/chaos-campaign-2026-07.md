@@ -25,7 +25,7 @@ No sudo (root steps → BLOCKED + note the command). No AskUserQuestion. OOM is 
 - [x] E2 — kill extract consumer
 - [x] E3 — kill embed consumer
 - [x] E4 — kill gpu-gateway mid-embed
-- [ ] E5 — kill Kafka broker
+- [x] E5 — kill Kafka broker
 - [ ] E6 — kill CNPG instance
 - [ ] E7 — kill SeaweedFS mid-write
 - [ ] E8 — poison flood → DLQ
@@ -79,3 +79,6 @@ Cleared E1-era failed/degraded debris + the small test docs so remaining experim
 
 ### 2026-07-03T09:39:47Z — E4 kill gpu-gateway mid-embed: STRONG PASS
 Force-killed the gateway pod with 60 embeds in flight. Recovery: fresh gateway pod Ready + /health 200 in ~20s. **35 of 60 embeds actively survived the outage by retrying** (glr 20 retried, max_attempt=4; rlr 15 retried, max_attempt=2) and ALL 60 converged to embed=ok — zero loss, well under the 5-min bound, no false dead-letters (max attempt 4 succeeded before the DLQ threshold). This is the exact v1-killer failure (consumer death on gateway loss) now surviving as bounded retry + convergence. Memory stable, v1 no drift. The rag_common bounded-backoff retry client (the P0 crash-gate fix) + 180s embed timeout carried it.
+
+### 2026-07-03T09:47:24Z — E5 kill Kafka broker (full bus outage): PASS
+Force-killed the single broker pipeline-v2-single-node-0 with 70 docs enqueued. Broker recovered 1/1 in ~23s (Strimzi recreate, PVC persisted the log). **Consumers did NOT crash (0 restarts) — reconnected gracefully and resumed.** All 70 docs (35 glr + 35 rlr) reached extract=ok: messages enqueued pre-kill survived in Kafka and processed post-reconnect. Zero loss, well under 3-min bound, memory stable ~17.6GB, v1 no drift.
