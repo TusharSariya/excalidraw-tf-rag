@@ -115,11 +115,20 @@ def make_embed_handler(
     timeout: float = DEFAULT_TIMEOUT_S,
     max_retries: int = DEFAULT_MAX_RETRIES,
     client: httpx.Client | None = None,
+    contextual: bool | None = None,
 ):
-    """Build the embed stage handler. ``store``/``client`` are injectable for tests."""
+    """Build the embed stage handler. ``store``/``client`` are injectable for tests.
+
+    ``contextual`` (env ``PIPELINE_V2_CONTEXTUAL``, truthy) turns on the
+    contextual-retrieval context-line prefix per chunk before embedding — the
+    RLR SOTA champion (``cuda-qwen0.6b-contextual-v1``). GLR does NOT set it
+    (contextual regresses GLR per the research).
+    """
     artifact_store = store if store is not None else artifact_store_from_env()
     resolved_url = gateway_url or os.getenv("PIPELINE_GATEWAY_URL", DEFAULT_GATEWAY_URL)
     resolved_model = model or os.getenv("PIPELINE_GATEWAY_EMBED_MODEL", DEFAULT_MODEL)
+    if contextual is None:
+        contextual = os.getenv("PIPELINE_V2_CONTEXTUAL", "").strip().lower() in ("1", "true", "yes")
 
     def _handler(message: StageMessage) -> HandlerResult:
         return _embed_one(
@@ -130,9 +139,44 @@ def make_embed_handler(
             timeout=timeout,
             max_retries=max_retries,
             client=client,
+            contextual=contextual,
         )
 
     return _handler
+
+
+def _augment_contextual(
+    chunks: list[dict], texts: list[str], *, canonical_sha256: str
+) -> list[str]:
+    """Prepend the cached contextual context-line per chunk (RLR SOTA champion).
+
+    Delegates to v1's ``rag_literature_rag.ingest.contextual.augment_texts_for_context``
+    (single source of truth for the prompt, cache-key format, and the shared
+    ``contextual_cache.json``), so a v2 rebuild reuses the ~20k already-generated
+    context lines instead of re-calling the LLM — provided ``canonical_sha256``
+    (== the doc's PDF-bytes sha) and ``chunk_index`` match v1 (they do: v2 reuses
+    v1's docling chunks). Fails soft: any import/lookup error returns the texts
+    unchanged rather than aborting the embed.
+    """
+    try:
+        from types import SimpleNamespace
+
+        from rag_literature_rag.ingest.contextual import augment_texts_for_context
+
+        adapters = [
+            SimpleNamespace(
+                canonical_sha256=canonical_sha256,
+                chunk_index=int(c.get("chunk_index") or 0),
+                title=str(c.get("title") or ""),
+                section_path=str(c.get("section_path") or ""),
+                text=str(c.get("text") or ""),
+            )
+            for c in chunks
+        ]
+        return augment_texts_for_context(adapters, texts)
+    except Exception as exc:  # noqa: BLE001 — contextual is an enhancement, never fatal
+        logger.warning("contextual augmentation failed (embedding raw texts): %s", exc)
+        return texts
 
 
 def _embed_one(
@@ -144,6 +188,7 @@ def _embed_one(
     timeout: float,
     max_retries: int,
     client: httpx.Client | None,
+    contextual: bool = False,
 ) -> HandlerResult:
     artifact_uri = message.payload.get("chunks_artifact_uri")
     if not artifact_uri:
@@ -160,6 +205,8 @@ def _embed_one(
         return HandlerResult(state="degraded", reason="chunks artifact has no chunks")
 
     texts = [str(chunk.get("embed_text") or chunk.get("text") or "") for chunk in chunks]
+    if contextual:
+        texts = _augment_contextual(chunks, texts, canonical_sha256=message.content_sha256)
 
     owns_client = client is None
     http_client = client if client is not None else httpx.Client()
@@ -183,7 +230,13 @@ def _embed_one(
             reason=(f"gateway returned {len(vectors_by_index)} embeddings for {len(texts)} chunks"),
         )
 
-    embedded_chunks = [{**chunk, "vector": vectors_by_index[i]} for i, chunk in enumerate(chunks)]
+    # index_text = the exact surface form that was embedded (contextual prefix
+    # included when applicable). The indexer uses it as the BM25 body so lexical
+    # and dense retrieval see "one surface form" — matching v1 ingest/bm25.
+    embedded_chunks = [
+        {**chunk, "vector": vectors_by_index[i], "index_text": texts[i]}
+        for i, chunk in enumerate(chunks)
+    ]
 
     artifact_body = {
         "doc_id": message.doc_id,

@@ -11,10 +11,14 @@ from pipeline_v2.handlers import indexer as ix
 
 
 def _row(i: int, doc_id: str = "d1") -> dict:
+    # Mirrors indexer._chunk_row output (the shape _write_lance/_write_bm25 receive).
     return {
         "id": f"{doc_id}-{i}", "doc_id": doc_id, "corpus": "glr", "title": "t",
         "text": f"hello world chunk {i}", "section_path": "", "source_url": "",
-        "chunk_index": i, "page": 0, "vector": [0.1, 0.2],
+        "chunk_index": i, "page": 0, "page_end": 0, "year": 0, "venue": "",
+        "arxiv_category": "", "genre": "", "is_retracted": False, "tags": "",
+        "pipeline_categories": "", "bm25_text": f"hello world chunk {i}",
+        "vector": [0.1, 0.2],
     }
 
 

@@ -95,7 +95,22 @@ def _chunk_row(doc_id: str, corpus: str, record: dict[str, Any]) -> dict[str, An
         "tags": str(record.get("tags") or ""),
         "pipeline_categories": str(record.get("pipeline_categories") or ""),
         "vector": record["vector"],
+        # BM25 body = the exact text that was embedded ("one surface form" —
+        # v1 ingest/bm25.upsert_chunks indexes index_texts, not clean chunk.text).
+        # For contextual profiles this carries the "Context: …\n" prefix; for
+        # plain profiles it is embed_input_text. Kept OUT of the Lance schema via
+        # _LANCE_COLUMNS so the stored/display Lance `text` stays clean.
+        "bm25_text": str(record.get("index_text") or record.get("text") or ""),
     }
+
+
+# Lance table columns (everything _chunk_row emits EXCEPT bm25_text, which is a
+# BM25-only surface form and must not enter the Lance schema).
+_LANCE_COLUMNS = (
+    "id", "doc_id", "corpus", "chunk_index", "title", "text", "page", "page_end",
+    "section_path", "source_url", "year", "venue", "arxiv_category", "genre",
+    "is_retracted", "tags", "pipeline_categories", "vector",
+)
 
 
 def _table_names(db: lancedb.DBConnection) -> list[str]:
@@ -106,15 +121,19 @@ def _table_names(db: lancedb.DBConnection) -> list[str]:
 
 def _write_lance(lance_dir: Path, doc_id: str, corpus: str, rows: list[dict[str, Any]]) -> int:
     lance_dir.parent.mkdir(parents=True, exist_ok=True)
+    # Project to the Lance schema so BM25-only keys (bm25_text) never enter the
+    # table (its schema is fixed at create-time; an extra key would either
+    # pollute the schema or fail add() on an existing table).
+    lance_rows = [{k: r[k] for k in _LANCE_COLUMNS} for r in rows]
     db = lancedb.connect(str(lance_dir))
     if CHUNKS_TABLE in _table_names(db):
         table = db.open_table(CHUNKS_TABLE)
         # Idempotent replace: drop any prior rows for this exact doc before
         # re-adding, so a message redelivery/rerun never duplicates rows.
         table.delete(f"doc_id = '{doc_id}' AND corpus = '{corpus}'")
-        table.add(rows)
+        table.add(lance_rows)
     else:
-        table = db.create_table(CHUNKS_TABLE, data=rows)
+        table = db.create_table(CHUNKS_TABLE, data=lance_rows)
     version = getattr(table, "version", None)
     if callable(version):
         version = version()
@@ -153,7 +172,7 @@ def _bm25_add(writer: tantivy.IndexWriter, row: dict[str, Any]) -> None:
             doc_id=row["doc_id"],
             corpus=row["corpus"],
             title=row["title"],
-            text=row["text"],
+            text=row.get("bm25_text") or row["text"],
             section_path=row["section_path"],
             source_url=row["source_url"],
             tags=row.get("tags", ""),

@@ -6,11 +6,18 @@ manifest) comes later; for now the extract stage message simply carries
 extract — plus optional ``payload["title"]`` / ``payload["source_url"]``
 used only as chunk metadata.
 
-Extract-import choice: PyMuPDF, not Docling
---------------------------------------------
-graph-layout-rag offers two PDF backends (``graph_layout_rag.pdf_text`` /
-PyMuPDF, and ``graph_layout_rag.docling_text`` / Docling, gated behind the
-``docling`` extra). This handler always uses PyMuPDF:
+Extract path: reuse v1's cached docling chunks, else PyMuPDF
+------------------------------------------------------------
+For the SOTA rebuild this handler is **cache-first**: it looks up the doc's
+PDF-sha in the corpus's v1 ``extract_cache`` (docling, default profile) and, on
+a hit (~97-99% of docs), reuses those chunks verbatim — giving v1-identical
+``chunk_index`` + ``canonical_sha256`` (so the RLR contextual cache hits) and
+the full-text docling structure the research found load-bearing, with NO docling
+runtime dependency in this CPU-only stage. On a cache miss it falls back to
+PyMuPDF (below). graph-layout-rag offers two PDF backends
+(``graph_layout_rag.pdf_text`` / PyMuPDF, and ``graph_layout_rag.docling_text``
+/ Docling, gated behind the ``docling`` extra); the PyMuPDF fallback is used
+because:
 
 * It's graph-layout-rag's own default (``default_pdf_backend()`` returns
   ``"pymupdf"`` unless ``GRAPH_RAG_PDF_BACKEND=docling`` is set) — reaching
@@ -87,6 +94,55 @@ def make_extract_handler(store: ArtifactStore | None = None):
     return _handler
 
 
+# Corpus → the v1 tool package whose ingest modules produced the docling
+# extract_cache + (for RLR) the contextual_cache. Reusing the RIGHT tool's
+# cache + chunker is what makes v2 chunk_index / canonical_sha256 match v1 —
+# the precondition for both caches to hit (see docs/…decision log, Phase 0a).
+_CORPUS_PKG = {"glr": "graph_layout_rag", "rlr": "rag_literature_rag"}
+
+
+def _load_cached_docling_chunks(corpus: str, content_sha256: str) -> list[dict] | None:
+    """Return v2 chunk records from v1's cached docling chunks, or None on miss.
+
+    v1 built every production index with the ``docling`` backend + the default
+    chunk profile; those chunks are cached at ``<tool>/data/extract_cache`` keyed
+    by (pdf_sha256, "docling", default-profile). Reusing them gives byte-identical
+    ``chunk_index`` + ``canonical_sha256`` to v1 (so the contextual cache hits) and
+    the full-text docling structure the research found load-bearing — with no
+    docling runtime dependency in this CPU-only stage. Empty sha or cache miss
+    (~1–3% of docs) returns None so the caller falls back to PyMuPDF.
+    """
+    pkg = _CORPUS_PKG.get(corpus)
+    if not pkg or not content_sha256:
+        return None
+    try:
+        import importlib
+
+        extract_cache = importlib.import_module(f"{pkg}.ingest.extract_cache")
+        chunk_mod = importlib.import_module(f"{pkg}.ingest.chunk")
+        cached = extract_cache.get(content_sha256, "docling", None)
+    except Exception as exc:  # noqa: BLE001 — cache reuse is best-effort
+        logger.debug("extract cache reuse unavailable for %s: %s", corpus, exc)
+        return None
+    if not cached:
+        return None
+    embed_input_text = chunk_mod.embed_input_text
+    return [
+        {
+            "doc_id": c.doc_id,
+            "chunk_index": c.chunk_index,
+            "title": c.title,
+            "text": c.text,
+            "embed_text": embed_input_text(c),
+            "page": c.page,
+            "page_end": c.page_end,
+            "section_path": c.section_path,
+            "source_url": c.source_url,
+        }
+        for c in cached
+    ]
+
+
 def _extract_one(message: StageMessage, store: ArtifactStore) -> HandlerResult:
     _assert_cpu_only()
 
@@ -98,12 +154,22 @@ def _extract_one(message: StageMessage, store: ArtifactStore) -> HandlerResult:
     if not pdf_path.is_file():
         return HandlerResult(state="degraded", reason=f"pdf_path does not exist: {pdf_path}")
 
+    # Cache-first: reuse v1's cached docling chunks so chunk_index/canonical_sha256
+    # match v1 (contextual cache hits) and we get docling full-text without running
+    # docling here. Falls through to PyMuPDF on a cache miss.
+    cached_records = _load_cached_docling_chunks(message.corpus, message.content_sha256)
+
     # Lazily imported: keeps `import pipeline_v2.handlers.extract` cheap for
     # callers (tests included) that never actually exercise the PDF path.
     from graph_layout_rag.ingest.chunk import chunk_pages, chunking_fingerprint, embed_input_text
     from graph_layout_rag.ingest.extract import PageText
     from graph_layout_rag.manifest import ManifestItem
     from graph_layout_rag.pdf_text import extract_pages_from_path
+
+    if cached_records is not None:
+        return _emit_chunks(
+            message, store, cached_records, pdf_backend="docling", chunking_fingerprint=None
+        )
 
     result = extract_pages_from_path(pdf_path, clean=True)
     if not result.ok:
@@ -139,14 +205,30 @@ def _extract_one(message: StageMessage, store: ArtifactStore) -> HandlerResult:
         }
         for chunk in chunks
     ]
+    return _emit_chunks(
+        message, store, chunk_records, pdf_backend=PDF_BACKEND,
+        chunking_fingerprint=chunking_fingerprint(),
+    )
 
+
+def _emit_chunks(
+    message: StageMessage,
+    store: ArtifactStore,
+    chunk_records: list[dict],
+    *,
+    pdf_backend: str,
+    chunking_fingerprint: object,
+) -> HandlerResult:
+    """Write the chunks artifact + return the ok result (shared by cache-reuse and PyMuPDF paths)."""
+    if not chunk_records:
+        return HandlerResult(state="degraded", reason="no chunks produced")
     artifact_body = {
         "doc_id": message.doc_id,
         "corpus": message.corpus,
         "content_sha256": message.content_sha256,
         "stage_fingerprint": message.stage_fingerprint,
-        "pdf_backend": PDF_BACKEND,
-        "chunking_fingerprint": chunking_fingerprint(),
+        "pdf_backend": pdf_backend,
+        "chunking_fingerprint": chunking_fingerprint,
         "chunks": chunk_records,
     }
     content = json.dumps(artifact_body, sort_keys=True).encode("utf-8")
@@ -155,12 +237,11 @@ def _extract_one(message: StageMessage, store: ArtifactStore) -> HandlerResult:
         key_parts=["extract", message.corpus, message.doc_id, message.stage_fingerprint],
         suffix=".json",
     )
-
     return HandlerResult(
         state="ok",
         artifact_uri=artifact_uri,
         output_payload={
             "chunks_artifact_uri": artifact_uri,
-            "chunk_count": len(chunks),
+            "chunk_count": len(chunk_records),
         },
     )
