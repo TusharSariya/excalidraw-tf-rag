@@ -127,27 +127,86 @@ def _open_or_create_bm25(bm25_dir: Path) -> tantivy.Index:
     return tantivy.Index(_build_bm25_schema(), path=str(bm25_dir))
 
 
-def _write_bm25(bm25_dir: Path, doc_id: str, corpus: str, rows: list[dict[str, Any]]) -> int:
-    index = _open_or_create_bm25(bm25_dir)
-    writer = index.writer()
-    writer.delete_documents("doc_id", doc_id)
-    for row in rows:
-        writer.add_document(
-            tantivy.Document(
-                id=row["id"],
-                doc_id=row["doc_id"],
-                corpus=row["corpus"],
-                title=row["title"],
-                text=row["text"],
-                section_path=row["section_path"],
-                source_url=row["source_url"],
-                chunk_index=row["chunk_index"],
-                page=row["page"],
-            )
+def _bm25_add(writer: tantivy.IndexWriter, row: dict[str, Any]) -> None:
+    writer.add_document(
+        tantivy.Document(
+            id=row["id"],
+            doc_id=row["doc_id"],
+            corpus=row["corpus"],
+            title=row["title"],
+            text=row["text"],
+            section_path=row["section_path"],
+            source_url=row["source_url"],
+            chunk_index=row["chunk_index"],
+            page=row["page"],
         )
+    )
+
+
+def _is_bm25_corruption(exc: Exception) -> bool:
+    """tantivy leaves a non-crash-atomic index: if the indexer pod is killed
+    mid-commit/merge, meta.json can reference a segment whose files are gone,
+    and every later open/commit fails with FileDoesNotExist on a .term/.idx/...
+    segment file. Detect that class so we can self-heal from LanceDB rather
+    than dead-letter every subsequent doc (found during the E15 full ingest,
+    planted by the E13/E15 indexer kills)."""
+    msg = str(exc).lower()
+    # A killed indexer leaves the tantivy index inconsistent; the next
+    # open/commit surfaces it one of two ways depending on which file the
+    # merge/read touches: a missing segment file ("FileDoesNotExist"/"no such
+    # file") or a half-written segment ("Data corruption ... composite file").
+    if "filedoesnotexist" in msg or "data corrupt" in msg:
+        return True
+    seg_ext = (".term", ".idx", ".store", ".fieldnorm", ".pos", ".fast")
+    return ("no such file" in msg or "does not exist" in msg) and any(e in msg for e in seg_ext)
+
+
+def _rebuild_bm25_from_lance(bm25_dir: Path, lance_dir: Path) -> None:
+    """Crash-recovery: wipe the corrupted tantivy index and rebuild it from the
+    LanceDB chunks table (the source of truth — the Lance write in _index_one
+    runs BEFORE the bm25 write, so it already contains the current doc). This
+    makes the indexer self-heal from a mid-merge kill instead of getting stuck
+    dead-lettering forever."""
+    import shutil
+
+    logger.warning("bm25 index at %s is corrupted; rebuilding from LanceDB", bm25_dir)
+    if bm25_dir.exists():
+        shutil.rmtree(bm25_dir)
+    bm25_dir.mkdir(parents=True, exist_ok=True)
+    index = tantivy.Index(_build_bm25_schema(), path=str(bm25_dir))
+    writer = index.writer()
+    db = lancedb.connect(str(lance_dir))
+    if CHUNKS_TABLE in _table_names(db):
+        table = db.open_table(CHUNKS_TABLE)
+        for row in table.to_arrow().to_pylist():
+            _bm25_add(writer, row)
     writer.commit()
     index.reload()
-    return len(rows)
+
+
+def _write_bm25(
+    bm25_dir: Path,
+    doc_id: str,
+    corpus: str,
+    rows: list[dict[str, Any]],
+    lance_dir: Path | None = None,
+) -> int:
+    try:
+        index = _open_or_create_bm25(bm25_dir)
+        writer = index.writer()
+        writer.delete_documents("doc_id", doc_id)
+        for row in rows:
+            _bm25_add(writer, row)
+        writer.commit()
+        index.reload()
+        return len(rows)
+    except Exception as exc:  # noqa: BLE001 — narrowed to corruption below; re-raised otherwise
+        if lance_dir is not None and _is_bm25_corruption(exc):
+            # rows are already in LanceDB (written first in _index_one), so a
+            # full rebuild from Lance includes this doc — recover and move on.
+            _rebuild_bm25_from_lance(bm25_dir, lance_dir)
+            return len(rows)
+        raise
 
 
 def lance_doc_chunk_ids(lance_dir: Path, corpus: str | None = None) -> set[str]:
@@ -231,7 +290,9 @@ def _index_one(
 
     with _write_lock:
         lance_version = _write_lance(paths.lance_dir, message.doc_id, message.corpus, rows)
-        bm25_count = _write_bm25(paths.bm25_dir, message.doc_id, message.corpus, rows)
+        bm25_count = _write_bm25(
+            paths.bm25_dir, message.doc_id, message.corpus, rows, lance_dir=paths.lance_dir
+        )
 
     # No dedicated "lance table version" column exists on WorkStateRow (only
     # doc_id/corpus/stage/state/reason/artifact_uri/run_id) and `run_id` is
