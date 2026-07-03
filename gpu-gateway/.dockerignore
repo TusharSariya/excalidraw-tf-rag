@@ -1,0 +1,35 @@
+# .dockerignore — keep the build context small (see gpu-gateway/Containerfile).
+# Everything here is either a local venv/build artifact, secrets, or eval output
+# that must not (and need not) ship inside the image.
+
+.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+**/.pytest_cache/
+*.egg-info/
+**/*.egg-info/
+
+# Secrets — never bake credentials into an image layer.
+.env
+.env.*
+!.env.example
+
+# Local data / eval outputs — large and regenerated at runtime, not build inputs.
+data/
+eval-results/
+*.bench.json
+*.db
+*.sqlite
+*.sqlite3
+
+# VCS / editor / OS cruft.
+.git/
+.gitignore
+.DS_Store
+
+# Container tooling itself.
+Containerfile
+Dockerfile
+.dockerignore

@@ -37,7 +37,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, PlainTextResponse
 
 from gpu_gateway.cache import SQLiteCache, embed_cache_key, rerank_cache_key
-from gpu_gateway.handlers.dense_embed import DenseEmbed06B, DenseEmbed4B
+from gpu_gateway.handlers.dense_embed import DenseEmbed06B, DenseEmbed4B, EmbedOOMError
 from gpu_gateway.handlers.llm import LLMDeployment
 from gpu_gateway.handlers.reranker import RerankerDeployment
 from gpu_gateway.scheduler import LLM_SENTINEL, Job, Scheduler
@@ -62,6 +62,27 @@ _VRAM_MB: dict[str, int] = {
     "bge-reranker-v2-m3": 1200,  # BGE reranker v2 m3
 }
 _CARD_MB = 7200  # conservative ceiling — leaves ~600 MB for driver/CUDA overhead
+
+
+def _is_embed_oom(exc: BaseException) -> bool:
+    """True if `exc` is (or wraps) an `EmbedOOMError` raised by a dense-embed handler.
+
+    Ray re-raises actor-side exceptions as `RayTaskError`, which Ray constructs as a
+    dynamic subclass of the original exception type when it's picklable (ours is a
+    plain-args RuntimeError subclass, so it is) — `isinstance` sees through the wrap.
+    The class-name fallback covers any Ray version where that reconstruction doesn't
+    happen and the original type is lost across the actor boundary.
+    """
+    if isinstance(exc, EmbedOOMError):
+        return True
+    seen: set[int] = set()
+    cur: BaseException | None = exc
+    while cur is not None and id(cur) not in seen:
+        seen.add(id(cur))
+        if type(cur).__name__ == "EmbedOOMError":
+            return True
+        cur = cur.__cause__ or cur.__context__
+    return False
 
 
 def _model_handle_name(model: str) -> str:
@@ -233,9 +254,25 @@ class GatewayHTTP:
         if miss_texts:
             # Enqueue the miss batch and await the dispatcher; it coalesces same-model
             # jobs, bin-packs VRAM, and returns one vector per input text in order.
-            new_vecs: list[list[float]] = await self._sched.submit(
-                Job(kind="embed", canonical=canonical, items=miss_texts)
-            )
+            try:
+                new_vecs: list[list[float]] = await self._sched.submit(
+                    Job(kind="embed", canonical=canonical, items=miss_texts)
+                )
+            except Exception as exc:  # noqa: BLE001 — narrowed to embed-OOM below
+                if not _is_embed_oom(exc):
+                    raise
+                # A single item OOM'd even alone after halve-and-retry (see
+                # DenseEmbed*.__call__ / token_batch.EmbedOOMError): surface a
+                # structured per-request error instead of a bare 500 — the
+                # dispatcher and VRAM are already clean (cache emptied, model
+                # unaffected), so this request fails without taking down others.
+                log.warning(
+                    "embeddings: OOM for model=%s (%d texts): %s", model, len(miss_texts), exc
+                )
+                return JSONResponse(
+                    {"error": "embedding failed: out of GPU memory", "detail": str(exc)},
+                    status_code=503,
+                )
             store_entries = [
                 (keys[miss_indices[j]], model, new_vecs[j]) for j in range(len(miss_texts))
             ]
