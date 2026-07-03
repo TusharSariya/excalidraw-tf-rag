@@ -29,7 +29,7 @@ No sudo (root steps → BLOCKED + note the command). No AskUserQuestion. OOM is 
 - [x] E6 — kill CNPG instance
 - [x] E7 — kill SeaweedFS mid-write
 - [x] E8 — poison flood → DLQ
-- [ ] E9 — duplicate flood → idempotent
+- [x] E9 — duplicate flood → idempotent
 - [ ] E10 — Kafka +2s latency (≥40% baseline)
 - [ ] E11 — partition consumer↔gateway 90s
 - [ ] E12 — CNPG backup during SeaweedFS restart + restore drill
@@ -94,3 +94,6 @@ Every single-component infra fault (extract/embed consumer, gpu-gateway, Kafka b
 
 ### 2026-07-03T10:02:48Z — E8 poison flood: PASS
 Injected 10 malformed messages (5 invalid-JSON bytes + 5 valid-JSON-missing-contract-fields) to docs.enriched. All routed to deadletter.extract; extract consumers held 0 restarts (no crash-loop). StageConsumer contract-validation rejects poison to DLQ and keeps polling. (Observed: per-corpus consumers are separate share groups on the shared docs.enriched topic, so each poison is DLQd by both groups = 20 DLQ records for 10 inputs — noted, not a correctness issue.)
+
+### 2026-07-03T10:06:09Z — E9 duplicate flood: PASS
+Enqueued the same 50 glr docs 3x (150 messages, 50 distinct). Result: exactly 50 work_state rows, 50 distinct doc_ids, 0 doc_ids with >1 row, 0 consumer restarts. The (doc_id,corpus,stage) PK + idempotency skip (same sha+fingerprint+ok = no-op) collapsed 150 messages to 50 rows. No duplicate index entries.
