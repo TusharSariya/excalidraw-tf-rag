@@ -24,7 +24,7 @@ No sudo (root steps → BLOCKED + note the command). No AskUserQuestion. OOM is 
 - [x] E1 — baseline mixed dual-corpus (record throughput)
 - [x] E2 — kill extract consumer
 - [x] E3 — kill embed consumer
-- [ ] E4 — kill gpu-gateway mid-embed
+- [x] E4 — kill gpu-gateway mid-embed
 - [ ] E5 — kill Kafka broker
 - [ ] E6 — kill CNPG instance
 - [ ] E7 — kill SeaweedFS mid-write
@@ -76,3 +76,6 @@ Killed pv2-embed-glr mid-batch under load. Pod recovered; new embeds reached ok 
 
 ### 2026-07-03T09:37:07Z — work_state debris reset (pre-E4)
 Cleared E1-era failed/degraded debris + the small test docs so remaining experiments assert against a clean slate; the real corpus + index come from the E15 full-ingest capstone. v2 indexes/artifacts left in place (rebuilt at E15).
+
+### 2026-07-03T09:39:47Z — E4 kill gpu-gateway mid-embed: STRONG PASS
+Force-killed the gateway pod with 60 embeds in flight. Recovery: fresh gateway pod Ready + /health 200 in ~20s. **35 of 60 embeds actively survived the outage by retrying** (glr 20 retried, max_attempt=4; rlr 15 retried, max_attempt=2) and ALL 60 converged to embed=ok — zero loss, well under the 5-min bound, no false dead-letters (max attempt 4 succeeded before the DLQ threshold). This is the exact v1-killer failure (consumer death on gateway loss) now surviving as bounded retry + convergence. Memory stable, v1 no drift. The rag_common bounded-backoff retry client (the P0 crash-gate fix) + 180s embed timeout carried it.
