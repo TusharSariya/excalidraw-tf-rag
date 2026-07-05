@@ -25,6 +25,11 @@ jobs:
         run: uvx ruff check --output-format=github .
       - name: ruff format --check
         run: uvx ruff format --check .
+      - name: validate agent skills
+        # Frontmatter shape, reference reachability, portability terms, and
+        # snippet compilation for .agents/skills/. 3.14-marked snippets need a
+        # 3.14 interpreter; uv provisions it on demand.
+        run: uv run -p 3.14 --no-project python scripts/validate_skills.py
 
   # ---- Lockfile consistency: pyproject <-> uv.lock cannot drift -----------
   # gpu-gateway is excluded: it ships no uv.lock (torch is installed out-of-band).
@@ -83,7 +88,8 @@ jobs:
             run: >
               uv sync --frozen &&
               uv run --with pytest-socket
-              pytest -m "not integration" --disable-socket --allow-unix-socket -q
+              pytest -m "not integration" --disable-socket --allow-unix-socket
+              --allow-hosts=localhost,127.0.0.1 -q
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
