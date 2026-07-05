@@ -107,9 +107,24 @@ def _chunk_row(doc_id: str, corpus: str, record: dict[str, Any]) -> dict[str, An
 # Lance table columns (everything _chunk_row emits EXCEPT bm25_text, which is a
 # BM25-only surface form and must not enter the Lance schema).
 _LANCE_COLUMNS = (
-    "id", "doc_id", "corpus", "chunk_index", "title", "text", "page", "page_end",
-    "section_path", "source_url", "year", "venue", "arxiv_category", "genre",
-    "is_retracted", "tags", "pipeline_categories", "vector",
+    "id",
+    "doc_id",
+    "corpus",
+    "chunk_index",
+    "title",
+    "text",
+    "page",
+    "page_end",
+    "section_path",
+    "source_url",
+    "year",
+    "venue",
+    "arxiv_category",
+    "genre",
+    "is_retracted",
+    "tags",
+    "pipeline_categories",
+    "vector",
 )
 
 

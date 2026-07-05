@@ -129,9 +129,7 @@ def test_enqueue_cmd_rejects_both_sources(tmp_path):
 
 def test_enqueue_cmd_produces_well_formed_messages_from_manifest(fake_build_queue):
     runner = CliRunner()
-    result = runner.invoke(
-        main, ["enqueue", "--corpus", "glr", "--manifest", str(FIXTURE)]
-    )
+    result = runner.invoke(main, ["enqueue", "--corpus", "glr", "--manifest", str(FIXTURE)])
 
     assert result.exit_code == 0, result.output
     assert len(fake_build_queue.produced) == 1

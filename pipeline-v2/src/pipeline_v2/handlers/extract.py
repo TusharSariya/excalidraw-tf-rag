@@ -182,8 +182,11 @@ def _extract_one(message: StageMessage, store: ArtifactStore) -> HandlerResult:
         cached = None
     if cached:
         return _emit_chunks(
-            message, store, _records_from_chunks(cached, embed_input_text),
-            pdf_backend=backend, chunking_fingerprint=chunking_fingerprint(),
+            message,
+            store,
+            _records_from_chunks(cached, embed_input_text),
+            pdf_backend=backend,
+            chunking_fingerprint=chunking_fingerprint(),
         )
 
     # 2. Cache miss → extract with the chosen backend. docling gives the full-text
@@ -209,7 +212,9 @@ def _extract_one(message: StageMessage, store: ArtifactStore) -> HandlerResult:
     )
     chunks = chunk_pages(item, pages, canonical_sha256=sha)
     if not chunks:
-        return HandlerResult(state="degraded", reason=f"{backend} extracted but produced zero chunks")
+        return HandlerResult(
+            state="degraded", reason=f"{backend} extracted but produced zero chunks"
+        )
 
     # 3. Populate the extract_cache so the (expensive) docling tail is reused on
     #    any re-run — mirrors v1 ingest/run._extract_pdf_task.
@@ -220,8 +225,11 @@ def _extract_one(message: StageMessage, store: ArtifactStore) -> HandlerResult:
             logger.debug("extract cache write failed (%s/%s): %s", message.corpus, backend, exc)
 
     return _emit_chunks(
-        message, store, _records_from_chunks(chunks, embed_input_text),
-        pdf_backend=backend, chunking_fingerprint=chunking_fingerprint(),
+        message,
+        store,
+        _records_from_chunks(chunks, embed_input_text),
+        pdf_backend=backend,
+        chunking_fingerprint=chunking_fingerprint(),
     )
 
 

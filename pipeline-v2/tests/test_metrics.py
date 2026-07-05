@@ -176,8 +176,7 @@ def test_poison_message_increments_dlq_and_acked_but_not_processed_or_histogram(
     )
     assert _counter_value(MESSAGES_DLQ_TOTAL, stage="embed", corpus=corpus_label) == before_dlq + 1
     assert (
-        _counter_value(MESSAGES_ACKED_TOTAL, stage="embed", corpus=corpus_label)
-        == before_acked + 1
+        _counter_value(MESSAGES_ACKED_TOTAL, stage="embed", corpus=corpus_label) == before_acked + 1
     )
 
 
