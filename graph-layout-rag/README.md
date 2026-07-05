@@ -464,6 +464,35 @@ uv run graph-layout-rag query "stress majorization neato" --rerank --json   # cr
 uv run graph-layout-rag query "stress majorization neato" --no-hybrid --json # dense-only (skip BM25)
 ```
 
+### Deep research (`research`)
+
+`research <question>` is the agentic synthesis arm on top of plain `query`: it decomposes
+the question into ≤4 sub-questions, runs hybrid retrieval per sub-question, follows the
+citation graph 1 hop from the top docs (keeping neighbors that clear an embed-similarity
+bar — no LLM), summarizes each unique doc, then writes a cited synthesis with inline
+`[bib_key]` citations, a references section, and a `SUFFICIENT: yes/no` self-report that
+gates at most one iterate round.
+
+```bash
+uv run graph-layout-rag research "How does stress majorization compare to Sugiyama layering for readability?" \
+    --max-docs 6                       # human-readable markdown
+uv run graph-layout-rag research "..." --json      # structured agent surface
+uv run graph-layout-rag research "..." --dry-run    # retrieval + cite-expansion only, ZERO LLM calls
+```
+
+Flags: `--top`, `--max-docs` (≤12, caps evidence LLM calls), `--depth` (`1` single synthesis,
+`2` allow one iterate), `--dry-run`, plus the usual `query` filters. The end-of-run line prints
+the running LLM call count + a rough token/USD estimate.
+
+**LLM backends** (two lanes, all env-overridable). Cheap steps (decompose, follow-up) route
+through `rag_common.local_llm` by default (`GRAPH_RAG_RESEARCH_CHEAP_BACKEND`, default `local`);
+synthesis + evidence summaries default to a direct-HTTP DeepSeek helper
+(`GRAPH_RAG_RESEARCH_SYNTH_BACKEND`, default `deepseek`, `deepseek-chat` via `DEEPSEEK_API_KEY`).
+Set either lane to `deepseek`/`opencode`/`local`; on a box with no local Ollama models, run the
+cheap lane on DeepSeek too (`GRAPH_RAG_RESEARCH_CHEAP_BACKEND=deepseek`). If `query/graph_arm.py`
+is present it is used as the retrieval strategy automatically (soft optional; `--no-graph-arm`
+to force plain hybrid).
+
 | Flag / env | Effect |
 | --- | --- |
 | `--hybrid` / `--no-hybrid` | Fuse BM25 + dense (default on). Degrades to dense if no BM25 index yet. |

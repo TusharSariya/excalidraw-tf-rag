@@ -20,7 +20,8 @@ Qrels file shape (``data/eval/qrels/<name>.json``)::
       "cases": {
         "<case_id>": {
           "<canonical_doc_id>": {"grade": 3, "rationale": "...",
-                                  "systems": ["dense", "colbert"]}
+                                  "systems": ["dense", "colbert"],
+                                  "judge_model": "deepseek:deepseek-chat"}
         }
       }
     }
@@ -28,6 +29,14 @@ Qrels file shape (``data/eval/qrels/<name>.json``)::
 Grades follow the UMBRELA 0-3 scale: 0 irrelevant, 1 related, 2 highly relevant,
 3 perfectly relevant. The default binary threshold (grade >= 2) keeps the
 existing binary metrics in `metrics.py` meaningful.
+
+Per-entry ``judge_model`` (added for the direct-HTTP dual-backend judge,
+`eval/judge.py`) records the ACTUAL model/backend that produced THAT specific
+grade — it can differ from the file-level ``judge_model`` above when the
+judge failed over mid-run (e.g. DeepSeek credit exhaustion -> opencode-go).
+It is additive and backward-compatible: entries from qrels files written
+before this field existed simply omit it, and readers should treat an absent
+per-entry ``judge_model`` as "the file-level ``judge_model`` applies".
 """
 
 from __future__ import annotations

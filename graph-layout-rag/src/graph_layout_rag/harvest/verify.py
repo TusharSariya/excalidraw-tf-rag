@@ -11,6 +11,15 @@ MIN_PDF_BYTES = 10_000
 
 
 def _pdf_valid(item: ManifestItem) -> tuple[bool, str]:
+    """Structural PDF integrity only — never a topicality judgment.
+
+    Topical curation is ``harvest prune``'s job (explicit, previewed, gated
+    behind ``--apply --yes``). Verify must not demote an item whose PDF is
+    present and well-formed: doing so nulls localPath/sha256 and orphans a
+    perfectly good file (2026-07-04 incident: 1,196 ok items with valid
+    on-disk PDFs were flipped to failed by an off-topic check that lived
+    here).
+    """
     if not item.localPath:
         return False, "no localPath"
     path = PKG_ROOT / item.localPath
@@ -21,13 +30,19 @@ def _pdf_valid(item: ManifestItem) -> tuple[bool, str]:
         return False, "not a PDF"
     if len(data) < MIN_PDF_BYTES:
         return False, f"too small ({len(data)} bytes)"
-    if item.source not in CURATED_SOURCES and not is_layout_relevant(item.title, item.abstract):
-        return False, "off-topic"
     return True, "ok"
 
 
+def _looks_off_topic(item: ManifestItem) -> bool:
+    return item.source not in CURATED_SOURCES and not is_layout_relevant(item.title, item.abstract)
+
+
 def verify_manifest(manifest: Manifest, *, downgrade: bool = True) -> dict[str, int]:
-    """Verify ok items. Optionally downgrade invalid entries to failed."""
+    """Verify ok items have valid PDFs; optionally downgrade broken entries.
+
+    Off-topic-looking items are *counted and reported only* (``off_topic``
+    stat) — never downgraded here. Use ``harvest prune`` to act on them.
+    """
     log = get_logger()
     stats = {"checked": 0, "valid": 0, "downgraded": 0, "off_topic": 0}
 
@@ -38,10 +53,11 @@ def verify_manifest(manifest: Manifest, *, downgrade: bool = True) -> dict[str, 
         valid, reason = _pdf_valid(item)
         if valid:
             stats["valid"] += 1
+            if _looks_off_topic(item):
+                stats["off_topic"] += 1
+                log.info("verify: %s looks off-topic (kept; use prune to act)", item.id)
             continue
         log.warning("verify: %s invalid — %s", item.id, reason)
-        if reason == "off-topic":
-            stats["off_topic"] += 1
         if downgrade:
             item.status = "failed"
             item.localPath = None

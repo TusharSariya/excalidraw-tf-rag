@@ -107,6 +107,22 @@ def canonical_identity_map() -> CanonicalIdentityMap:
         for doc_id in doc_ids:
             canonical_by_doc[doc_id] = canonical
 
+    # Manifest-persisted aliases: ids of records this item absorbed in a past
+    # merge/collapse (ManifestItem.aliasDocIds). The absorbed record no longer
+    # exists as a manifest item, so the union-find above cannot see it — map
+    # it directly onto its absorber's component so old qrels/citation doc ids
+    # still resolve. A live item id always wins over a persisted alias.
+    for item in items:
+        canonical = canonical_by_doc[item.id]
+        extra = [alias for alias in item.aliasDocIds if alias and alias not in canonical_by_doc]
+        if not extra:
+            continue
+        for alias in extra:
+            canonical_by_doc[alias] = canonical
+        aliases_by_canonical[canonical] = tuple(
+            sorted(set(aliases_by_canonical.get(canonical, ())) | set(extra))
+        )
+
     return CanonicalIdentityMap(canonical_by_doc, aliases_by_canonical)
 
 

@@ -14,7 +14,12 @@ class IngestDocument:
 
     @property
     def alias_doc_ids(self) -> list[str]:
-        return sorted({item.id for item in self.aliases})
+        ids = {item.id for item in self.aliases}
+        # Manifest-persisted aliases: ids absorbed by past merges/collapses
+        # whose records no longer exist (ManifestItem.aliasDocIds).
+        ids.update(alias for item in (self.item, *self.aliases) for alias in item.aliasDocIds)
+        ids.discard(self.item.id)
+        return sorted(ids)
 
     @property
     def alias_source_urls(self) -> list[str]:
@@ -62,6 +67,12 @@ def canonical_ingest_projection(items: list[ManifestItem]) -> list[IngestDocumen
     pdf_without_sha: list[ManifestItem] = []
     metadata: list[ManifestItem] = []
     for item in items:
+        if item.excluded:
+            # Manifest `excluded` items must not reach the query-facing index
+            # (manifest.py: "excluded from the query-facing catalog"). Enforced
+            # here so any --force/--rebuild pass drops previously-indexed docs
+            # that were excluded after their original ingest.
+            continue
         if item.status == "ok" and item.localPath:
             if item.sha256:
                 pdf_groups.setdefault(item.sha256, []).append(item)

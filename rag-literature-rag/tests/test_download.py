@@ -146,3 +146,29 @@ def test_global_download_limit_bounds_nested_pools(tmp_path: Path, monkeypatch):
             pool.map(lambda i: download_to_file(tmp_path / f"{i}.pdf", f"https://x/{i}"), range(12))
         )
     assert peak == 3
+
+
+def test_download_caps_huge_retry_after_sleep(tmp_path: Path):
+    """2026-07-04 pass-4 hang regression: an hours-long Retry-After must not
+    park a worker (it holds a download-semaphore slot); sleep is capped at 60s."""
+    dest = tmp_path / "out.pdf"
+    pdf_bytes = b"%PDF-1.4\n" + b"x" * 20_000
+    rate_limited = MagicMock(status_code=429, headers={"Retry-After": "7200"})
+    ok_response = MagicMock(
+        status_code=200, content=pdf_bytes, headers={"content-type": "application/pdf"}
+    )
+
+    with patch("rag_literature_rag.harvest.download.log_attempt"):
+        with patch("rag_literature_rag.harvest.download.httpx.Client") as client_cls:
+            with patch("rag_literature_rag.harvest.download.time.sleep") as sleep_mock:
+                client = MagicMock()
+                client.__enter__ = MagicMock(return_value=client)
+                client.__exit__ = MagicMock(return_value=False)
+                client.get.side_effect = [rate_limited, ok_response]
+                client_cls.return_value = client
+
+                result = download_to_file(dest, "https://example.com/paper.pdf")
+
+    assert result["ok"] is True
+    assert sleep_mock.call_args_list, "expected a retry sleep"
+    assert all(call.args[0] <= 60 for call in sleep_mock.call_args_list)

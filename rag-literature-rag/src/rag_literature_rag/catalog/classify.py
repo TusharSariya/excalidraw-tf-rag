@@ -91,6 +91,8 @@ def build_catalog(
     seen_ids: set[str] = set()
 
     for item in manifest.items:
+        if item.excluded:
+            continue
         if status and item.status != status:
             continue
         if status == "ok" and not item.localPath and not _has_pdf_on_disk(item):

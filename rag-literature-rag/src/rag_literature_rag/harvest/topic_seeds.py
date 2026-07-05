@@ -372,6 +372,137 @@ TOPIC_PDF_SEEDS: list[dict] = [
     ),
 ]
 
+# P1c thin-topic fill (2026-07): learned sparse retrieval (SPLADE family), late
+# interaction / multi-vector retrieval (ColBERTv2, PLAID, JaColBERT, PyLate),
+# embedding-benchmark evaluation (MTEB/MMTEB), and modern embedding tech
+# reports (jina-v3, nomic, Matryoshka Representation Learning). All arXiv IDs
+# verified against the arxiv.org abstract page title before being added (wrong
+# IDs poison the harvest).
+SPARSE_LATE_INTERACTION_PDF_SEEDS: list[dict] = [
+    _arxiv_pdf(
+        "2107.05720",
+        "SPLADE: Sparse Lexical and Expansion Model for First Stage Ranking",
+        2021,
+        ["sparse-retrieval"],
+        authors=["Formal", "Piwowarski", "Clinchant"],
+        discovery_sources=["p1c-thin-topics-2026-07"],
+    ),
+    _arxiv_pdf(
+        "2109.10086",
+        "SPLADE v2: Sparse Lexical and Expansion Model for Information Retrieval",
+        2021,
+        ["sparse-retrieval"],
+        authors=["Formal", "Lassance", "Piwowarski", "Clinchant"],
+        discovery_sources=["p1c-thin-topics-2026-07"],
+    ),
+    _arxiv_pdf(
+        "2403.06789",
+        "SPLADE-v3: New baselines for SPLADE",
+        2024,
+        ["sparse-retrieval"],
+        authors=["Lassance", "Formal", "Clinchant"],
+        discovery_sources=["p1c-thin-topics-2026-07"],
+    ),
+    _arxiv_pdf(
+        "2112.01488",
+        "ColBERTv2: Effective and Efficient Retrieval via Lightweight Late Interaction",
+        2021,
+        ["dense-retrieval", "late-interaction", "evaluation"],
+        authors=["Santhanam", "Khattab", "Saad-Falcon", "Potts", "Zaharia"],
+        discovery_sources=["p1c-thin-topics-2026-07"],
+    ),
+    _arxiv_pdf(
+        "2205.09707",
+        "PLAID: An Efficient Engine for Late Interaction Retrieval",
+        2022,
+        ["dense-retrieval", "late-interaction", "engineering"],
+        authors=["Santhanam", "Khattab", "Potts", "Zaharia"],
+        discovery_sources=["p1c-thin-topics-2026-07"],
+    ),
+    _arxiv_pdf(
+        "2312.16144",
+        "JaColBERT and Hard Negatives, Towards Better Japanese-First Embeddings "
+        "for Retrieval: Early Technical Report",
+        2023,
+        ["dense-retrieval", "late-interaction"],
+        authors=["Clavié"],
+        discovery_sources=["p1c-thin-topics-2026-07"],
+    ),
+    _arxiv_pdf(
+        "2407.20750",
+        "JaColBERTv2.5: Optimising Multi-Vector Retrievers to Create "
+        "State-of-the-Art Japanese Retrievers with Constrained Resources",
+        2024,
+        ["dense-retrieval", "late-interaction"],
+        authors=["Clavié"],
+        discovery_sources=["p1c-thin-topics-2026-07"],
+    ),
+    _arxiv_pdf(
+        "2508.03555",
+        "PyLate: Flexible Training and Retrieval for Late Interaction Models",
+        2025,
+        ["dense-retrieval", "late-interaction", "engineering"],
+        authors=["Chaffin", "Sourty"],
+        discovery_sources=["p1c-thin-topics-2026-07"],
+    ),
+    _arxiv_pdf(
+        "2510.14880",
+        "Fantastic (small) Retrievers and How to Train Them: mxbai-edge-colbert-v0 Tech Report",
+        2025,
+        ["dense-retrieval", "late-interaction"],
+        authors=["Lee", "Shakir"],
+        discovery_sources=["p1c-thin-topics-2026-07"],
+    ),
+    _arxiv_pdf(
+        "2210.07316",
+        "MTEB: Massive Text Embedding Benchmark",
+        2022,
+        ["evaluation", "embeddings"],
+        authors=["Muennighoff", "Tazi", "Magne", "Reimers"],
+        discovery_sources=["p1c-thin-topics-2026-07"],
+    ),
+    _arxiv_pdf(
+        "2502.13595",
+        "MMTEB: Massive Multilingual Text Embedding Benchmark",
+        2025,
+        ["evaluation", "embeddings"],
+        authors=["Enevoldsen", "Chung", "Kerboua"],
+        discovery_sources=["p1c-thin-topics-2026-07"],
+    ),
+    _arxiv_pdf(
+        "2409.10173",
+        "jina-embeddings-v3: Multilingual Embeddings With Task LoRA",
+        2024,
+        ["dense-retrieval", "embeddings"],
+        authors=["Sturua", "Mohr", "Akram", "Günther", "Wang"],
+        discovery_sources=["p1c-thin-topics-2026-07"],
+    ),
+    _arxiv_pdf(
+        "2402.01613",
+        "Nomic Embed: Training a Reproducible Long Context Text Embedder",
+        2024,
+        ["dense-retrieval", "embeddings"],
+        authors=["Nussbaum", "Morris", "Duderstadt", "Mulyar"],
+        discovery_sources=["p1c-thin-topics-2026-07"],
+    ),
+    _arxiv_pdf(
+        "2205.13147",
+        "Matryoshka Representation Learning",
+        2022,
+        ["embeddings", "engineering"],
+        authors=["Kusupati", "Bhatt", "Rege", "Wallingford"],
+        discovery_sources=["p1c-thin-topics-2026-07"],
+    ),
+    _arxiv_pdf(
+        "2411.04403",
+        "Towards Competitive Search Relevance For Inference-Free Learned Sparse Retrievers",
+        2024,
+        ["sparse-retrieval", "engineering"],
+        authors=["Geng", "Zhu"],
+        discovery_sources=["p1c-thin-topics-2026-07"],
+    ),
+]
+
 # Tier 1–4 — resolved via OpenAlex / arXiv DOI
 TOPIC_DOI_SEEDS: list[dict] = [
     # Tier 1 — core pipeline
@@ -631,10 +762,11 @@ def harvest_topic_seeds(
 ) -> list[ManifestItem]:
     results: list[ManifestItem] = []
 
+    all_pdf_seeds = [*TOPIC_PDF_SEEDS, *SPARSE_LATE_INTERACTION_PDF_SEEDS]
     results.extend(
         parallel_map(
             lambda spec: _download_pdf_seed(spec, dry_run=dry_run),
-            TOPIC_PDF_SEEDS,
+            all_pdf_seeds,
             workers=workers,
         )
     )

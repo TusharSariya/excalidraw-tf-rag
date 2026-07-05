@@ -33,6 +33,38 @@ def use_cuda_bnb_4bit(config: EmbedConfig | None = None) -> bool:
         return False
 
 
+_bnb_4bit_import_ok: bool | None = None
+_bnb_4bit_import_error: str | None = None
+
+
+def bnb_4bit_import_ok() -> bool:
+    """Whether bitsandbytes' transformers integration actually imports on this host.
+
+    ``use_cuda_bnb_4bit`` only checks that 4-bit quant was *requested* and that torch
+    sees a CUDA device — it says nothing about whether the bitsandbytes native
+    extension itself is importable. When it isn't, ``local_embed._bnb_4bit_model_kwargs``
+    silently falls back to plain FP16, so ``resolved_embed_backend`` must probe this too
+    or it will keep recording a ``cuda-bnb-4bit`` tag that never actually happened.
+    Cached for the life of the process (import failures don't change at runtime).
+    """
+    global _bnb_4bit_import_ok, _bnb_4bit_import_error
+    if _bnb_4bit_import_ok is None:
+        try:
+            import torch  # noqa: F401
+            from transformers import BitsAndBytesConfig  # noqa: F401
+
+            _bnb_4bit_import_ok = True
+        except ImportError as exc:
+            _bnb_4bit_import_ok = False
+            _bnb_4bit_import_error = str(exc)
+    return _bnb_4bit_import_ok
+
+
+def bnb_4bit_import_error() -> str | None:
+    """The captured ``ImportError`` message from the last ``bnb_4bit_import_ok`` probe."""
+    return _bnb_4bit_import_error
+
+
 def resolved_embed_backend(
     config: EmbedConfig | None = None, *, model_name: str | None = None
 ) -> str:
@@ -42,9 +74,16 @@ def resolved_embed_backend(
     bitsandbytes (CUDA) quantization actually runs, so multiple quant stacks can share
     a profile name. This returns a host-specific tag (``cuda-bnb-4bit`` vs plain
     ``local-fp``) so a query host can be matched against the host that BUILT an index.
+
+    If 4-bit was requested but bitsandbytes fails to import, the actual load falls back
+    to FP16 (see ``local_embed._bnb_4bit_model_kwargs``); this returns a distinct
+    ``cuda-bnb-4bit-fp16-fallback`` tag in that case so the recorded/queried backend
+    reflects what was really loaded, not what was requested.
     """
     if use_cuda_bnb_4bit(config):
-        return "cuda-bnb-4bit"
+        if bnb_4bit_import_ok():
+            return "cuda-bnb-4bit"
+        return "cuda-bnb-4bit-fp16-fallback"
     backend = config.backend if config else "unknown"
     quant = local_embed_quant(config)
     if backend == "local":

@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import contextlib
+import faulthandler
 import logging
+import signal
 import sys
 from pathlib import Path
 
@@ -10,6 +13,17 @@ from rag_literature_rag.paths import DATA_DIR
 
 HARVEST_LOG_PATH = DATA_DIR / "harvest.log"
 _LOGGER: logging.Logger | None = None
+
+
+def _enable_hang_diagnostics() -> None:
+    """`kill -USR1 <pid>` dumps all thread stacks to stderr.
+
+    Hang forensics (2026-07-04 pass-4 wedge): when a harvest looks stuck,
+    send SIGUSR1 for a full thread dump in the console/nohup output instead
+    of killing blind. Main thread only; no-op where SIGUSR1 is unavailable.
+    """
+    with contextlib.suppress(ValueError, AttributeError, OSError):
+        faulthandler.register(signal.SIGUSR1, all_threads=True)
 
 
 def setup_harvest_logging(
@@ -42,6 +56,7 @@ def setup_harvest_logging(
     logger.addHandler(file_handler)
 
     _LOGGER = logger
+    _enable_hang_diagnostics()
     logger.info("logging to %s (verbose=%s)", path, verbose)
     return logger
 

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import atexit
 import logging
+import multiprocessing
 import os
 import queue
 import signal
@@ -97,6 +98,27 @@ def _extract_workers() -> int:
             "invalid GRAPH_RAG_EXTRACT_WORKERS=%r; using 4", raw
         )
         return 4
+
+
+def _extract_max_tasks_per_child() -> int | None:
+    """Recycle each extract worker after N tasks to bound retained memory.
+
+    docling keeps its layout/table models resident and the CPython/glibc
+    allocators hold freed page-rasterization memory as a high-water mark, so a
+    long-lived worker's RSS ratchets up across PDFs. Retiring workers
+    periodically releases it. ``0`` (default) keeps workers for the pool's
+    lifetime (original behaviour); a positive value recycles them via a
+    ``forkserver`` pool (safe here: extraction is CPU-only).
+    """
+    raw = os.getenv("GRAPH_RAG_EXTRACT_MAX_TASKS_PER_CHILD", "0")
+    try:
+        value = int(raw)
+    except ValueError:
+        logging.getLogger("graph_layout_rag.ingest").warning(
+            "invalid GRAPH_RAG_EXTRACT_MAX_TASKS_PER_CHILD=%r; using 0", raw
+        )
+        return None
+    return value if value > 0 else None
 
 
 def _extract_shutdown_timeout_s() -> float:
@@ -475,7 +497,16 @@ def _iter_extraction_outcomes(
     pending: dict[Future[ExtractionOutcome], ExtractionTask] = {}
     timeout_s = _extract_timeout_s()
     deadlines: dict[Future[ExtractionOutcome], float] | None = {} if timeout_s > 0 else None
-    executor = ProcessPoolExecutor(max_workers=extract_workers, initializer=_extract_worker_init)
+    pool_kwargs: dict = {"max_workers": extract_workers, "initializer": _extract_worker_init}
+    max_tasks = _extract_max_tasks_per_child()
+    if max_tasks is not None:
+        # Recycling requires a non-fork start method; use forkserver (NOT spawn):
+        # forkserver is fork-based so it avoids spawn's re-import hang seen in
+        # sandboxed/containerised runs, and workers fork lean from a clean
+        # server so their RSS is bounded per generation.
+        pool_kwargs["max_tasks_per_child"] = max_tasks
+        pool_kwargs["mp_context"] = multiprocessing.get_context("forkserver")
+    executor = ProcessPoolExecutor(**pool_kwargs)
     if pool_holder is not None:
         pool_holder["executor"] = executor
     pool_log = log or logging.getLogger("graph_layout_rag.ingest")

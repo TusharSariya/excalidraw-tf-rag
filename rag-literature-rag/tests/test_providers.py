@@ -115,3 +115,29 @@ def test_sub_one_rps_policy_paces_requests():
     policy._wait_for_slot()
     policy._wait_for_slot()
     assert clock.now == 6
+
+
+def test_request_bails_rate_limited_when_slot_wait_exceeds_budget():
+    """2026-07-04 pass-4 hang regression: a long/re-opening cooldown circuit
+    must not park callers forever — request() bails with RATE_LIMITED once its
+    slot-wait budget is exhausted so workers can fall back."""
+    clock = FakeClock()
+    policy = ProviderPolicy(
+        "wedge", concurrency=1, rps=0, cooldown_seconds=300, clock=clock.clock, sleep=clock.sleep
+    )
+    policy._open_circuit(10_000)  # far beyond any sane wait
+    out = policy.request("GET", "https://example.org/api", max_wait_seconds=120.0)
+    assert out.kind is OutcomeKind.RATE_LIMITED
+    # It never slept past the budget (no 10k-second park).
+    assert clock.now <= 121
+
+
+def test_wait_for_slot_deadline_returns_false_instead_of_sleeping():
+    clock = FakeClock()
+    policy = ProviderPolicy("deadline", concurrency=1, rps=0, clock=clock.clock, sleep=clock.sleep)
+    policy._open_circuit(500)
+    assert policy._wait_for_slot(clock.now + 60) is False
+    assert clock.now == 0  # bailed without sleeping through the circuit
+    # No deadline: legacy behavior still waits it out.
+    assert policy._wait_for_slot(None) is True
+    assert clock.now == 500

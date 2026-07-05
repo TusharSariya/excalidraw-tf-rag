@@ -44,6 +44,20 @@ class ManifestItem(BaseModel):
     sourceUrls: list[str] = Field(default_factory=list)
     abstractSource: str | None = None
     documentKind: DocumentKind = "paper"
+    # Former manifest ids this record has absorbed (via DOI/sha256 merges or
+    # duplicate-collapse repairs). Read by query/identity.py's canonical
+    # identity map and projected into the index's alias_doc_ids column, so
+    # qrels/citation references to a swallowed id still resolve here. Without
+    # this, a merge that re-keys a record (e.g. arxiv-2004-04906 absorbed into
+    # an OpenAlex-id sibling) silently orphans every qrels judgment for it.
+    aliasDocIds: list[str] = Field(default_factory=list)
+    # Manually/programmatically excluded from the query-facing catalog (e.g. a
+    # relevance re-score found the item off-topic) without deleting it — the
+    # citation graph may still reference its id. Mirrors the shape of
+    # graph-layout-rag's ManifestItem.is_retracted: a persisted boolean the
+    # query layer (catalog.classify.build_catalog) respects, OR'd together on
+    # merge so no source can silently un-exclude an item.
+    excluded: bool = False
 
 
 class Manifest(BaseModel):
@@ -161,6 +175,13 @@ def merge_items(
         if not getattr(merged, field):
             setattr(merged, field, getattr(fallback, field))
 
+    merged.excluded = existing.excluded or incoming.excluded
+    # Union alias ids and both record ids: whichever id does not survive the
+    # merge (the caller stamps merged.id afterwards) must remain reachable as
+    # an alias. upsert_item removes the surviving id from the list.
+    merged.aliasDocIds = sorted(
+        (set(existing.aliasDocIds) | set(incoming.aliasDocIds) | {existing.id, incoming.id}) - {""}
+    )
     merged.tags = sorted(set(existing.tags) | set(incoming.tags))
     merged.discoverySources = sorted(
         set(existing.discoverySources)
@@ -204,6 +225,7 @@ def upsert_item(manifest: Manifest, item: ManifestItem) -> None:
         if id_match:
             merged = merge_items(existing, item, check_title_conflict=False)
             merged.id = existing.id
+            merged.aliasDocIds = [a for a in merged.aliasDocIds if a != merged.id]
             manifest.items[idx] = merged
             return
 
@@ -222,6 +244,7 @@ def upsert_item(manifest: Manifest, item: ManifestItem) -> None:
                 continue
             merged = merge_items(existing, item)
             merged.id = existing.id
+            merged.aliasDocIds = [a for a in merged.aliasDocIds if a != merged.id]
             manifest.items[idx] = merged
             return
 
@@ -241,6 +264,7 @@ def upsert_item(manifest: Manifest, item: ManifestItem) -> None:
                 continue
             merged = merge_items(existing, item)
             merged.id = existing.id
+            merged.aliasDocIds = [a for a in merged.aliasDocIds if a != merged.id]
             manifest.items[idx] = merged
             return
 

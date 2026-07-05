@@ -15,6 +15,85 @@ def test_slug_id():
     )
 
 
+def test_merge_items_ors_excluded_flag():
+    """excluded is sticky across merges, like is_retracted in graph-layout-rag.
+
+    Once any provider observation marks an item excluded=True, a later merge
+    from a source that doesn't set it must not silently un-exclude it.
+    """
+    existing = ManifestItem(
+        id="a", title="Paper", source="s1", url="https://example.com/a", status="ok", excluded=True
+    )
+    incoming = ManifestItem(
+        id="a", title="Paper", source="s2", url="https://example.com/a", status="ok", excluded=False
+    )
+    merged = merge_items(existing, incoming)
+    assert merged.excluded is True
+
+
+def test_upsert_sha256_merge_preserves_losing_id_as_alias():
+    """Regression: a merge that re-keys a record must not orphan the old id.
+
+    The Jul-2026 sha256-collapse repair absorbed e.g. arxiv-2004-04906 (DPR)
+    into a sibling record and the id vanished entirely — while qrels still
+    referenced it, silently corrupting eval metrics. Any merge where the
+    incoming id differs from the surviving id must persist the losing id in
+    aliasDocIds (which query/identity.py's canonical map resolves).
+    """
+    manifest = Manifest()
+    upsert_item(
+        manifest,
+        ManifestItem(
+            id="arxiv-2004-04906v3",
+            title="Dense Passage Retrieval for Open-Domain Question Answering",
+            source="arxiv",
+            url="https://arxiv.org/pdf/2004.04906v3.pdf",
+            status="ok",
+            sha256="abc123",
+        ),
+    )
+    upsert_item(
+        manifest,
+        ManifestItem(
+            id="arxiv-2004-04906",
+            title="Dense Passage Retrieval for Open-Domain Question Answering",
+            source="topic-seed",
+            url="https://arxiv.org/pdf/2004.04906.pdf",
+            status="ok",
+            sha256="abc123",
+            externalIds={"ArXiv": "2004.04906"},
+        ),
+    )
+    assert len(manifest.items) == 1
+    survivor = manifest.items[0]
+    assert survivor.id == "arxiv-2004-04906v3"
+    assert "arxiv-2004-04906" in survivor.aliasDocIds
+    assert survivor.id not in survivor.aliasDocIds
+    # externalIds from the losing record must survive the merge too
+    assert survivor.externalIds.get("ArXiv") == "2004.04906"
+
+
+def test_merge_items_unions_alias_doc_ids():
+    existing = ManifestItem(
+        id="a",
+        title="Paper",
+        source="s1",
+        url="https://example.com/a",
+        status="ok",
+        aliasDocIds=["old-1"],
+    )
+    incoming = ManifestItem(
+        id="b",
+        title="Paper",
+        source="s2",
+        url="https://example.com/b",
+        status="ok",
+        aliasDocIds=["old-2"],
+    )
+    merged = merge_items(existing, incoming)
+    assert set(merged.aliasDocIds) >= {"old-1", "old-2", "a", "b"}
+
+
 def test_upsert_replaces_by_id():
     manifest = Manifest()
     item = ManifestItem(

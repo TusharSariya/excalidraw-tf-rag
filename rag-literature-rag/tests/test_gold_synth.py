@@ -6,9 +6,16 @@ near-duplicate rejection (within-set and vs curated), and the cases.json round-t
 
 from __future__ import annotations
 
+import json
+from collections import defaultdict
+from random import Random
+
 from rag_literature_rag.eval.gold_cases import GOLD_CASES
 from rag_literature_rag.eval.gold_synth import (
+    MULTIHOP_STRATUM,
     Seed,
+    append_synth_cases,
+    build_multihop_cases,
     category_for,
     load_synth_cases,
     quality_filters,
@@ -101,3 +108,161 @@ def test_cases_json_roundtrip(tmp_path, monkeypatch):
     assert len(loaded) == 1
     assert loaded[0].id == "synth-catalog-single-0001"
     assert loaded[0].relevant_doc_ids == frozenset({"arxiv-2005-11401"})
+
+
+# --------------------------------------------------------------------------- #
+# Multi-hop / relational stratum
+# --------------------------------------------------------------------------- #
+class _FakeGraph:
+    """Citation graph stub keyed like CitationGraph (oa-id space)."""
+
+    def __init__(self, edges):
+        self.doc_to_oa = {}
+        self.oa_to_doc = {}
+        self.undirected = defaultdict(set)
+        for a, b in edges:
+            for d in (a, b):
+                self.doc_to_oa[d] = f"oa-{d}"
+                self.oa_to_doc[f"oa-{d}"] = d
+            self.undirected[f"oa-{a}"].add(f"oa-{b}")
+            self.undirected[f"oa-{b}"].add(f"oa-{a}")
+
+
+def _mh_seed(doc_id: str, category: str, words: str) -> Seed:
+    return Seed(
+        doc_id=doc_id,
+        title=f"Paper {doc_id}",
+        abstract=words,
+        chunk_text="",
+        category=category,
+        year_bucket=">=2024",
+        track="catalog",
+    )
+
+
+_GOOD_MH_QUERY = "how does one retriever design relate to and improve upon another approach"
+
+_MH_VARIANTS = [
+    "how do dense bi-encoders compare with late interaction scoring for passage ranking",
+    "what distinguishes sparse lexical expansion from learned reranking in retrieval pipelines",
+    "when does graph structured summarization outperform flat chunk retrieval for questions",
+    "why choose query rewriting over document expansion when recall is limited overall",
+]
+
+
+def _cycling_gen(monkeypatch):
+    counter = {"n": 0}
+
+    def _gen(*_a, **_k):
+        v = _MH_VARIANTS[counter["n"] % len(_MH_VARIANTS)]
+        counter["n"] += 1
+        return v
+
+    monkeypatch.setattr("rag_common.local_llm.generate_text", _gen)
+
+
+def test_build_multihop_co_category(monkeypatch, tmp_path):
+    seeds = [
+        _mh_seed("d1", "dense-retrieval", "biencoder alpha beta"),
+        _mh_seed("d2", "dense-retrieval", "colbert gamma delta"),
+        _mh_seed("d3", "dense-retrieval", "splade epsilon zeta"),
+        _mh_seed("d4", "dense-retrieval", "dpr eta theta"),
+    ]
+    monkeypatch.setattr("rag_literature_rag.eval.gold_synth.GEN_CACHE_PATH", tmp_path / "gc.json")
+    monkeypatch.setattr("rag_literature_rag.eval.gold_synth._gen_model", lambda: "test-model")
+    _cycling_gen(monkeypatch)
+
+    cases, manifest = build_multihop_cases("prof", 2, seeds=seeds, graph=None, rng=Random(0))
+    assert len(cases) == 2
+    for c in cases:
+        assert c["stratum"] == MULTIHOP_STRATUM
+        a, b = c["seed_doc_id"], c["partner_doc_id"]
+        assert set(c["relevant_doc_ids"]) == {a, b}
+        assert c["grades"][a] == 3 and c["grades"][b] == 2
+        assert c["pairing"] == "co-category"
+
+
+def test_build_multihop_citation_pairing(monkeypatch, tmp_path):
+    seeds = [
+        _mh_seed("a", "reranking", "cross encoder alpha"),
+        _mh_seed("b", "graphrag", "community summary beta gamma"),
+    ]
+    graph = _FakeGraph([("a", "b")])
+    monkeypatch.setattr("rag_literature_rag.eval.gold_synth.GEN_CACHE_PATH", tmp_path / "gc.json")
+    monkeypatch.setattr("rag_literature_rag.eval.gold_synth._gen_model", lambda: "test-model")
+    monkeypatch.setattr("rag_common.local_llm.generate_text", lambda *a, **k: _GOOD_MH_QUERY)
+
+    cases, manifest = build_multihop_cases("prof", 1, seeds=seeds, graph=graph, rng=Random(0))
+    assert len(cases) == 1
+    assert cases[0]["pairing"] == "citation"
+    assert manifest["citation_linked"] == 1
+    assert set(cases[0]["relevant_doc_ids"]) == {"a", "b"}
+
+
+def test_build_multihop_leakage_dropped(monkeypatch, tmp_path):
+    seeds = [
+        _mh_seed(
+            "d1", "dense-retrieval", "biencoder dense passage retrieval contrastive negatives"
+        ),
+        _mh_seed("d2", "dense-retrieval", "late interaction token level maxsim scoring colbert"),
+    ]
+    leaky = (
+        "biencoder dense passage retrieval contrastive negatives late interaction token "
+        "level maxsim scoring colbert"
+    )
+    monkeypatch.setattr("rag_literature_rag.eval.gold_synth.GEN_CACHE_PATH", tmp_path / "gc.json")
+    monkeypatch.setattr("rag_literature_rag.eval.gold_synth._gen_model", lambda: "test-model")
+    monkeypatch.setattr("rag_common.local_llm.generate_text", lambda *a, **k: leaky)
+
+    cases, manifest = build_multihop_cases("prof", 1, seeds=seeds, graph=None, rng=Random(0))
+    assert len(cases) == 0
+    assert manifest["filters"]["leakage"] >= 1
+
+
+def test_append_synth_cases_additive(tmp_path, monkeypatch):
+    from rag_literature_rag.eval import gold_synth
+
+    cases_file = tmp_path / "cases.json"
+    existing = {
+        "manifest": {"version": "synth-v1", "total_cases": 1},
+        "cases": [
+            {
+                "id": "synth-catalog-single-0000",
+                "query": "existing single-hop query about retrieval",
+                "relevant_doc_ids": ["doc-x"],
+                "pdf_only": False,
+                "stratum": "single-hop",
+            }
+        ],
+    }
+    cases_file.write_text(json.dumps(existing), encoding="utf-8")
+    monkeypatch.setattr(gold_synth, "SYNTH_DIR", tmp_path)
+    monkeypatch.setattr(gold_synth, "CASES_PATH", cases_file)
+
+    new = [
+        {
+            "id": "synth-catalog-multihop-0000",
+            "query": "q1",
+            "relevant_doc_ids": ["a", "b"],
+            "stratum": MULTIHOP_STRATUM,
+        },
+        {
+            "id": "synth-catalog-multihop-0001",
+            "query": "q2",
+            "relevant_doc_ids": ["c", "d"],
+            "stratum": MULTIHOP_STRATUM,
+        },
+    ]
+    summary = append_synth_cases(new)
+    summary2 = append_synth_cases(new)
+    loaded = load_synth_cases()
+
+    assert summary == {"added": 2, "total": 3, "skipped_existing": 0}
+    assert summary2["added"] == 0
+    assert len(loaded) == 3
+    ids = {c.id for c in loaded}
+    assert "synth-catalog-single-0000" in ids
+    mh = [c for c in loaded if len(c.relevant_doc_ids) == 2]
+    assert len(mh) == 2
+    payload = json.loads(cases_file.read_text(encoding="utf-8"))
+    assert payload["manifest"]["by_stratum"][MULTIHOP_STRATUM] == 2

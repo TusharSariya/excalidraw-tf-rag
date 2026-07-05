@@ -47,7 +47,7 @@ exclude = [
 data_dir          = "graph-layout-rag/data"
 corpus            = ["raw"]                 # → corpus/raw/  (3,017 PDFs)
 indexes           = ["indexes/*", "lancedb"]
-retrieval_indexes = ["retrieval-indexes/*"] # the 14 GB gemini-2-structure-v1 dense index
+retrieval_indexes = ["retrieval-indexes/*"]
 related           = ["related/*"]           # scincl / specter2 vectors
 eval              = ["eval"]                # benchmark run history (tarred whole)
 meta              = ["citations.sqlite", "harvest.db", "manifest.json", "ingest_state.json", "harvest_checkpoint.json"]
@@ -60,7 +60,7 @@ meta              = ["citations.sqlite", "harvest.db", "manifest.json", "ingest_
 # ---------------------------------------------------------------------------
 [tool.rag-literature-rag]
 data_dir = "rag-literature-rag/data"
-corpus   = ["raw"]                          # → corpus/raw/  (1,422 PDFs)
+corpus   = ["raw"]                          # → corpus/raw/  (1,053 PDFs, verified 2026-07-04)
 indexes  = ["indexes/*"]
 eval     = ["eval"]                         # benchmark run history (tarred whole)
 meta     = ["harvest.db", "manifest.json", "harvest_checkpoint.json"]

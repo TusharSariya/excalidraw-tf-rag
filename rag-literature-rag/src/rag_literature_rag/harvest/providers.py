@@ -77,7 +77,14 @@ class ProviderPolicy:
         self._circuit_until = 0.0
         self.metrics = ProviderMetrics(started_at=clock())
 
-    def _wait_for_slot(self) -> None:
+    def _wait_for_slot(self, deadline: float | None = None) -> bool:
+        """Wait for a rate/cooldown slot. Returns False if ``deadline`` passes first.
+
+        The deadline is the anti-wedge guarantee: without it, repeated 429
+        cooldown circuits (e.g. the anonymous Semantic Scholar pool under 32
+        workers) silently re-open faster than callers drain, and every worker
+        thread parks here indefinitely (2026-07-04 pass-4 hang).
+        """
         while True:
             with self._lock:
                 now = self._clock()
@@ -92,7 +99,9 @@ class ProviderPolicy:
                 wait = max(cooldown, rate_wait)
                 if wait <= 0:
                     self._starts.append(now)
-                    return
+                    return True
+                if deadline is not None and now + wait > deadline:
+                    return False
             self._sleep(wait)
 
     def _open_circuit(self, seconds: float) -> None:
@@ -101,9 +110,13 @@ class ProviderPolicy:
         with self._lock:
             now = self._clock()
             until = now + seconds
-            if until > self._circuit_until:
+            opened = until > self._circuit_until
+            if opened:
                 self.metrics.cooldown_seconds += until - max(now, self._circuit_until)
                 self._circuit_until = until
+        if opened:
+            # Visible by design: a silent circuit is indistinguishable from a hang.
+            get_logger().info("%s: cooldown circuit open for %.0fs", self.name, seconds)
 
     def _record_start(self) -> None:
         with self._lock:
@@ -126,11 +139,23 @@ class ProviderPolicy:
         timeout: float = 60.0,
         terminal_statuses: frozenset[int] = frozenset({404}),
         before_attempt: Callable[[], bool] | None = None,
+        max_wait_seconds: float = 120.0,
     ) -> RequestOutcome:
+        # Total wall-clock budget for waiting on rate/cooldown slots across all
+        # attempts. When exhausted, bail with RATE_LIMITED so the caller falls
+        # back (all call sites treat non-SUCCESS as "no data") instead of
+        # wedging a worker thread behind endlessly re-opened circuits.
+        wait_deadline = self._clock() + max(1.0, max_wait_seconds)
         for attempt in range(self.max_attempts):
             if before_attempt is not None and not before_attempt():
                 return RequestOutcome(OutcomeKind.BUDGET_EXHAUSTED)
-            self._wait_for_slot()
+            if not self._wait_for_slot(wait_deadline):
+                get_logger().debug(
+                    "%s: slot-wait budget (%.0fs) exhausted — returning RATE_LIMITED",
+                    self.name,
+                    max_wait_seconds,
+                )
+                return RequestOutcome(OutcomeKind.RATE_LIMITED)
             self._semaphore.acquire()
             self._record_start()
             try:
@@ -189,7 +214,7 @@ class ProviderPolicy:
             if attempt < self.max_attempts - 1:
                 with self._lock:
                     self.metrics.retries += 1
-                self._sleep(outcome.retry_after or min(30.0, 2**attempt))
+                self._sleep(min(float(outcome.retry_after or 2**attempt), 30.0))
         return outcome
 
     def summary(self) -> dict[str, float | int | str]:

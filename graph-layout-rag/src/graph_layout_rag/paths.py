@@ -44,6 +44,7 @@ class ProfileIndexPaths:
     lance_dir: Path
     ingest_state: Path
     bm25_dir: Path
+    sparse_dir: Path | None = None
     ingest_status: Path | None = None
 
 
@@ -84,6 +85,7 @@ def profile_index_paths(profile: str | None = None) -> ProfileIndexPaths:
         ingest_state=root / "ingest_state.json",
         ingest_status=root / "ingest_status.json",
         bm25_dir=root / "bm25",
+        sparse_dir=root / "sparse",
     )
 
 
@@ -102,6 +104,7 @@ def list_profile_indexes() -> list[ProfileIndexPaths]:
             ingest_state=child / "ingest_state.json",
             ingest_status=child / "ingest_status.json",
             bm25_dir=child / "bm25",
+            sparse_dir=child / "sparse",
         )
         if paths.lance_dir.is_dir() or paths.ingest_state.is_file():
             out.append(paths)

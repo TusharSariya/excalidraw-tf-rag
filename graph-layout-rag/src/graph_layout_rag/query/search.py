@@ -302,6 +302,7 @@ def search(
     dense_weight: float = DENSE_WEIGHT,
     sparse_weight: float = SPARSE_WEIGHT,
     citation_prior_weight: float = 0.0,
+    sparse_backend: str | None = None,
 ) -> list[dict[str, Any]]:
     if category and category not in PIPELINE_CATEGORIES:
         raise ValueError(
@@ -330,6 +331,7 @@ def search(
         dense_weight=dense_weight,
         sparse_weight=sparse_weight,
         citation_prior_weight=citation_prior_weight,
+        sparse_backend=sparse_backend,
     )
     if expand == "force" or (
         expand == "auto" and _should_expand(query, candidates, pdf_only=pdf_only)

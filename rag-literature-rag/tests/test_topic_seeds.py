@@ -3,6 +3,7 @@ import sqlite3
 
 from rag_literature_rag.catalog.taxonomy import RAG_CATEGORIES
 from rag_literature_rag.harvest.topic_seeds import (
+    SPARSE_LATE_INTERACTION_PDF_SEEDS,
     TOPIC_DOI_SEEDS,
     TOPIC_METADATA_SEEDS,
     TOPIC_PDF_SEEDS,
@@ -17,6 +18,25 @@ def test_topic_pdf_seed_ids():
     assert "arxiv-2004-04906" in ids
     assert "arxiv-2004-12832" in ids
     assert "arxiv-2312-10997" in ids
+
+
+def test_sparse_late_interaction_seed_ids():
+    ids = {s["id"] for s in SPARSE_LATE_INTERACTION_PDF_SEEDS}
+    assert len(SPARSE_LATE_INTERACTION_PDF_SEEDS) >= 15
+    # SPLADE family
+    assert "arxiv-2107-05720" in ids  # SPLADE v1
+    assert "arxiv-2109-10086" in ids  # SPLADE v2
+    assert "arxiv-2403-06789" in ids  # SPLADE-v3
+    # late interaction / multi-vector
+    assert "arxiv-2112-01488" in ids  # ColBERTv2
+    assert "arxiv-2205-09707" in ids  # PLAID
+    assert "arxiv-2508-03555" in ids  # PyLate
+    # embedding evaluation benchmarks
+    assert "arxiv-2210-07316" in ids  # MTEB
+    assert "arxiv-2502-13595" in ids  # MMTEB
+    # embedding tech reports
+    assert "arxiv-2409-10173" in ids  # jina-embeddings-v3
+    assert "arxiv-2205-13147" in ids  # Matryoshka Representation Learning
 
 
 def test_topic_doi_seed_count():
@@ -77,7 +97,12 @@ def test_topic_seed_tags_use_rag_taxonomy():
         "context",
         "metrics",
     }
-    for spec in [*TOPIC_PDF_SEEDS, *TOPIC_DOI_SEEDS, *TOPIC_METADATA_SEEDS]:
+    for spec in [
+        *TOPIC_PDF_SEEDS,
+        *SPARSE_LATE_INTERACTION_PDF_SEEDS,
+        *TOPIC_DOI_SEEDS,
+        *TOPIC_METADATA_SEEDS,
+    ]:
         for tag in spec.get("tags", []):
             assert tag in allowed, f"unknown tag {tag!r} on {spec.get('id') or spec.get('doi')}"
 
@@ -92,6 +117,7 @@ def test_harvest_topic_seeds_dry_run():
     items = harvest_topic_seeds(dry_run=True)
     ids = {i.id for i in items}
     assert "arxiv-2005-11401" in ids
+    assert "arxiv-2112-01488" in ids  # ColBERTv2, from SPARSE_LATE_INTERACTION_PDF_SEEDS
     assert "anthropic-contextual-retrieval-cookbook" in ids
     assert any(i.tags and "topic-seed" in i.tags for i in items)
 

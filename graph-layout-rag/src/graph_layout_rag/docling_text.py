@@ -120,12 +120,24 @@ def extract_pages_docling(path: Path, *, clean: bool = True) -> PdfExtractResult
         return result
 
     timeout = _env_positive_int("GRAPH_RAG_DOCLING_TIMEOUT_S", DEFAULT_TIMEOUT_S)
+    # Opt-in resource caps (unset = unlimited, original behaviour). A pathological
+    # PDF (hundreds of pages / tens of MB) can balloon a docling worker's RSS by
+    # gigabytes before the SIGALRM time cap fires; docling's convert() checks these
+    # limits up front and aborts cheaply, so the doc lands in the normal
+    # metadata-fallback path instead of exhausting system memory.
+    convert_kwargs: dict = {}
+    max_pages = _env_positive_int("GRAPH_RAG_DOCLING_MAX_PAGES", 0)
+    if max_pages > 0:
+        convert_kwargs["max_num_pages"] = max_pages
+    max_file_mb = _env_positive_int("GRAPH_RAG_DOCLING_MAX_FILE_MB", 0)
+    if max_file_mb > 0:
+        convert_kwargs["max_file_size"] = max_file_mb * 1024 * 1024
     # SIGALRM fires in the worker-process main thread, interrupting stuck C-extension calls
     # that docling's internal document_timeout cannot reach.
     old_handler = signal.signal(signal.SIGALRM, _sigalrm_handler)
     signal.alarm(timeout)
     try:
-        doc = converter.convert(path).document
+        doc = converter.convert(path, **convert_kwargs).document
     except _DoclingTimeout:
         log.warning("docling hard-killed after %ds (SIGALRM): %s", timeout, path.name)
         result.open_error = f"docling timeout {timeout}s"

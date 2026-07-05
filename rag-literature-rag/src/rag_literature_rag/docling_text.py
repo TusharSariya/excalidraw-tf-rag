@@ -110,8 +110,21 @@ def extract_pages_docling(path: Path, *, clean: bool = True) -> PdfExtractResult
         result.open_error = "docling not installed"
         return result
 
+    # Opt-in resource caps (unset = unlimited, original behaviour). A pathological
+    # PDF (hundreds of pages / tens of MB) can balloon a docling worker's RSS by
+    # gigabytes; docling's convert() checks these limits up front and aborts
+    # cheaply, so the doc lands in the normal metadata-fallback path instead of
+    # exhausting system memory.
+    convert_kwargs: dict = {}
+    max_pages = _env_positive_int("RAG_LIT_DOCLING_MAX_PAGES", 0)
+    if max_pages > 0:
+        convert_kwargs["max_num_pages"] = max_pages
+    max_file_mb = _env_positive_int("RAG_LIT_DOCLING_MAX_FILE_MB", 0)
+    if max_file_mb > 0:
+        convert_kwargs["max_file_size"] = max_file_mb * 1024 * 1024
+
     try:
-        doc = converter.convert(path).document
+        doc = converter.convert(path, **convert_kwargs).document
     except Exception as exc:
         result.open_error = str(exc)
         return result

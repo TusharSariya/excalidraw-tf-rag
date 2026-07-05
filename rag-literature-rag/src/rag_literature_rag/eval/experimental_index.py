@@ -70,6 +70,61 @@ def _qdrant():
     return QdrantClient, models, SparseTextEmbedding, LateInteractionTextEmbedding
 
 
+def _fastembed_supports_colbert(model_name: str) -> bool:
+    from fastembed import LateInteractionTextEmbedding
+
+    return any(
+        m.get("model") == model_name for m in LateInteractionTextEmbedding.list_supported_models()
+    )
+
+
+class _PylateColbertEncoder:
+    """Late-interaction encoder for ColBERT checkpoints not shipped in fastembed
+    (e.g. GTE-ModernColBERT). Exposes the same ``embed``/``query_embed`` surface
+    the build/search paths use, yielding per-text 2D token-embedding arrays."""
+
+    def __init__(self, model_name: str) -> None:
+        try:
+            from pylate import models as pylate_models
+        except ImportError as exc:
+            raise click.ClickException(
+                f"ColBERT model {model_name!r} is not shipped in fastembed and requires pylate. "
+                "Run: uv pip install pylate"
+            ) from exc
+        import torch
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        self.model_name = model_name
+        self._model = pylate_models.ColBERT(model_name_or_path=model_name, device=device)
+
+    def _encode(self, texts: list[str], *, batch_size: int, is_query: bool):
+        import numpy as np
+
+        embeddings = self._model.encode(
+            texts,
+            batch_size=batch_size,
+            is_query=is_query,
+            show_progress_bar=False,
+            convert_to_numpy=True,
+        )
+        for emb in embeddings:
+            yield np.asarray(emb, dtype=np.float32)
+
+    def embed(self, texts: list[str], *, batch_size: int):
+        yield from self._encode(list(texts), batch_size=batch_size, is_query=False)
+
+    def query_embed(self, query: str):
+        yield from self._encode([query], batch_size=1, is_query=True)
+
+
+def _colbert_encoder(model_name: str):
+    if _fastembed_supports_colbert(model_name):
+        from fastembed import LateInteractionTextEmbedding
+
+        return LateInteractionTextEmbedding(model_name=model_name)
+    return _PylateColbertEncoder(model_name)
+
+
 def _connect(QdrantClient, index_dir: Path, index_id: str, *, meta: dict | None = None):
     """Connect to Qdrant. Server (out-of-process, no OOM) when RAG_LIT_QDRANT_URL
     is set — uses a per-index collection so multiple indexes coexist; else local
@@ -138,7 +193,7 @@ def build_experimental_index(
             for idx, (row, vector) in enumerate(zip(rows, vectors))
         )
     else:
-        model = LateInteractionTextEmbedding(model_name=model_name)
+        model = _colbert_encoder(model_name)
         probe = next(model.embed([texts[0]], batch_size=1))
         dims = len(probe[0])
         client.create_collection(
@@ -208,7 +263,7 @@ def search_experimental(
             ),
         )
     else:
-        vector = next(LateInteractionTextEmbedding(model_name=meta["model"]).query_embed(query))
+        vector = next(_colbert_encoder(meta["model"]).query_embed(query))
         query_vector = ("colbert", vector)
     name, value = query_vector
     response = client.query_points(

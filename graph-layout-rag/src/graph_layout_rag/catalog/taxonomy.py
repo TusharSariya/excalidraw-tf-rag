@@ -12,6 +12,17 @@ PIPELINE_CATEGORIES: tuple[str, ...] = (
     "compaction",
     "packing",
     "overlap",
+    # --- general graph-theory / graph-analytics categories (P1a expansion) ---
+    # The corpus grew beyond the Sugiyama pipeline to cover graph analytics and
+    # representation learning. These six are self-standing subject areas, not
+    # pipeline phases; they are appended (never inserted) so the pipeline order
+    # above stays stable for anything that indexes by position.
+    "graph-analytics",  # PageRank / centrality / HITS / random-walk ranking
+    "community-detection",  # Louvain / Leiden / modularity / graph partitioning
+    "spectral-methods",  # spectral clustering / graph Laplacian / eigenvectors
+    "graph-embeddings",  # node2vec / DeepWalk / LINE / GNN-based layout
+    "edge-routing",  # edge bundling + standalone orthogonal connector routing
+    "dynamic-graphs",  # dynamic / streaming / temporal graph layout
 )
 
 UNCATEGORIZED = "uncategorized"
@@ -70,6 +81,48 @@ TAG_TO_CATEGORIES: dict[str, list[str]] = {
     "clutter": ["overlap"],
     "prism": ["overlap"],
     "node-overlap-removal": ["overlap"],
+    # graph-analytics
+    "graph-analytics": ["graph-analytics"],
+    "pagerank": ["graph-analytics"],
+    "centrality": ["graph-analytics"],
+    "hits": ["graph-analytics"],
+    "random-walk": ["graph-analytics"],
+    "link-analysis": ["graph-analytics"],
+    # community-detection
+    "community-detection": ["community-detection"],
+    "louvain": ["community-detection"],
+    "leiden": ["community-detection"],
+    "modularity": ["community-detection"],
+    "graph-partitioning": ["community-detection"],
+    "girvan-newman": ["community-detection"],
+    # spectral-methods
+    "spectral": ["spectral-methods"],
+    "spectral-clustering": ["spectral-methods"],
+    "laplacian": ["spectral-methods"],
+    "normalized-cuts": ["spectral-methods"],
+    "eigenvector": ["spectral-methods"],
+    # graph-embeddings
+    "graph-embedding": ["graph-embeddings"],
+    "node-embedding": ["graph-embeddings"],
+    "node2vec": ["graph-embeddings"],
+    "deepwalk": ["graph-embeddings"],
+    "line-embedding": ["graph-embeddings"],
+    "graph-neural-network": ["graph-embeddings"],
+    "gnn": ["graph-embeddings"],
+    "representation-learning": ["graph-embeddings"],
+    # edge-routing (edge bundling + standalone connector routing). "orthogonal"
+    # already maps to routing+compaction above; the bundling tags are new and
+    # land here rather than in the pipeline `routing` phase.
+    "edge-bundling": ["edge-routing"],
+    "orthogonal-routing": ["edge-routing", "routing"],
+    "connector-routing": ["edge-routing", "routing"],
+    "libavoid": ["edge-routing", "routing"],
+    # dynamic-graphs
+    "dynamic": ["dynamic-graphs"],
+    "dynamic-graph": ["dynamic-graphs"],
+    "temporal": ["dynamic-graphs"],
+    "streaming": ["dynamic-graphs"],
+    "storyline": ["dynamic-graphs"],
 }
 
 # Title/abstract phrase lists per pipeline category (keyword fallback).
@@ -202,6 +255,83 @@ CATEGORY_KEYWORDS: dict[str, list[str]] = {
         "prism",
         "force scan",
         "growing a tree",
+    ],
+    "graph-analytics": [
+        "pagerank",
+        "page rank",
+        "personalized pagerank",
+        "personalised pagerank",
+        "hits algorithm",
+        "hubs and authorities",
+        "authoritative sources",
+        "link analysis",
+        "centrality measure",
+        "betweenness centrality",
+        "eigenvector centrality",
+        "closeness centrality",
+        "random walk ranking",
+    ],
+    "community-detection": [
+        "community detection",
+        "community structure",
+        "modularity optimization",
+        "modularity optimisation",
+        "modularity maximization",
+        "louvain",
+        "leiden",
+        "graph partitioning",
+        "network partitioning",
+        "girvan-newman",
+        "girvan newman",
+        "label propagation",
+    ],
+    "spectral-methods": [
+        "spectral clustering",
+        "spectral partitioning",
+        "graph laplacian",
+        "normalized cut",
+        "normalized cuts",
+        "normalised cuts",
+        "eigenvector method",
+        "fiedler vector",
+        "laplacian eigenmap",
+    ],
+    "graph-embeddings": [
+        "node embedding",
+        "node2vec",
+        "deepwalk",
+        "graph embedding",
+        "network embedding",
+        "graph representation learning",
+        "representation learning on graphs",
+        "graph neural network",
+        "graph convolutional network",
+        "graph attention network",
+        "graph autoencoder",
+        "graph drawing with neural network",
+        "deep learning based graph drawing",
+    ],
+    "edge-routing": [
+        "edge bundling",
+        "edge bundles",
+        "hierarchical edge bundling",
+        "force-directed edge bundling",
+        "orthogonal connector routing",
+        "orthogonal edge routing",
+        "connector routing",
+        "hyperedge routing",
+    ],
+    "dynamic-graphs": [
+        "dynamic graph drawing",
+        "dynamic graph visualization",
+        "dynamic graph visualisation",
+        "dynamic network visualization",
+        "temporal graph",
+        "temporal network",
+        "streaming graph",
+        "evolving graph",
+        "graph animation",
+        "storyline layout",
     ],
 }
 

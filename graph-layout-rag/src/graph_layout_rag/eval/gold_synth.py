@@ -24,8 +24,15 @@ asserts relevance itself — it stays bias-honest by deferring to the pooled jud
 Bias guards live here by construction: system-blind prompts, an anti-lexical-leakage
 filter, de-dup vs curated, and enforced stratum balance (reported in the manifest).
 
-Multi-hop is intentionally NOT used: the graph-layout corpus is too small for
-reliable multi-hop; only single-hop NL paraphrases are generated.
+Multi-hop stratum (added 2026-07-04, P0.4): the corpus has since grown enough to
+support a small, high-quality *relational* stratum. ``build_multihop_cases`` pairs
+two thematically-linked docs — preferring a citation edge (via the persisted
+citation graph), else a same-category partner — and prompts the LLM for one need
+answerable ONLY by combining both. Both docs are marked relevant (seed grade 3,
+partner grade 2), the case carries ``stratum="multi-hop"``, and the same
+system-blind + anti-lexical-leakage + de-dup guards apply. These cases gate the
+Phase-2 graph-arm eval, so they are kept deliberately small (quality over quantity)
+and appended additively via ``append_synth_cases`` (never a full regeneration).
 """
 
 from __future__ import annotations
@@ -70,6 +77,18 @@ DUP_JACCARD_MAX = 0.70
 # Map the graph-layout corpus tag vocabulary onto curated category labels so
 # synthetic strata line up with the hand-written gold set's categories.
 _TAG_TO_CATEGORY: tuple[tuple[str, str], ...] = (
+    # New-category needles first: more-specific tags (e.g. edge-routing) must
+    # win over the generic needles below (e.g. routing).
+    ("graph-analytics", "graph-analytics"),
+    ("community-detection", "community-detection"),
+    ("community detection", "community-detection"),
+    ("spectral", "spectral"),
+    ("graph-embeddings", "graph-embeddings"),
+    ("graph-embedding", "graph-embeddings"),
+    ("graph embedding", "graph-embeddings"),
+    ("edge-routing", "edge-routing"),
+    ("dynamic-graphs", "dynamic-graphs"),
+    ("dynamic graph", "dynamic-graphs"),
     ("layer-assignment", "layer-assignment"),
     ("layer", "layer-assignment"),
     ("crossing", "crossing"),
@@ -483,8 +502,265 @@ def load_synth_cases() -> list[dict[str, Any]]:
                 "category": c.get("category"),
                 "track": c.get("track"),
                 "mode": c.get("mode"),
+                "stratum": c.get("stratum", "single-hop"),
                 "seed_doc_id": c.get("seed_doc_id"),
                 "notes": c.get("notes", ""),
             }
         )
     return out
+
+
+# --------------------------------------------------------------------------- #
+# Multi-hop / relational stratum
+# --------------------------------------------------------------------------- #
+MULTIHOP_STRATUM = "multi-hop"
+# Seed doc is the primary answer (grade 3), the paired partner is supporting (2).
+MULTIHOP_SEED_GRADE = 3
+MULTIHOP_PARTNER_GRADE = 2
+
+
+def _citation_neighbors(graph: Any, doc_id: str) -> set[str]:
+    """doc_ids that share a citation edge with ``doc_id`` (either direction).
+
+    Returns an empty set when the graph is unavailable or the doc is not mapped
+    onto the citation graph (only ~a third of corpus ids bridge to OpenAlex).
+    """
+    if graph is None:
+        return set()
+    oa = graph.doc_to_oa.get(doc_id)
+    if not oa:
+        return set()
+    out: set[str] = set()
+    for nb in graph.undirected.get(oa, ()):
+        d = graph.oa_to_doc.get(nb)
+        if d and d != doc_id:
+            out.add(d)
+    return out
+
+
+def _load_citation_graph() -> Any:
+    """Best-effort citation graph load; None if the store is missing/unreadable."""
+    try:
+        from graph_layout_rag.query.citation_rank import load_graph_cached
+
+        return load_graph_cached()
+    except Exception as exc:  # noqa: BLE001 — degrade to co-category pairing
+        log.warning("multihop: citation graph unavailable (%s); using co-category pairs", exc)
+        return None
+
+
+def _multihop_prompt(a: Seed, b: Seed) -> str:
+    body_a = (a.chunk_text or a.abstract)[:MAX_ABSTRACT_CHARS]
+    body_b = (b.chunk_text or b.abstract)[:MAX_ABSTRACT_CHARS]
+    return (
+        "You write realistic search queries that a researcher would type into a "
+        "graph drawing / layout literature search engine.\n"
+        "Write ONE question whose full answer requires BOTH papers below — a "
+        "relational or lineage need (how one technique relates to, builds on, "
+        "refines, generalizes, or contrasts with the other). Do NOT name either "
+        "paper's title or copy its distinctive phrasing; phrase it as an "
+        "independent information need answerable only by combining the two.\n"
+        "Output ONLY the query text, one line, 8-24 words, no quotes, no preamble.\n"
+        f"PAPER A: {a.title}\n{body_a}\n\n"
+        f"PAPER B: {b.title}\n{body_b}\n"
+    )
+
+
+def _pick_partner(
+    seed: Seed,
+    by_id: dict[str, Seed],
+    by_cat: dict[str, list[Seed]],
+    graph: Any,
+    used: set[tuple[str, str]],
+    rng: random.Random,
+) -> tuple[Seed, str] | None:
+    """Pick a partner doc for ``seed``: citation neighbour first, else co-category.
+
+    Returns ``(partner, pairing)`` where pairing is ``"citation"`` or
+    ``"co-category"``; None when no eligible unused partner exists.
+    """
+    cited = [by_id[d] for d in _citation_neighbors(graph, seed.doc_id) if d in by_id]
+    rng.shuffle(cited)
+    cocat = [s for s in by_cat.get(seed.category, ()) if s.doc_id != seed.doc_id]
+    rng.shuffle(cocat)
+    for cand, pairing in [(c, "citation") for c in cited] + [(c, "co-category") for c in cocat]:
+        key = tuple(sorted((seed.doc_id, cand.doc_id)))
+        if key in used:
+            continue
+        return cand, pairing
+    return None
+
+
+def _multihop_cache_key(a: Seed, b: Seed) -> str:
+    h = hashlib.sha256(f"{a.doc_id}|{b.doc_id}".encode()).hexdigest()[:16]
+    return f"{SYNTH_VERSION}:multihop:{h}"
+
+
+def _generate_multihop(pairs: list[tuple[Seed, Seed, str]], model: str) -> dict[int, str]:
+    """Generate one relational query per pair; cache hits skip the LLM."""
+    from rag_common.local_llm import generate_text
+
+    cache = _load_cache()
+    misses = [
+        (i, a, b) for i, (a, b, _p) in enumerate(pairs) if _multihop_cache_key(a, b) not in cache
+    ]
+
+    def _run(item: tuple[int, Seed, Seed]) -> tuple[int, str]:
+        i, a, b = item
+        try:
+            text = (
+                generate_text(_multihop_prompt(a, b), model=model, temperature=0.7, max_tokens=128)
+                or ""
+            ).strip()
+            text = text.replace("\n", " ")
+            return i, re.sub(r'^["\']|["\']$', "", text).strip()
+        except Exception as exc:  # noqa: BLE001 — degrade, retry next run
+            log.warning("multihop gen failed for %s|%s (%s)", a.doc_id, b.doc_id, exc)
+            return i, ""
+
+    if misses:
+        with ThreadPoolExecutor(max_workers=_gen_workers()) as pool:
+            for i, text in pool.map(_run, misses):
+                if text:  # only cache successes so 429s retry, not embed empties
+                    a, b, _p = pairs[i]
+                    cache[_multihop_cache_key(a, b)] = text
+        _save_cache(cache)
+        log.info("multihop gen: %d new queries", len(misses))
+
+    return {i: cache.get(_multihop_cache_key(a, b), "") for i, (a, b, _p) in enumerate(pairs)}
+
+
+def build_multihop_cases(
+    profile: str,
+    n: int,
+    *,
+    track: EvalTrack = "catalog",
+    seed: int = 1234,
+    oversample: int = 6,
+    rng: random.Random | None = None,
+    seeds: list[Seed] | None = None,
+    graph: Any = None,
+    exclude_queries: list[str] | None = None,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Generate up to ``n`` multi-hop (relational) cases. Does not judge.
+
+    ``seeds``/``graph`` may be injected (used by tests); otherwise seeds are
+    sampled stratified from the manifest and the citation graph is loaded from
+    disk. Both source docs are recorded relevant with grades; the surviving
+    cases carry ``stratum="multi-hop"``. Returns ``(case dicts, stats)``.
+    """
+    rng = rng or random.Random(seed)
+    if seeds is None:
+        curated_ids = {d for c in GOLD_CASES for d in c.relevant_doc_ids}
+        seeds = sample_seed_docs(
+            profile, track, n * oversample, rng=rng, exclude_ids=set(curated_ids)
+        )
+    if graph is None:
+        graph = _load_citation_graph()
+
+    by_id = {s.doc_id: s for s in seeds}
+    by_cat: dict[str, list[Seed]] = defaultdict(list)
+    for s in seeds:
+        by_cat[s.category].append(s)
+
+    used: set[tuple[str, str]] = set()
+    pairs: list[tuple[Seed, Seed, str]] = []
+    pair_cap = max(n * 3, n + 8)  # oversample pairs to survive filtering
+    for s in seeds:
+        if len(pairs) >= pair_cap:
+            break
+        picked = _pick_partner(s, by_id, by_cat, graph, used, rng)
+        if picked is None:
+            continue
+        partner, pairing = picked
+        used.add(tuple(sorted((s.doc_id, partner.doc_id))))
+        pairs.append((s, partner, pairing))
+
+    model = _gen_model()
+    queries = _generate_multihop(pairs, model)
+
+    stats = FilterStats()
+    curated_tokens = [_tokens(c.query) for c in GOLD_CASES]
+    exclude_tokens = [_tokens(q) for q in (exclude_queries or [])]
+    kept_tokens: list[set[str]] = []
+    cases: list[dict[str, Any]] = []
+    citation_linked = 0
+    for i, (a, b, pairing) in enumerate(pairs):
+        if len(cases) >= n:
+            break
+        q = (queries.get(i) or "").strip()
+        if not q:
+            stats.empty += 1
+            continue
+        if len(q.split()) < 6:
+            stats.too_short += 1
+            continue
+        qt = _tokens(q)
+        combined = _tokens(f"{a.title} {a.abstract} {b.title} {b.abstract}")
+        if _jaccard(qt, combined) > LEAKAGE_JACCARD_MAX:
+            stats.leakage += 1
+            continue
+        if any(
+            _jaccard(qt, t) > DUP_JACCARD_MAX for t in kept_tokens + curated_tokens + exclude_tokens
+        ):
+            stats.duplicate += 1
+            continue
+        citation_linked += int(pairing == "citation")
+        cases.append(
+            {
+                "id": f"synth-{track}-multihop-{len(cases):04d}",
+                "query": q,
+                "relevant_ids": [a.doc_id, b.doc_id],
+                "source": "synth",
+                "category": a.category,
+                "track": track,
+                "mode": "hard",
+                "stratum": MULTIHOP_STRATUM,
+                "seed_doc_id": a.doc_id,
+                "partner_doc_id": b.doc_id,
+                "pairing": pairing,
+                "grades": {a.doc_id: MULTIHOP_SEED_GRADE, b.doc_id: MULTIHOP_PARTNER_GRADE},
+                "notes": f"synthetic;stratum=multi-hop;pairing={pairing};seed={a.doc_id};partner={b.doc_id}",
+            }
+        )
+        kept_tokens.append(qt)
+    stats.kept = len(cases)
+    manifest = {
+        "stratum": MULTIHOP_STRATUM,
+        "requested": n,
+        "pairs": len(pairs),
+        "citation_linked": citation_linked,
+        "filters": stats.to_dict(),
+        "categories": dict(Counter(c["category"] for c in cases)),
+    }
+    return cases, manifest
+
+
+def append_synth_cases(new_cases: list[dict[str, Any]]) -> dict[str, Any]:
+    """Additively append ``new_cases`` to cases.json — never regenerates existing.
+
+    Existing cases are preserved verbatim; only cases with a fresh ``id`` are
+    added. The manifest's ``total_cases``/``by_stratum`` counters are refreshed
+    and an ``appended`` tally is recorded. Returns a small summary dict.
+    """
+    if CASES_PATH.is_file():
+        payload = json.loads(CASES_PATH.read_text(encoding="utf-8"))
+    else:
+        payload = {"manifest": {"version": SYNTH_VERSION}, "cases": []}
+    existing: list[dict[str, Any]] = payload.get("cases", [])
+    have = {c.get("id") for c in existing}
+    added = [c for c in new_cases if c.get("id") not in have]
+    payload["cases"] = existing + added
+    manifest = payload.setdefault("manifest", {})
+    manifest["total_cases"] = len(payload["cases"])
+    manifest["by_stratum"] = dict(Counter(c.get("stratum", "single-hop") for c in payload["cases"]))
+    manifest["appended"] = int(manifest.get("appended", 0)) + len(added)
+    SYNTH_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = CASES_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, CASES_PATH)
+    return {
+        "added": len(added),
+        "total": len(payload["cases"]),
+        "skipped_existing": len(new_cases) - len(added),
+    }

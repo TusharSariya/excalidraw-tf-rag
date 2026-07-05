@@ -276,6 +276,69 @@ def test_upsert_sha256_match_with_similar_titles_merges():
     assert manifest.items[0].abstract == "filled abstract"
 
 
+def test_upsert_sha256_merge_preserves_losing_id_as_alias():
+    """Regression: a merge that re-keys a record must not orphan the old id.
+
+    A sha256-collapse repair that absorbs a record into a sibling record and
+    lets the id vanish entirely would silently corrupt eval metrics if qrels
+    still reference the old id. Any merge where the incoming id differs from
+    the surviving id must persist the losing id in aliasDocIds (which
+    query/identity.py's canonical map resolves).
+    """
+    manifest = Manifest()
+    upsert_item(
+        manifest,
+        ManifestItem(
+            id="arxiv-2004-04906v3",
+            title="Dense Passage Retrieval for Open-Domain Question Answering",
+            source="arxiv",
+            url="https://arxiv.org/pdf/2004.04906v3.pdf",
+            status="ok",
+            sha256="abc123",
+        ),
+    )
+    upsert_item(
+        manifest,
+        ManifestItem(
+            id="arxiv-2004-04906",
+            title="Dense Passage Retrieval for Open-Domain Question Answering",
+            source="topic-seed",
+            url="https://arxiv.org/pdf/2004.04906.pdf",
+            status="ok",
+            sha256="abc123",
+            externalIds={"ArXiv": "2004.04906"},
+        ),
+    )
+    assert len(manifest.items) == 1
+    survivor = manifest.items[0]
+    assert survivor.id == "arxiv-2004-04906v3"
+    assert "arxiv-2004-04906" in survivor.aliasDocIds
+    assert survivor.id not in survivor.aliasDocIds
+    # externalIds from the losing record must survive the merge too
+    assert survivor.externalIds.get("ArXiv") == "2004.04906"
+
+
+def test_merge_items_unions_alias_doc_ids():
+    existing = ManifestItem(
+        id="a",
+        title="Paper",
+        source="s1",
+        url="https://example.com/a",
+        status="ok",
+        aliasDocIds=["old-1"],
+    )
+    incoming = ManifestItem(
+        id="b",
+        title="Paper",
+        source="s2",
+        url="https://example.com/b",
+        status="ok",
+        aliasDocIds=["old-2"],
+    )
+    merged = merge_items(existing, incoming)
+    assert set(merged.aliasDocIds) >= {"old-1", "old-2", "a", "b"}
+
+
 def test_upsert_sha256_match_with_dissimilar_titles_does_not_merge():
     manifest = Manifest()
     upsert_item(
