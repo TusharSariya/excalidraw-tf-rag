@@ -1684,12 +1684,13 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate", specifier = ">=0.30.0" },
+    { name = "flagembedding", marker = "extra == 'sparse'", specifier = ">=1.3.0" },
     { name = "leidenalg", specifier = ">=0.10.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "python-igraph", specifier = ">=0.11.0" },
     { name = "sentence-transformers", specifier = ">=3.0.0" },
 ]
-provides-extras = ["dev"]
+provides-extras = ["dev", "sparse"]
 
 [[package]]
 name = "regex"
