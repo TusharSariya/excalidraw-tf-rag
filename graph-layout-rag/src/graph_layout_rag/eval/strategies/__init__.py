@@ -664,6 +664,34 @@ class SpecterPRFStrategy:
             db.close()
 
 
+@dataclass
+class GraphArmStrategy:
+    """HippoRAG-2-style personalized-PageRank graph arm (``query/graph_arm.py``).
+
+    Thin benchmark wrapper around ``graph_search``: hybrid seeds the restart
+    distribution, PPR walks the citation+kNN doc graph, and the blended score
+    (``alpha*PPR + (1-alpha)*hybrid``) is returned in the same doc-level shape as
+    every other strategy. A/B only (bake-off #10) — not part of the default
+    offline run; intended for use alongside the relational-regime router
+    (``query/routing.py::classify_query_regime``), which is expected to route
+    multi-hop/relational queries here and everything else to plain hybrid.
+    """
+
+    name: str = "graph_arm"
+    requires_llm: bool = False
+    requires_cloud_cost: bool = False
+
+    def run(self, case: EvalCase, *, embed_profile: str, top: int = 20) -> list[dict[str, Any]]:
+        from graph_layout_rag.query.graph_arm import graph_search
+
+        return graph_search(
+            case.query,
+            top=top,
+            embed_profile=embed_profile,
+            filters=_filters(case, use_category=False, use_pdf_only=False),
+        )
+
+
 def _dot(a: list[float], b: list[float]) -> float:
     return math.fsum(x * y for x, y in zip(a, b))
 
@@ -747,6 +775,10 @@ AGGREGATION_STRATEGIES: tuple[str, ...] = (
 # Experimental SPECTER2 paper-embedding re-rank arm (A/B only; not in the default run).
 SPECTER_STRATEGIES: tuple[str, ...] = ("hybrid_specter_prf",)
 
+# HippoRAG-2-style graph/PPR arm (bake-off #10; A/B only, not in the default run —
+# the relational router, not a blanket swap-in, is the point).
+GRAPH_STRATEGIES: tuple[str, ...] = ("graph_arm",)
+
 ALL_STRATEGIES: tuple[str, ...] = (
     OFFLINE_STRATEGIES
     + LLM_STRATEGIES
@@ -754,6 +786,7 @@ ALL_STRATEGIES: tuple[str, ...] = (
     + EXPERIMENTAL_STRATEGIES
     + AGGREGATION_STRATEGIES
     + SPECTER_STRATEGIES
+    + GRAPH_STRATEGIES
 )
 
 
@@ -807,6 +840,7 @@ def strategy_registry() -> dict[str, RetrievalStrategy]:
         HybridAggregateStrategy("hybrid_agg_sum3", pool=200, aggregate="sum_topk", topk=3),
         HybridAggregateStrategy("hybrid_agg_count", pool=200, aggregate="count_boost"),
         SpecterPRFStrategy(),
+        GraphArmStrategy(),
     ]
     return {strategy.name: strategy for strategy in strategies}
 

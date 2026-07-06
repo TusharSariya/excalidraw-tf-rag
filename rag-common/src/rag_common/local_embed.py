@@ -14,6 +14,8 @@ from rag_common.config import (
     EmbedConfig,
     EmbedStats,
     LocalEmbedMode,
+    bnb_4bit_import_error,
+    bnb_4bit_import_ok,
     use_cuda_bnb_4bit,
 )
 
@@ -159,13 +161,25 @@ def _preload_nvjitlink() -> None:
         pass
 
 
+_warned_bnb_fallback = False
+
+
 def _bnb_4bit_model_kwargs() -> dict | None:
-    try:
-        import torch
-        from transformers import BitsAndBytesConfig
-    except ImportError as exc:
-        log.warning("bitsandbytes 4-bit requested but import failed (%s); using FP16", exc)
+    global _warned_bnb_fallback
+    if not bnb_4bit_import_ok():
+        if not _warned_bnb_fallback:
+            log.warning(
+                "QUANT FALLBACK: requested quant='4bit' (cuda-bnb-4bit) but "
+                "bitsandbytes/transformers import failed (%s); actual quant='fp16'. "
+                "Index/query metadata will record 'cuda-bnb-4bit-fp16-fallback', NOT "
+                "'cuda-bnb-4bit' -- do not trust this host's vectors as bnb-quantized.",
+                bnb_4bit_import_error(),
+            )
+            _warned_bnb_fallback = True
         return None
+    import torch
+    from transformers import BitsAndBytesConfig
+
     _preload_nvjitlink()
 
     return {

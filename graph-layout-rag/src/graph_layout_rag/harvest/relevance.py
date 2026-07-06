@@ -139,6 +139,58 @@ STRONG_LAYOUT_TERMS = frozenset(
         "drawing directed graphs",
         "drawing of graphs",
         "drawing graphs",
+        # --- graph analytics / network science (P1a expansion) ---
+        # Named methods and their defining phrases are unambiguous subject markers:
+        # a single hit proves the paper is in-domain. Broad ML terms
+        # ("graph neural network", "representation learning") stay in the *weak*
+        # set below so a generic deep-learning paper does not pass on them alone.
+        "pagerank",
+        "page rank",
+        "personalized pagerank",
+        "personalised pagerank",
+        "hits algorithm",
+        "hubs and authorities",
+        "authoritative sources",
+        "community detection",
+        "community structure",
+        "louvain",
+        "leiden",
+        "modularity optimization",
+        "modularity optimisation",
+        "modularity maximization",
+        "modularity maximisation",
+        "girvan-newman",
+        "girvan newman",
+        "graph partitioning",
+        "network partitioning",
+        "spectral clustering",
+        "spectral partitioning",
+        "graph laplacian",
+        "normalized cut",
+        "normalized cuts",
+        "normalised cut",
+        "normalised cuts",
+        "fiedler vector",
+        "laplacian eigenmap",
+        "node2vec",
+        "deepwalk",
+        "node embedding",
+        "graph embedding",
+        "network embedding",
+        # "edge bundling" already appears in the routing-area strong terms above.
+        "edge bundles",
+        "hierarchical edge bundling",
+        "hierarchical edge bundles",
+        "force-directed edge bundling",
+        "orthogonal connector routing",
+        "orthogonal edge routing",
+        "hyperedge routing",
+        "dynamic graph drawing",
+        "dynamic graph visualization",
+        "dynamic graph visualisation",
+        "dynamic network visualization",
+        "dynamic network visualisation",
+        "temporal graph drawing",
     }
 )
 
@@ -179,6 +231,26 @@ WEAK_LAYOUT_TERMS = frozenset(
         "nested",
         "hypergraph",
         "dag",
+        # --- graph-analytics / ML-on-graphs weak terms (P1a expansion) ---
+        # Broad enough to appear in off-domain ML/network-science papers, so they
+        # only score when a drawing/visualization-context word co-occurs. This is
+        # deliberately how "graph neural network" is admitted: strong when the
+        # paper is about *layout* ("...for graph drawing"), silent otherwise.
+        "graph neural network",
+        "graph convolutional",
+        "graph attention",
+        "representation learning",
+        "community",
+        "modularity",
+        "centrality",
+        "spectral",
+        "laplacian",
+        "eigenvector",
+        "partitioning",
+        "random walk",
+        "temporal",
+        "dynamic",
+        "streaming",
     }
 )
 
@@ -204,11 +276,36 @@ DRAWING_CONTEXT_TERMS = frozenset(
 
 # DOI prefixes that are definitionally never graph-layout venues.
 # Checked before any API call so we never waste a quota request on a PLOS paper.
+#
+# P1a reconciliation (graph-analytics/network-science expansion): the corpus now
+# wants community-detection, PageRank, and spectral classics, many of which live
+# in *multidisciplinary megajournals* — Girvan-Newman (2002) is in PNAS, Newman's
+# modularity work is in Physical Review E (10.1103, never blocked), Leiden (2019)
+# is in Nature Scientific Reports, and PLOS ONE hosts network science. Blanket
+# blocking those venues would reject the very seeds we are adding. So the venue
+# block is narrowed to *definitionally biomedical* sub-journals, and the
+# multidisciplinary megajournals (PNAS, Nature main/Comms, Scientific Reports,
+# PLOS ONE) are released — the content-based OFF_TOPIC_KEYWORDS filter (genome,
+# protein, clinical, …) plus the relevance score still guard against the
+# biomedical long tail those venues also publish.
 OFF_TOPIC_DOI_PREFIXES: tuple[str, ...] = (
-    "10.1371/",  # PLOS family (Biology, CompBio, ONE, Genetics, Medicine…)
+    # PLOS: block the purely biomedical sub-journals; leave 10.1371/journal.pone
+    # (PLOS ONE, multidisciplinary) to the content filter.
+    "10.1371/journal.pbio",  # PLOS Biology
+    "10.1371/journal.pmed",  # PLOS Medicine
+    "10.1371/journal.pgen",  # PLOS Genetics
+    "10.1371/journal.ppat",  # PLOS Pathogens
+    "10.1371/journal.pcbi",  # PLOS Computational Biology
+    "10.1371/journal.pntd",  # PLOS Neglected Tropical Diseases
     "10.1186/",  # BMC family (Bioinformatics, Systems Biology, Genome Biology…)
-    "10.1038/",  # Nature family (Nature, Nature Comms, Nature Methods…)
-    "10.1073/",  # PNAS
+    # Nature: block the biomedical sub-journals; leave 10.1038/s41598 (Scientific
+    # Reports), 10.1038/s41467 (Nature Communications), and Nature main open.
+    "10.1038/nmeth",  # Nature Methods
+    "10.1038/ng",  # Nature Genetics
+    "10.1038/nbt",  # Nature Biotechnology
+    "10.1038/nm",  # Nature Medicine
+    "10.1038/nn",  # Nature Neuroscience
+    "10.1038/nrg",  # Nature Reviews Genetics
     "10.1523/",  # Journal of Neuroscience
     "10.1016/j.neuroimage",
     "10.1016/j.brainres",
@@ -222,7 +319,9 @@ OFF_TOPIC_DOI_PREFIXES: tuple[str, ...] = (
     "10.1093/bioinformatics",
     "10.1093/nar/",  # Nucleic Acids Research
     "10.1093/hmg/",  # Human Molecular Genetics
-    "10.1126/science",  # Science
+    # NOTE: 10.1073 (PNAS) and 10.1126 (Science) are intentionally NOT blocked —
+    # both are multidisciplinary and host network-science classics; the keyword
+    # filter handles their biomedical majority.
 )
 
 

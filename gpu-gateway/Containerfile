@@ -1,0 +1,115 @@
+# gpu-gateway/Containerfile
+#
+# Ray Serve inference gateway (embed + rerank + LLM proxy) for a single
+# consumer GPU. Built for k3s + the NVIDIA GPU Operator; also runs (models
+# unloaded, scheduling-only) on a CPU-only host for smoke testing — see
+# docker-entrypoint.sh and README "Smoke test (no GPU)" below.
+#
+# ---------------------------------------------------------------------------
+# Base image / CUDA pin rationale
+# ---------------------------------------------------------------------------
+# pyproject.toml deliberately ships no torch pin ("torch with CUDA 12.x is
+# installed separately via pip index URL: .../whl/cu124" — see pyproject.toml
+# comment) because on the bare-metal desktop it's installed once, out-of-band,
+# against the host's CUDA driver. Inside a container we get the same effect
+# for free by starting FROM an official `pytorch/pytorch` CUDA runtime image
+# instead of layering pip-installed torch on a generic Python base:
+#   - it ships a torch build already linked against CUDA 12.4 + cuDNN 9,
+#     matching the cu124 wheel index named in pyproject.toml, so we don't
+#     redundantly pip-install a second torch;
+#   - `bitsandbytes>=0.44` (pinned to 0.49.2 below, per uv.lock) ships
+#     prebuilt manylinux wheels for CUDA 12.x — no nvcc/compiler needed, so
+#     the slimmer "runtime" (not "devel") variant is sufficient;
+#   - CUDA 12.4 is comfortably within the desktop's driver capability
+#     (measured: NVIDIA driver 595.71.05, CUDA 13.2 max) and the target k3s
+#     GPU Operator node — NVIDIA's forward driver compatibility guarantees a
+#     12.4 runtime works under any 12.x-or-newer driver; pin the runtime, not
+#     the driver, and this image travels to any node the Operator supports.
+# Digest-pin (not just the tag) so a Docker Hub tag mutation can't silently
+# change what ships; re-resolve with `docker pull --platform linux/amd64
+# pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime` and update both if you
+# intentionally bump the base.
+FROM pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime@sha256:c8268a92a69bd500f8be0e665b2630ee006dadaf7bfbc24249141b15ff622755
+
+# ---------------------------------------------------------------------------
+# OCI labels
+# ---------------------------------------------------------------------------
+LABEL org.opencontainers.image.title="gpu-gateway" \
+      org.opencontainers.image.description="Persistent single-GPU inference gateway (embed + rerank + LLM proxy) — Ray Serve + SQLite cache" \
+      org.opencontainers.image.source="https://github.com/excalidraw-tf-rag" \
+      org.opencontainers.image.licenses="UNLICENSED" \
+      org.opencontainers.image.base.name="pytorch/pytorch:2.5.1-cuda12.4-cudnn9-runtime"
+
+WORKDIR /app
+
+# No apt packages needed: the base image ships python (conda) for the
+# HEALTHCHECK probe below, so we don't need to install curl (and don't pay
+# an apt-get update layer / trust an extra package source for it). k8s
+# readiness/liveness probes are native httpGet and don't need a binary at all.
+
+# ---------------------------------------------------------------------------
+# Python deps — pinned to the versions uv.lock already resolved for this repo
+# (see gpu-gateway/uv.lock), installed WITHOUT touching the base image's
+# torch. `pip install` only reinstalls a dependency if the installed version
+# doesn't satisfy the requested constraint; none of these packages pin torch
+# tightly enough to conflict with the base's 2.5.1+cu124, so torch is left
+# alone (verified at build time below via `pip check`).
+# ---------------------------------------------------------------------------
+RUN pip install --no-cache-dir \
+        "ray[serve]==2.56.0" \
+        "protobuf==3.20.3" \
+        "aiosqlite==0.22.1" \
+        "fastapi==0.139.0" \
+        "uvicorn[standard]==0.49.0" \
+        "httpx==0.28.1" \
+        "pydantic==2.13.4" \
+        "sentence-transformers==5.6.0" \
+        "bitsandbytes==0.49.2" \
+        "accelerate==1.14.0"
+
+# Copy only what's needed to install + run the package (see .dockerignore for
+# what's excluded: .venv/, eval-results/, tests/, .env, etc.).
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
+COPY config/ ./config/
+COPY docker-entrypoint.sh ./
+
+# Install the package itself with --no-deps: its runtime deps were just
+# pinned explicitly above (torch stays whatever the base image shipped).
+#
+# NOTE: deliberately not running `pip check` here — the base conda image
+# ships a `ninja` package whose wheel metadata pip considers "not supported
+# on this platform", which fails `pip check` even though it's unrelated to
+# anything we installed and nothing in this image imports ninja. Verify the
+# thing we actually care about instead: torch is untouched (still base
+# image's CUDA 12.4 build, not silently re-resolved/upgraded by the deps
+# above) and the package imports.
+RUN pip install --no-cache-dir --no-deps -e . \
+    && python -c "import torch; assert torch.__version__.startswith('2.5.1'), torch.__version__; assert torch.version.cuda == '12.4', torch.version.cuda; import gpu_gateway; print('torch', torch.__version__, 'cuda', torch.version.cuda, 'gpu_gateway OK')" \
+    && chmod +x docker-entrypoint.sh
+
+# ---------------------------------------------------------------------------
+# Non-root user. Ray writes session/spill state under $HOME/.cache and
+# /tmp/ray; HF/sentence-transformers cache downloaded model weights under
+# $HOME/.cache/huggingface. Give the user a real home dir for both.
+# ---------------------------------------------------------------------------
+RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin gateway \
+    && mkdir -p /tmp/ray \
+    && chown -R gateway:gateway /app /tmp/ray
+
+USER gateway
+ENV HOME=/home/gateway \
+    HF_HOME=/home/gateway/.cache/huggingface \
+    RAY_DISABLE_USAGE_STATS=1 \
+    PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
+EXPOSE 8765
+
+# The gateway's own /health (GatewayHTTP.__call__ in src/gpu_gateway/main.py)
+# reports GPU/model/queue state and always returns 200 once Ray Serve is up —
+# it degrades gracefully (best-effort nvidia-smi probe) rather than requiring
+# CUDA, so this also works for the CPU-only smoke test.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
+    CMD python -c "import urllib.request as u; u.urlopen('http://127.0.0.1:8765/health', timeout=8).read()" || exit 1
+
+ENTRYPOINT ["./docker-entrypoint.sh"]

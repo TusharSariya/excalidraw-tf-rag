@@ -1,6 +1,6 @@
-from rag_literature_rag.catalog.classify import classify_item
+from rag_literature_rag.catalog.classify import build_catalog, classify_item
 from rag_literature_rag.catalog.taxonomy import categories_from_tags
-from rag_literature_rag.manifest import ManifestItem
+from rag_literature_rag.manifest import Manifest, ManifestItem
 
 
 def _item(**kwargs) -> ManifestItem:
@@ -54,6 +54,28 @@ def test_multi_category_agentic_and_evaluation():
     categories, _ = classify_item(item)
     assert "agentic" in categories
     assert "evaluation" in categories or "survey" in categories
+
+
+def test_build_catalog_skips_excluded_items(monkeypatch, tmp_path):
+    """excluded=True items must never surface in the query-facing catalog.
+
+    build_catalog() is what retrieve.py's catalog_maps() reads live from
+    data/manifest.json -- marking an item excluded (the P1c biomedical
+    re-score exclusion mechanism) must take effect without re-ingesting.
+    """
+    kept = _item(id="kept-doc", title="Retrieval-Augmented Generation Survey")
+    dropped = _item(
+        id="dropped-doc",
+        title="Working memory in episodic long-term memory",
+        excluded=True,
+    )
+    manifest = Manifest(items=[kept, dropped])
+    monkeypatch.setattr("rag_literature_rag.catalog.classify.load_manifest", lambda: manifest)
+    monkeypatch.setattr("rag_literature_rag.catalog.classify._has_pdf_on_disk", lambda item: True)
+    entries = build_catalog(status="ok")
+    ids = {e.doc_id for e in entries}
+    assert "kept-doc" in ids
+    assert "dropped-doc" not in ids
 
 
 def test_uncategorized_generic_title():

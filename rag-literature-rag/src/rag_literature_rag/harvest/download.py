@@ -229,10 +229,16 @@ def _download_to_file_unbounded(
         if res.status_code in _RETRYABLE_STATUSES:
             if res.status_code == 429:
                 note_rate_limit(domain, retry_after=last_retry_after)
-            wait = (
+            # Cap the retry sleep: servers send Retry-After values of hours
+            # (quota exhaustion), and an uncapped sleep parks the worker for
+            # that long while it holds a download-semaphore slot (2026-07-04
+            # pass-4 hang: 32 workers wedged with zero progress). Mirrors the
+            # 60s cap already used by http_client.get_json.
+            wait = min(
                 last_retry_after
                 if last_retry_after
-                else 2 ** (attempt - 1) * (3 if res.status_code == 429 else 1)
+                else 2 ** (attempt - 1) * (3 if res.status_code == 429 else 1),
+                60,
             )
             log.debug(
                 "download HTTP %s for %s — retry in %ds (attempt %d)",

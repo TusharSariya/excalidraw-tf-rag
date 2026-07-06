@@ -31,13 +31,17 @@ def test_enrich_fills_missing_abstract():
         ],
     )
 
-    with patch.object(enrich_mod, "_fetch_abstract", return_value="filled in abstract"):
+    with (
+        patch.object(enrich_mod, "_fetch_abstract", return_value="filled in abstract"),
+        patch.object(enrich_mod, "_fetch_title", return_value=None),
+    ):
         stats = enrich_manifest(m, workers=1)
 
     assert stats["candidates"] == 1  # only item a
     assert stats["enriched"] == 1
     by_id = {i.id: i for i in m.items}
     assert by_id["a"].abstract == "filled in abstract"
+    assert by_id["a"].abstractSource == "enrich"
     assert by_id["b"].abstract == "already here"  # untouched
     assert by_id["c"].abstract is None
 
@@ -45,7 +49,10 @@ def test_enrich_fills_missing_abstract():
 def test_enrich_dry_run_does_not_mutate():
     m = Manifest(updatedAt="t", items=[_item(id="a", doi="10.1/a", abstract=None)])
 
-    with patch.object(enrich_mod, "_fetch_abstract", return_value="node overlap removal"):
+    with (
+        patch.object(enrich_mod, "_fetch_abstract", return_value="node overlap removal"),
+        patch.object(enrich_mod, "_fetch_title", return_value=None),
+    ):
         stats = enrich_manifest(m, workers=1, dry_run=True)
 
     assert stats["enriched"] == 1
@@ -55,12 +62,74 @@ def test_enrich_dry_run_does_not_mutate():
 def test_enrich_handles_no_provider_hit():
     m = Manifest(updatedAt="t", items=[_item(id="a", doi="10.1/a", abstract=None)])
 
-    with patch.object(enrich_mod, "_fetch_abstract", return_value=None):
+    with (
+        patch.object(enrich_mod, "_fetch_abstract", return_value=None),
+        patch.object(enrich_mod, "_fetch_title", return_value=None),
+    ):
         stats = enrich_manifest(m, workers=1)
 
     assert stats["candidates"] == 1
     assert stats["enriched"] == 0
     assert m.items[0].abstract is None
+
+
+def test_enrich_skips_abstract_on_title_mismatch():
+    # DOI lookup resolves to a different paper's record (e.g. a synthesized
+    # arXiv DOI collision) -- must not attach that record's abstract.
+    m = Manifest(
+        updatedAt="t",
+        items=[
+            _item(
+                id="self-rag",
+                title="Self-RAG: Learning to Retrieve, Generate, and Critique",
+                doi="10.48550/arxiv.2310.11511",
+                abstract=None,
+            ),
+        ],
+    )
+
+    with (
+        patch.object(enrich_mod, "_fetch_abstract", return_value="CareerX matches candidates."),
+        patch.object(
+            enrich_mod,
+            "_fetch_title",
+            return_value="CareerX: A Bidirectional Recommendation System",
+        ),
+    ):
+        stats = enrich_manifest(m, workers=1)
+
+    assert stats["candidates"] == 1
+    assert stats["enriched"] == 0
+    assert m.items[0].abstract is None
+    assert m.items[0].abstractSource is None
+
+
+def test_enrich_fills_abstract_when_fetched_title_matches():
+    m = Manifest(
+        updatedAt="t",
+        items=[
+            _item(
+                id="self-rag",
+                title="Self-RAG: Learning to Retrieve, Generate, and Critique",
+                doi="10.48550/arxiv.2310.11511",
+                abstract=None,
+            ),
+        ],
+    )
+
+    with (
+        patch.object(enrich_mod, "_fetch_abstract", return_value="Self-reflective RAG abstract."),
+        patch.object(
+            enrich_mod,
+            "_fetch_title",
+            return_value="Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection",
+        ),
+    ):
+        stats = enrich_manifest(m, workers=1)
+
+    assert stats["enriched"] == 1
+    assert m.items[0].abstract == "Self-reflective RAG abstract."
+    assert m.items[0].abstractSource == "enrich"
 
 
 def test_enrich_no_candidates():

@@ -119,44 +119,58 @@ def log_attempt(
     retry_after: int | None = None,
     stage: str | None = None,
 ) -> None:
+    init_db()
     host = urlparse(url).hostname or ""
     now = _now_iso()
-    with _lock, _conn() as db:
-        db.execute(
-            """
-            INSERT INTO download_attempts
-            (doc_id, doi, url, host, attempt, http_status, outcome, transient,
-             bytes, retry_after, harvest_run, stage, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                doc_id,
-                doi,
-                url,
-                host,
-                attempt,
-                http_status,
-                outcome,
-                1 if transient else 0,
-                bytes_count,
-                retry_after,
-                current_run_id(),
-                stage or _stage,
-                now,
-            ),
-        )
-        if doc_id:
-            db.execute(
-                """
-                INSERT INTO documents (doc_id, final_status, winning_url, last_outcome, urls_tried, updated_at)
-                VALUES (?, NULL, NULL, ?, 1, ?)
-                ON CONFLICT(doc_id) DO UPDATE SET
-                    last_outcome = excluded.last_outcome,
-                    urls_tried = urls_tried + 1,
-                    updated_at = excluded.updated_at
-                """,
-                (doc_id, outcome, now),
-            )
+    # Belt-and-suspenders: a write can still hit "no such table" (e.g. a
+    # concurrent process recreated/truncated the db file, or a schema drift)
+    # even right after init_db() above. Retrying once after a fresh init_db()
+    # makes the ledger self-healing so a logging hiccup can never surface as
+    # an exception that callers (e.g. the harvest download path) mistake for
+    # a failed download and react to by deleting an already-saved file.
+    for attempt_no in (1, 2):
+        try:
+            with _lock, _conn() as db:
+                db.execute(
+                    """
+                    INSERT INTO download_attempts
+                    (doc_id, doi, url, host, attempt, http_status, outcome, transient,
+                     bytes, retry_after, harvest_run, stage, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        doc_id,
+                        doi,
+                        url,
+                        host,
+                        attempt,
+                        http_status,
+                        outcome,
+                        1 if transient else 0,
+                        bytes_count,
+                        retry_after,
+                        current_run_id(),
+                        stage or _stage,
+                        now,
+                    ),
+                )
+                if doc_id:
+                    db.execute(
+                        """
+                        INSERT INTO documents (doc_id, final_status, winning_url, last_outcome, urls_tried, updated_at)
+                        VALUES (?, NULL, NULL, ?, 1, ?)
+                        ON CONFLICT(doc_id) DO UPDATE SET
+                            last_outcome = excluded.last_outcome,
+                            urls_tried = urls_tried + 1,
+                            updated_at = excluded.updated_at
+                        """,
+                        (doc_id, outcome, now),
+                    )
+            return
+        except sqlite3.OperationalError:
+            if attempt_no == 2:
+                raise
+            init_db()
 
 
 def update_document(

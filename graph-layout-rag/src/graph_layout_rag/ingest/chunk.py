@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 import math
 import re
 from dataclasses import dataclass, field
 
 from graph_layout_rag.ingest.extract import PageText
 from graph_layout_rag.manifest import ManifestItem
+
+log = logging.getLogger(__name__)
 
 CHUNK_STRATEGY = "markdown-structure-v1"
 TARGET_TOKENS = 800
@@ -23,6 +26,19 @@ _LIST_RE = re.compile(r"^\s*(?:[-+*]|\d+[.)])\s+")
 _FENCE_RE = re.compile(r"^\s*(```+|~~~+)")
 _FORMULA_RE = re.compile(r"^\s*\$\$\s*$")
 _SENTENCE_RE = re.compile(r"(?<=[.!?])(?:[\"')\]]*)\s+")
+
+# Terminal-section stripping: matches whole heading titles only (not partial
+# mentions, and not "Appendix" — appendices are kept since they often carry
+# real content). Trailing punctuation/colon and a leading number/letter
+# ("A. References") are tolerated.
+_REFERENCE_HEADING_RE = re.compile(
+    r"^(?:[a-z0-9]{1,3}[.)]\s*)?(references|bibliography|works\s+cited|acknowledge?ments?)\s*:?\s*$",
+    re.IGNORECASE,
+)
+# A matching heading only triggers stripping if it starts at/after this
+# fraction of the way through the document's blocks — guards against a
+# "References" subsection or discussion mid-paper.
+REFERENCE_STRIP_TERMINAL_FRACTION = 0.6
 
 
 @dataclass(frozen=True)
@@ -73,7 +89,9 @@ def estimate_tokens(text: str) -> int:
     return max(1, math.ceil(len(text) / 4)) if text else 0
 
 
-def chunking_fingerprint(profile: str | None = None) -> dict[str, object]:
+def chunking_fingerprint(
+    profile: str | None = None, *, strip_references: bool = True
+) -> dict[str, object]:
     limits = _limits_for_profile(profile)
     fingerprint: dict[str, object] = {
         "strategy": CHUNK_STRATEGY,
@@ -82,6 +100,7 @@ def chunking_fingerprint(profile: str | None = None) -> dict[str, object]:
         "min_preferred_tokens": limits.min_preferred_tokens,
         "overlap_tokens": limits.overlap_tokens,
         "deduplication_version": DEDUPLICATION_VERSION,
+        "reference_strip": "v1" if strip_references else "off",
     }
     if limits.variant != DEFAULT_LIMITS.variant:
         fingerprint["variant"] = limits.variant
@@ -315,6 +334,67 @@ def parse_markdown_blocks(pages: list[PageText]) -> list[StructuralBlock]:
     return blocks
 
 
+def _heading_level(block: StructuralBlock) -> int:
+    match = _HEADING_RE.match(block.text)
+    return len(match.group(1)) if match else 0
+
+
+def _heading_title(block: StructuralBlock) -> str:
+    match = _HEADING_RE.match(block.text)
+    return match.group(2).strip() if match else block.text.strip()
+
+
+def strip_reference_sections(
+    blocks: list[StructuralBlock],
+    *,
+    doc_id: str = "",
+) -> tuple[list[StructuralBlock], int]:
+    """Drop a terminal References/Bibliography/Acknowledg(e)ments section.
+
+    Only a heading whose title exactly matches one of those (case-insensitive)
+    AND whose position is at/after ``REFERENCE_STRIP_TERMINAL_FRACTION`` of the
+    way through ``blocks`` is treated as the start of a droppable section — a
+    "References" subsection or discussion earlier in the paper is left alone.
+    Everything from the matching heading up to (but not including) the next
+    heading of the same or shallower level — or EOF — is dropped. Appendices
+    are never matched and are therefore always kept.
+
+    Returns ``(kept_blocks, dropped_count)``. Logs a debug-level line with the
+    dropped count when anything is dropped, so false positives are auditable.
+    """
+    total = len(blocks)
+    if total == 0:
+        return blocks, 0
+    kept: list[StructuralBlock] = []
+    dropped = 0
+    skip_level: int | None = None
+    for position, block in enumerate(blocks):
+        if skip_level is not None:
+            if block.kind == "heading" and _heading_level(block) <= skip_level:
+                skip_level = None
+            else:
+                dropped += 1
+                continue
+        if (
+            block.kind == "heading"
+            and _REFERENCE_HEADING_RE.match(_heading_title(block))
+            and position / total >= REFERENCE_STRIP_TERMINAL_FRACTION
+        ):
+            skip_level = _heading_level(block)
+            dropped += 1
+            continue
+        kept.append(block)
+    if dropped:
+        log.debug(
+            "chunk: stripped terminal reference/bibliography/acknowledgments section "
+            "for doc_id=%s (%d/%d blocks dropped)",
+            doc_id,
+            dropped,
+            total,
+        )
+    return kept, dropped
+
+
 def _pack_units(
     units: list[str],
     *,
@@ -430,9 +510,13 @@ def chunk_pages(
     alias_dois: list[str] | None = None,
     canonical_sha256: str | None = None,
     chunk_profile: str | None = None,
+    strip_references: bool = True,
 ) -> list[TextChunk]:
     cats = pipeline_categories or []
-    groups = _assemble_blocks(parse_markdown_blocks(pages), chunk_profile=chunk_profile)
+    blocks = parse_markdown_blocks(pages)
+    if strip_references:
+        blocks, _dropped = strip_reference_sections(blocks, doc_id=item.id)
+    groups = _assemble_blocks(blocks, chunk_profile=chunk_profile)
     chunks: list[TextChunk] = []
     for idx, group in enumerate(groups):
         text = "\n\n".join(block.text for block in group)

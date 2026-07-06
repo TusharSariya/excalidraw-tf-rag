@@ -1,0 +1,39 @@
+{
+  "description": "Produced by the embed stage; consumed by the indexer stage.",
+  "properties": {
+    "attempt": {
+      "default": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "content_sha256": {
+      "title": "Content Sha256",
+      "type": "string"
+    },
+    "corpus": {
+      "title": "Corpus",
+      "type": "string"
+    },
+    "doc_id": {
+      "title": "Doc Id",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    },
+    "stage_fingerprint": {
+      "title": "Stage Fingerprint",
+      "type": "string"
+    }
+  },
+  "required": [
+    "doc_id",
+    "corpus",
+    "content_sha256",
+    "stage_fingerprint"
+  ],
+  "title": "ChunksEmbeddedMessage",
+  "type": "object"
+}

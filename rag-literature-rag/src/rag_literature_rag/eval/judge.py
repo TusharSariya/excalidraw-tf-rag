@@ -61,6 +61,26 @@ _RUBRIC = (
 
 
 def judge_model() -> str:
+    """Resolve the judge model name for the *active* judge backend.
+
+    Default (``RAG_LIT_JUDGE_BACKEND`` unset): the direct-HTTP dual backend
+    (DeepSeek API primary, opencode-go Zen fallback on credit/rate-limit
+    errors) — see ``_http_judge_backend``/``_backend_order`` below. Set
+    ``RAG_LIT_JUDGE_BACKEND=local`` (or ``ollama``) to opt back into the
+    ``rag_common.local_llm`` dispatch instead. Bulk judging must NEVER route
+    through the opencode CLI subprocess path — only the HTTP Zen endpoint or
+    the DeepSeek API.
+
+    The *actual* model that produced a given grade (which may differ from this
+    resolved name when the HTTP dual backend fails over) is recorded per-case
+    in the qrels entry's ``judge_model`` field — see ``judge_pool``.
+    """
+    http_backend = _http_judge_backend()
+    if http_backend in ("opencode", "auto"):
+        return os.getenv("RAG_LIT_JUDGE_HTTP_MODEL", "opencode-go/deepseek-v4-flash")
+    if http_backend == "deepseek":
+        return os.getenv("RAG_LIT_DEEPSEEK_JUDGE_MODEL", "deepseek-chat")
+
     from rag_common.local_llm import llm_backend, ollama_model, opencode_model
 
     if llm_backend() == "opencode":
@@ -68,25 +88,51 @@ def judge_model() -> str:
     return ollama_model()
 
 
-# --- OpenCode Go (Zen) OpenAI-compatible judge backend --------------------
-# DeepSeek V4 Flash (and other Zen Go models) via the OpenAI-compatible HTTP
-# endpoint. Used when the judge model is "opencode-go/<model>" or
-# RAG_LIT_JUDGE_BACKEND=opencode. Avoids `opencode run` (TTY/agent overhead,
-# no parallelism); we manage concurrency ourselves in judge_pool.
+# --- Direct-HTTP dual-backend judge (DeepSeek API + opencode-go Zen) -------
+# Bypasses rag_common.local_llm's opencode-CLI path for the OpenAI-compatible
+# HTTP endpoints, so a large judging run gets (a) real concurrency (judge_pool
+# owns its threads) and (b) automatic FAILOVER when one backend runs out of
+# credits. This is the DEFAULT judge path (RAG_LIT_JUDGE_BACKEND unset ==
+# "auto"): DeepSeek API primary, opencode-go Zen fallback on credit/rate-limit
+# errors. Override via RAG_LIT_JUDGE_BACKEND:
+#   "deepseek" -> DeepSeek API only ; "opencode" -> opencode-go only ;
+#   "auto"     -> DeepSeek primary, fail over to opencode-go on credit
+#                 exhaustion / rate limit (the default) ;
+#   "local"/"ollama"/"none"/"off" -> opt OUT of the HTTP path entirely and use
+#                 the rag_common.local_llm dispatch below (Ollama/opencode
+#                 CLI/gateway) — bulk judging should not need this.
 _OPENCODE_URL = "https://opencode.ai/zen/go/v1/chat/completions"
 # A non-empty User-Agent is REQUIRED — the gateway's Cloudflare returns 403 to
 # urllib's default UA. (Discovered 2026-06-27.)
 _OPENCODE_UA = "opencode/1.17.11"
+_DEEPSEEK_URL = "https://api.deepseek.com/v1/chat/completions"
 _OPENCODE_RETRYABLE_HTTP = frozenset({408, 409, 425, 429, 500, 502, 503, 504})
+_HTTP_CREDIT = frozenset({401, 402, 403})  # auth / insufficient-balance -> fail over, don't retry
+_HTTP_DISABLE = frozenset({"local", "ollama", "none", "off", ""})
 
 
-def _judge_backend(model: str) -> str:
-    override = os.getenv("RAG_LIT_JUDGE_BACKEND", "").strip().lower()
-    if override:
-        return override
-    if model.startswith(("opencode-go/", "opencode/")):
-        return "opencode"
-    return "local"
+class _JudgeCreditError(RuntimeError):
+    """A backend refused for auth/credit reasons (401/402/403) — try the next one."""
+
+
+def _http_judge_backend() -> str:
+    """RAG_LIT_JUDGE_BACKEND, defaulting to "auto" (DeepSeek primary, opencode
+    fallback).
+
+    Deliberately does NOT infer from an "opencode-go/..." model string: the
+    resolved default judge model itself looks like an opencode-go id (see
+    judge_model()), so inferring backend from that string would silently
+    collapse the default "auto" dual-backend into "opencode"-only.
+    """
+    return os.getenv("RAG_LIT_JUDGE_BACKEND", "auto").strip().lower()
+
+
+def _backend_order(backend: str) -> list[str]:
+    if backend == "auto":
+        return ["deepseek", "opencode"]
+    if backend in ("opencode", "deepseek"):
+        return [backend]
+    return []
 
 
 def _opencode_key() -> str:
@@ -102,18 +148,20 @@ def _opencode_key() -> str:
         return ""
 
 
-def _judge_one_opencode(query: str, doc: dict[str, Any], model: str) -> tuple[int, str]:
-    """Grade one (query, doc) via the OpenCode Go OpenAI-compatible endpoint.
+def _deepseek_key() -> str:
+    return os.getenv("DEEPSEEK_API_KEY", "").strip()
 
-    Resilient by contract: retries 429/5xx/timeout/empty with jittered backoff,
-    and RAISES on persistent failure so judge_pool records a non-cached
-    judge_error (retried next run) rather than poisoning qrels with a fake 0.
+
+def _http_chat_grade(
+    url: str, key: str, api_model: str, prompt: str, *, user_agent: str | None = None
+) -> tuple[int, str]:
+    """POST one OpenAI-compatible chat completion and parse a 0-3 grade.
+
+    Retries transient HTTP/timeout with jittered backoff; raises
+    ``_JudgeCreditError`` on 401/402/403 (credit/auth → caller fails over); raises
+    the last exception on persistent transient failure (so judge_pool records a
+    non-cached judge_error, retried next run, rather than a fake grade-0).
     """
-    key = _opencode_key()
-    if not key:
-        raise RuntimeError("opencode judge: no OPENCODE_API_KEY and no auth.json opencode-go key")
-    api_model = model.split("/", 1)[1] if "/" in model else model
-    prompt = build_judge_prompt(query, doc)
     payload = json.dumps(
         {
             "model": api_model,
@@ -122,16 +170,14 @@ def _judge_one_opencode(query: str, doc: dict[str, Any], model: str) -> tuple[in
             "max_tokens": 256,
         }
     ).encode()
-    headers = {
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json",
-        "User-Agent": _OPENCODE_UA,
-    }
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    if user_agent:
+        headers["User-Agent"] = user_agent
 
     last_exc: Exception | None = None
     for attempt in range(5):
         try:
-            req = urllib.request.Request(_OPENCODE_URL, data=payload, headers=headers)
+            req = urllib.request.Request(url, data=payload, headers=headers)
             with urllib.request.urlopen(req, timeout=90) as resp:
                 data = json.load(resp)
             text = ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
@@ -140,6 +186,8 @@ def _judge_one_opencode(query: str, doc: dict[str, Any], model: str) -> tuple[in
             return _parse_grade(text)
         except urllib.error.HTTPError as exc:  # noqa: PERF203
             last_exc = exc
+            if exc.code in _HTTP_CREDIT:
+                raise _JudgeCreditError(f"backend refused ({exc.code})") from exc
             if exc.code in _OPENCODE_RETRYABLE_HTTP and attempt < 4:
                 retry_after = exc.headers.get("Retry-After") if exc.headers else None
                 base = (
@@ -150,6 +198,8 @@ def _judge_one_opencode(query: str, doc: dict[str, Any], model: str) -> tuple[in
                 time.sleep(base + random.uniform(0, max(0.5, base * 0.25)))
                 continue
             raise
+        except _JudgeCreditError:
+            raise
         except Exception as exc:  # noqa: BLE001 — timeout / empty / decode → retry then raise
             last_exc = exc
             if attempt < 4:
@@ -157,7 +207,61 @@ def _judge_one_opencode(query: str, doc: dict[str, Any], model: str) -> tuple[in
                 time.sleep(delay + random.uniform(0, 1.0))
                 continue
             raise
-    raise last_exc or RuntimeError("opencode judge failed")
+    raise last_exc or RuntimeError("http judge failed")
+
+
+def _judge_one_opencode(query: str, doc: dict[str, Any], model: str) -> tuple[int, str, str]:
+    """Grade one (query, doc) via the OpenCode Go OpenAI-compatible endpoint.
+
+    Resilient by contract: retries 429/5xx/timeout/empty with jittered backoff,
+    raises ``_JudgeCreditError`` on 401/402/403 (caller fails over), and RAISES
+    on persistent failure so judge_pool records a non-cached judge_error
+    (retried next run) rather than poisoning qrels with a fake 0.
+    """
+    key = _opencode_key()
+    if not key:
+        raise _JudgeCreditError("opencode: no OPENCODE_API_KEY and no auth.json opencode-go key")
+    api_model = model.split("/", 1)[1] if "/" in model else model
+    grade, reason = _http_chat_grade(
+        _OPENCODE_URL, key, api_model, build_judge_prompt(query, doc), user_agent=_OPENCODE_UA
+    )
+    return grade, reason, f"opencode-go/{api_model}"
+
+
+def _judge_one_deepseek(query: str, doc: dict[str, Any], model: str) -> tuple[int, str, str]:
+    key = _deepseek_key()
+    if not key:
+        raise _JudgeCreditError("deepseek: DEEPSEEK_API_KEY unset")
+    # The Zen id (deepseek-v4-flash) is not a DeepSeek-API model name; map to a
+    # configurable direct-API model (default deepseek-chat).
+    api_model = os.getenv("RAG_LIT_DEEPSEEK_JUDGE_MODEL", "deepseek-chat")
+    grade, reason = _http_chat_grade(_DEEPSEEK_URL, key, api_model, build_judge_prompt(query, doc))
+    return grade, reason, f"deepseek:{api_model}"
+
+
+_HTTP_JUDGES = {"opencode": _judge_one_opencode, "deepseek": _judge_one_deepseek}
+
+
+def _judge_one_http(
+    query: str, doc: dict[str, Any], model: str, backend: str
+) -> tuple[int, str, str]:
+    """Grade via the HTTP backends in order, failing over on credit/other errors.
+
+    Returns ``(grade, reason, actual_model)`` — ``actual_model`` names the
+    backend/model that actually produced the grade (not just the requested
+    ``model``), for per-grade auditability even when a failover occurred.
+    """
+    last_exc: Exception | None = None
+    for name in _backend_order(backend):
+        try:
+            return _HTTP_JUDGES[name](query, doc, model)
+        except _JudgeCreditError as exc:
+            log.warning("judge backend %s refused/exhausted (%s); failing over", name, exc)
+            last_exc = exc
+        except Exception as exc:  # noqa: BLE001 — one backend down; try the next before giving up
+            log.warning("judge backend %s failed (%s); failing over", name, exc)
+            last_exc = exc
+    raise last_exc or RuntimeError(f"no usable judge backend for {backend!r}")
 
 
 def _load_cache() -> dict[str, Any]:
@@ -219,15 +323,25 @@ def _parse_grade(text: str) -> tuple[int, str]:
     return 0, raw[:200]
 
 
-def _judge_one(query: str, doc: dict[str, Any], model: str) -> tuple[int, str]:
-    if _judge_backend(model) == "opencode":
-        return _judge_one_opencode(query, doc, model)
+def _judge_one(query: str, doc: dict[str, Any], model: str) -> tuple[int, str, str]:
+    """Grade one (query, doc) pair via the active judge backend.
+
+    Returns ``(grade, reason, actual_model)``. Defaults to the direct-HTTP
+    dual backend (DeepSeek primary, opencode-go fallback); set
+    ``RAG_LIT_JUDGE_BACKEND=local``/``ollama`` to dispatch through
+    ``rag_common.local_llm.generate_text`` instead (never used for bulk
+    judging).
+    """
+    http_backend = _http_judge_backend()
+    if http_backend not in _HTTP_DISABLE:
+        return _judge_one_http(query, doc, model, http_backend)
 
     from rag_common.local_llm import generate_text
 
     prompt = build_judge_prompt(query, doc)
     text = generate_text(prompt, model=model, temperature=0.0, max_tokens=256)
-    return _parse_grade(text or "")
+    grade, reason = _parse_grade(text or "")
+    return grade, reason, model
 
 
 def _judge_workers() -> int:
@@ -241,7 +355,10 @@ def _judge_workers() -> int:
 def judge_pool(pool: dict[str, Any], *, model: str | None = None) -> dict[str, Any]:
     """Grade every pooled (query, doc) pair → qrels ``cases`` mapping.
 
-    Returns ``{case_id: {doc_id: {grade, reason, systems, curated}}}``.
+    Returns ``{case_id: {doc_id: {grade, reason, systems, curated, judge_model}}}``.
+    ``judge_model`` is the actual model/backend that produced that particular
+    grade (may differ from the file-level ``judge_model`` in ``write_qrels``
+    when the HTTP dual backend failed over mid-run).
     """
     model = model or judge_model()
     cache = _load_cache()
@@ -261,11 +378,11 @@ def judge_pool(pool: dict[str, Any], *, model: str | None = None) -> dict[str, A
     def _run(item: tuple[str, str, str, str, dict[str, Any]]) -> tuple[str, dict[str, Any]]:
         key, _case_id, _doc_id, query, doc = item
         try:
-            grade, reason = _judge_one(query, doc, model)
+            grade, reason, actual_model = _judge_one(query, doc, model)
         except Exception as exc:  # noqa: BLE001 — degrade to 0, keep going
             log.warning("judge failed for %s (%s)", key, exc)
-            return key, {"grade": 0, "reason": f"judge_error: {exc}"[:200]}
-        return key, {"grade": grade, "reason": reason}
+            return key, {"grade": 0, "reason": f"judge_error: {exc}"[:200], "judge_model": model}
+        return key, {"grade": grade, "reason": reason, "judge_model": actual_model}
 
     if misses:
         done = cached = 0
@@ -286,12 +403,22 @@ def judge_pool(pool: dict[str, Any], *, model: str | None = None) -> dict[str, A
     cases_out: dict[str, dict[str, dict[str, Any]]] = {}
     for key, case_id, doc_id, _query, doc in work:
         verdict = cache.get(key, {"grade": 0, "reason": ""})
-        cases_out.setdefault(case_id, {})[doc_id] = {
+        entry: dict[str, Any] = {
             "grade": int(verdict.get("grade", 0)),
             "reason": verdict.get("reason", ""),
             "systems": sorted(doc.get("systems", {})),
             "curated": bool(doc.get("curated")),
         }
+        # Per-grade judge-model auditability: record the ACTUAL model/backend
+        # that produced this grade (may differ from the file-level judge_model
+        # in write_qrels() if the HTTP dual backend failed over mid-run).
+        # Absent for entries loaded from legacy cache rows written before this
+        # field existed — treat a missing field as "the file-level judge_model
+        # applies" (see qrels.py docstring).
+        actual_model = verdict.get("judge_model")
+        if actual_model:
+            entry["judge_model"] = actual_model
+        cases_out.setdefault(case_id, {})[doc_id] = entry
     return cases_out
 
 

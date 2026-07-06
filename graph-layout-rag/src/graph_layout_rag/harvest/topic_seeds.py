@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable
 
 from graph_layout_rag.harvest.doi_resolver import resolve_doi_with_fallbacks
@@ -107,6 +108,60 @@ TOPIC_PDF_SEEDS = [
         "url": "http://yifanhu.net/PUB/graph_draw_small.pdf",
         "source": "yifanhu",
         "tags": ["force-directed", "multilevel", "sfdp"],
+    },
+    # --- graph-embeddings / neural graph drawing (P1a expansion) ---
+    # arXiv-native papers with no journal DOI (or where arXiv is the canonical OA
+    # copy). GraphSAGE (NeurIPS'17) and GAT (ICLR'18) have no publisher DOI; we
+    # cite the arXiv DOI form (10.48550/arXiv.*) as the ELK seed above does.
+    {
+        "id": "graphsage-inductive-representation-learning",
+        "title": "Inductive Representation Learning on Large Graphs (GraphSAGE)",
+        "authors": ["Hamilton", "Ying", "Leskovec"],
+        "year": 2017,
+        "url": "https://arxiv.org/pdf/1706.02216.pdf",
+        "doi": "10.48550/arXiv.1706.02216",
+        "source": "arxiv",
+        "tags": ["graph-embedding", "gnn", "representation-learning"],
+    },
+    {
+        "id": "velickovic-graph-attention-networks",
+        "title": "Graph Attention Networks",
+        "authors": ["Veličković", "Cucurull", "Casanova", "Romero", "Liò", "Bengio"],
+        "year": 2018,
+        "url": "https://arxiv.org/pdf/1710.10903.pdf",
+        "doi": "10.48550/arXiv.1710.10903",
+        "source": "arxiv",
+        "tags": ["graph-embedding", "gnn", "graph-neural-network"],
+    },
+    {
+        "id": "deepgd-graph-drawing-gnn",
+        "title": "DeepGD: A Deep Learning Framework for Graph Drawing Using GNN",
+        "authors": ["Wang", "Yen", "Hu", "Shen"],
+        "year": 2021,
+        "url": "https://arxiv.org/pdf/2106.15347.pdf",
+        "doi": "10.48550/arXiv.2106.15347",
+        "source": "arxiv",
+        "tags": ["graph-embedding", "gnn", "graph-drawing", "force-directed"],
+    },
+    {
+        "id": "gnn-for-graph-drawing-survey",
+        "title": "Graph Neural Networks for Graph Drawing",
+        "authors": ["Tiezzi", "Ciravegna", "Gori"],
+        "year": 2021,
+        "url": "https://arxiv.org/pdf/2109.10061.pdf",
+        "doi": "10.48550/arXiv.2109.10061",
+        "source": "arxiv",
+        "tags": ["graph-embedding", "gnn", "graph-drawing", "survey"],
+    },
+    {
+        "id": "deep-graph-representation-learning-survey",
+        "title": "A Comprehensive Survey on Deep Graph Representation Learning",
+        "authors": ["Ju", "Fu", "Qin", "Luo"],
+        "year": 2024,
+        "url": "https://arxiv.org/pdf/2304.05055.pdf",
+        "doi": "10.48550/arXiv.2304.05055",
+        "source": "arxiv",
+        "tags": ["graph-embedding", "representation-learning", "gnn", "survey"],
     },
 ]
 
@@ -577,7 +632,156 @@ PIPELINE_LAYOUT_DOI_SEEDS: list[dict] = [
     },
 ]
 
+# General graph-theory / graph-analytics seeds (P1a expansion beyond the Sugiyama
+# pipeline): PageRank/HITS ranking, community detection (Louvain/Leiden/modularity),
+# spectral methods, graph embeddings, edge bundling, and dynamic-graph surveys.
+# DOI + arXiv OA PDF where one exists; all DOIs were verified against the publisher
+# landing page before being added (wrong IDs poison the harvest). Tamassia's
+# orthogonal bend-minimization (10.1137/0216030) and the Wybrow/Marriott libavoid
+# routing papers already live in TOPIC_DOI_SEEDS above and are not duplicated here.
+GRAPH_ANALYTICS_DOI_SEEDS: list[dict] = [
+    # --- graph-analytics: PageRank / HITS ---
+    {
+        "doi": "10.1145/324133.324140",
+        "tags": ["graph-analytics", "hits", "link-analysis"],
+        "title_hint": "Authoritative Sources in a Hyperlinked Environment (Kleinberg HITS)",
+    },
+    # --- community-detection ---
+    {
+        "doi": "10.1088/1742-5468/2008/10/P10008",
+        "tags": ["community-detection", "louvain", "modularity"],
+        "title_hint": "Fast unfolding of communities in large networks (Louvain)",
+        "pdf_urls": ["https://arxiv.org/pdf/0803.0476.pdf"],
+    },
+    {
+        "doi": "10.1038/s41598-019-41695-z",
+        "tags": ["community-detection", "leiden", "modularity"],
+        "title_hint": "From Louvain to Leiden: guaranteeing well-connected communities",
+        "pdf_urls": ["https://arxiv.org/pdf/1810.08473.pdf"],
+    },
+    {
+        "doi": "10.1073/pnas.122653799",
+        "tags": ["community-detection", "girvan-newman"],
+        "title_hint": "Community structure in social and biological networks (Girvan-Newman)",
+    },
+    {
+        "doi": "10.1103/PhysRevE.69.026113",
+        "tags": ["community-detection", "modularity"],
+        "title_hint": "Finding and evaluating community structure in networks (Newman-Girvan)",
+    },
+    {
+        "doi": "10.1103/PhysRevE.69.066133",
+        "tags": ["community-detection", "modularity"],
+        "title_hint": "Fast algorithm for detecting community structure in networks (Newman)",
+    },
+    {
+        "doi": "10.1016/j.physrep.2009.11.002",
+        "tags": ["community-detection", "survey"],
+        "title_hint": "Community detection in graphs (Fortunato survey)",
+        "pdf_urls": ["https://arxiv.org/pdf/0906.0612.pdf"],
+    },
+    {
+        "doi": "10.1016/j.physrep.2016.09.002",
+        "tags": ["community-detection", "survey"],
+        "title_hint": "Community detection in networks: A user guide (Fortunato & Hric)",
+        "pdf_urls": ["https://arxiv.org/pdf/1608.00163.pdf"],
+    },
+    # --- spectral-methods ---
+    {
+        "doi": "10.1109/34.868688",
+        "tags": ["spectral", "normalized-cuts", "graph-partitioning"],
+        "title_hint": "Normalized Cuts and Image Segmentation (Shi & Malik)",
+    },
+    {
+        "doi": "10.1007/s11222-007-9033-z",
+        "tags": ["spectral", "spectral-clustering", "survey"],
+        "title_hint": "A Tutorial on Spectral Clustering (von Luxburg)",
+        "pdf_urls": ["https://arxiv.org/pdf/0711.0189.pdf"],
+    },
+    # --- graph-embeddings (journal/proceedings DOI; arXiv OA PDF) ---
+    {
+        "doi": "10.1145/2939672.2939754",
+        "tags": ["graph-embedding", "node2vec", "node-embedding"],
+        "title_hint": "node2vec: Scalable Feature Learning for Networks",
+        "pdf_urls": ["https://arxiv.org/pdf/1607.00653.pdf"],
+    },
+    {
+        "doi": "10.1145/2623330.2623732",
+        "tags": ["graph-embedding", "deepwalk", "node-embedding"],
+        "title_hint": "DeepWalk: Online Learning of Social Representations",
+        "pdf_urls": ["https://arxiv.org/pdf/1403.6652.pdf"],
+    },
+    {
+        "doi": "10.1145/2736277.2741093",
+        "tags": ["graph-embedding", "line-embedding", "node-embedding"],
+        "title_hint": "LINE: Large-scale Information Network Embedding",
+        "pdf_urls": ["https://arxiv.org/pdf/1503.03578.pdf"],
+    },
+    {
+        "doi": "10.1111/cgf.13187",
+        "tags": ["graph-embedding", "graph-drawing", "force-directed"],
+        "title_hint": "Graph Layouts by t-SNE (tsNET)",
+        "pdf_urls": ["http://www2.cs.arizona.edu/~kobourov/tsne-eurovis17.pdf"],
+    },
+    {
+        "doi": "10.1109/TVCG.2020.3030447",
+        "tags": ["graph-embedding", "graph-drawing", "multilevel"],
+        "title_hint": "DRGraph: Efficient Graph Layout by Dimensionality Reduction",
+        "pdf_urls": ["https://arxiv.org/pdf/2008.07799.pdf"],
+    },
+    # --- edge-routing: edge bundling ---
+    {
+        "doi": "10.1109/TVCG.2006.147",
+        "tags": ["edge-bundling", "edge-routing", "compound"],
+        "title_hint": "Hierarchical Edge Bundles (Holten)",
+    },
+    {
+        "doi": "10.1111/j.1467-8659.2009.01450.x",
+        "tags": ["edge-bundling", "edge-routing", "force-directed"],
+        "title_hint": "Force-Directed Edge Bundling for Graph Visualization (Holten & van Wijk)",
+    },
+    # --- dynamic-graphs ---
+    {
+        "doi": "10.1111/cgf.12791",
+        "tags": ["dynamic", "temporal", "survey"],
+        "title_hint": "A Taxonomy and Survey of Dynamic Graph Visualization (Beck et al.)",
+    },
+]
+
 TOPIC_METADATA_SEEDS = [
+    # --- graph-analytics seeds without a resolvable DOI (P1a expansion) ---
+    {
+        "id": "page-brin-pagerank-citation-ranking-1999",
+        "title": "The PageRank Citation Ranking: Bringing Order to the Web",
+        "authors": ["Page", "Brin", "Motwani", "Winograd"],
+        "year": 1999,
+        "url": "http://ilpubs.stanford.edu:8090/422/",
+        "source": "stanford",
+        "tags": ["graph-analytics", "pagerank", "centrality", "link-analysis"],
+        "abstract": (
+            "Stanford InfoLab Technical Report 1999-66. Introduces PageRank, a global "
+            "importance ranking of web pages computed from the link graph as the "
+            "stationary distribution of a random walk with teleportation (the dominant "
+            "eigenvector of the transition matrix). Foundational graph-analytics / "
+            "centrality method. No journal DOI; canonical tech-report seed."
+        ),
+    },
+    {
+        "id": "ng-jordan-weiss-spectral-clustering-2001",
+        "title": "On Spectral Clustering: Analysis and an Algorithm",
+        "authors": ["Ng", "Jordan", "Weiss"],
+        "year": 2001,
+        "url": "https://proceedings.neurips.cc/paper/2001/hash/801272ee79cfde7fa5960571fee36b9b-Abstract.html",
+        "source": "neurips",
+        "tags": ["spectral", "spectral-clustering", "eigenvector"],
+        "abstract": (
+            "Advances in Neural Information Processing Systems 14 (NIPS 2001). The "
+            "canonical normalized-symmetric spectral clustering algorithm: build an "
+            "affinity matrix, form the normalized graph Laplacian, embed points using its "
+            "top-k eigenvectors, and k-means in that space. No DOI (NeurIPS proceedings); "
+            "metadata seed for the spectral-methods stratum."
+        ),
+    },
     {
         "id": "mermaid-layouts-docs",
         "title": "Mermaid diagram layouts (dagre, ELK, tidy-tree, cose-bilkent)",
@@ -768,14 +972,20 @@ def _download_pdf_seed(spec: dict, *, dry_run: bool) -> ManifestItem:
         insecure = any(h in url for h in ("infotech.monash.edu", "marvl.", "rtsys.informatik"))
         try:
             dl = download_to_file(dest, url, verify=not insecure)
-            if dl.get("ok") and dest.exists() and dest.read_bytes()[:4] == b"%PDF":
-                item.status = "ok"
-                item.url = url
-                item.sha256 = dl.get("sha256")
-                item.localPath = relative_local_path(dest)
-                return item
-            dest.unlink(missing_ok=True)
         except Exception:
+            # download_to_file writes the file to disk *before* it logs the
+            # attempt to the harvest ledger; a failure in that logging step
+            # (e.g. a sqlite hiccup) must never be mistaken for a failed
+            # download and destroy bytes that already landed successfully.
+            dl = None
+        valid_pdf = dest.exists() and dest.read_bytes()[:4] == b"%PDF"
+        if valid_pdf and (dl is None or dl.get("ok")):
+            item.status = "ok"
+            item.url = url
+            item.sha256 = (dl or {}).get("sha256") or hashlib.sha256(dest.read_bytes()).hexdigest()
+            item.localPath = relative_local_path(dest)
+            return item
+        if not valid_pdf:
             dest.unlink(missing_ok=True)
     return item
 
@@ -808,7 +1018,7 @@ def harvest_topic_seeds(
             include_paywall_guesses=False,
         )
 
-    all_doi_seeds = [*TOPIC_DOI_SEEDS, *PIPELINE_LAYOUT_DOI_SEEDS]
+    all_doi_seeds = [*TOPIC_DOI_SEEDS, *PIPELINE_LAYOUT_DOI_SEEDS, *GRAPH_ANALYTICS_DOI_SEEDS]
     for start in range(0, len(all_doi_seeds), doi_batch_size):
         batch = all_doi_seeds[start : start + doi_batch_size]
         batch_items = parallel_map(_resolve_doi_seed, batch, workers=workers)

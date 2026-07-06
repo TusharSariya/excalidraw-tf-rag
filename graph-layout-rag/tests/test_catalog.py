@@ -122,3 +122,50 @@ def test_new_tag_maps():
     # orthogonal touches both routing and compaction
     cats = categories_from_tags(["orthogonal"])
     assert "routing" in cats and "compaction" in cats
+
+
+# --- P1a graph-analytics expansion categories ---
+
+
+def test_graph_analytics_tag_maps():
+    assert "graph-analytics" in categories_from_tags(["pagerank"])
+    assert "community-detection" in categories_from_tags(["louvain"])
+    assert "community-detection" in categories_from_tags(["leiden"])
+    assert "spectral-methods" in categories_from_tags(["spectral-clustering"])
+    assert "graph-embeddings" in categories_from_tags(["node2vec"])
+    assert "graph-embeddings" in categories_from_tags(["gnn"])
+    assert "dynamic-graphs" in categories_from_tags(["temporal"])
+    # edge bundling is its own edge-routing category (bundling ≠ pipeline routing)
+    assert "edge-routing" in categories_from_tags(["edge-bundling"])
+    # connector/orthogonal routing tags land in both edge-routing and routing
+    cats = categories_from_tags(["orthogonal-routing"])
+    assert "edge-routing" in cats and "routing" in cats
+
+
+def test_community_detection_keyword_fallback():
+    item = _item(
+        title="Fast unfolding of communities in large networks",
+        tags=["graph-drawing"],
+        abstract="A modularity optimization heuristic (Louvain) for community detection.",
+    )
+    categories, methods = classify_item(item)
+    assert "community-detection" in categories
+    assert methods[categories.index("community-detection")] == "keyword"
+
+
+def test_graph_analytics_and_embeddings_keyword_fallback():
+    pagerank = _item(
+        title="The PageRank Citation Ranking",
+        tags=["graph-drawing"],
+        abstract="Personalized pagerank as a link analysis centrality measure.",
+    )
+    cats, _ = classify_item(pagerank)
+    assert "graph-analytics" in cats
+
+    node2vec = _item(
+        title="node2vec: Scalable Feature Learning for Networks",
+        tags=["graph-drawing"],
+        abstract="A node embedding / graph representation learning method.",
+    )
+    cats, _ = classify_item(node2vec)
+    assert "graph-embeddings" in cats

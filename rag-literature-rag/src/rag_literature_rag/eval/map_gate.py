@@ -26,11 +26,27 @@ from typing import Any
 
 import click
 
+# Rubric v2 — encodes the labeling policy the panel-consensus reference labels were
+# produced under (2026-07-02 arbitration): provenance-term leniency, DOI-cluster
+# handling, minority-topic strictness. The judge must share the labelers' rubric.
 _CLUSTER_LABEL_RUBRIC = (
     "You are sanity-checking automatically generated cluster labels for a RAG / neural-IR "
-    "literature research corpus. Given a cluster's label and a sample of its member paper "
-    "titles, answer whether the label plausibly describes the shared topic of those "
-    "titles.\n\nAnswer with exactly one word: yes or no."
+    "literature research corpus. Given a cluster's label (slash-separated terms) and a "
+    "sample of its member paper titles, answer whether the label plausibly describes "
+    "the shared topic of those titles.\n\n"
+    "Guidelines:\n"
+    "- Answer yes when the label's terms name the dominant topic shared by most "
+    "members. One generic or provenance term (a corpus, venue, or source tag like "
+    "'arxiv') does not sink an otherwise accurate label.\n"
+    "- Answer no when the label foregrounds a topic that only a small minority of "
+    "members are about, or fails to name a coherent topic the members clearly share.\n"
+    "- Members that are bare DOI strings are unresolved citations. If most members are "
+    "bare DOIs, a 'doi / bibliography' style label accurately describes the cluster — "
+    "answer yes. But if the members are mostly titled papers sharing a real subject, a "
+    "'doi / bibliography' label fails to name it — answer no.\n"
+    "- If the members are a grab-bag with no shared topic and the label merely stitches "
+    "together unrelated fragments, answer no.\n\n"
+    "Answer with exactly one word: yes or no."
 )
 
 

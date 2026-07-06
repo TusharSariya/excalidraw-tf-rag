@@ -121,4 +121,35 @@ Chronological record of every decision behind the plan in
     ties.
 37. **Push blocked at session end** — user's new fine-grained PAT is personal-scoped and
     cannot see `TusharSariyaOrg/excalidraw-tf-rag`; needs org resource-owner or classic
-    `repo`-scope token. PR deferred until then.
+    `repo`-scope token. PR deferred until then. (Resolved same day: third token with org
+    resource-owner worked; PR #6 opened, CI green.)
+
+## Phase 6 — Judge calibration (2026-07-02, post-PR-#6)
+
+38. **D7 amended (user decision): reference labels from a multi-model panel, not solo
+    hand-labeling.** User proposed an adversarial multi-model swarm; accepted with two
+    design corrections: (a) independent blind votes BEFORE any cross-exam (anti-herding —
+    open-discussion swarms converge on the loudest voice), (b) human arbitration retained
+    for post-debate 3/2 splits, so the D7 human element lands exactly where models
+    disagree. Panel = 5 cross-family voters (glm-5.2, qwen3.7-max, kimi-k2.7-code, codex,
+    Claude blind in-session); deepseek-* excluded as the judge under test. Basis: LLM-jury
+    / PoLL (Verga 2024); defensible here because cluster-label sanity is low-ambiguity
+    binary topical judgment. Caveat recorded: panel consensus ≠ human ground truth;
+    family diversity reduces, not eliminates, correlated error.
+39. **Sheets regenerated to full coverage before voting** — the smoke-test sheets had only
+    5 cases; rebuilt to every ≥2-member cluster (RLR 14, GLR 18; 32 total — the maximum
+    the current clustering supports, under the plan's ~30/tool intent).
+40. **Arbitration policy rulings (user):** P1 — 'doi / bibliography' labels are VALID for
+    predominantly-bare-DOI junk clusters (the label truthfully describes what members
+    share; keeps gold consistent with 3 unanimous precedents). P2 — one provenance term
+    ('arxiv', 'guest') does not sink an otherwise-accurate label (LENIENT; matches 3
+    unanimous precedents). Case calls: RLR cluster-6 (multimodal) = yes; GLR cluster-10
+    (bundling) = no. These plus consensus give RLR 11y/3n, GLR 10y/8n.
+41. **Judge verdict: deepseek-v4-flash NOT certified for cluster-label sanity.** Rubric
+    v1: κ=0.000 RLR (yes on all 14 — rubber stamp), 0.299 GLR. One permitted revision
+    (rubric v2 encodes P1/P2 + minority-topic strictness into `_CLUSTER_LABEL_RUBRIC`,
+    both tools): κ=0.440 RLR / 0.507 GLR — still <0.7. Per the pre-registered fail path,
+    the gate stays panel/human-judged; no further prompt iteration (that would be tuning
+    the judge to the test set). Panel harness (`scripts/panel_calibrate.py`) is the
+    reusable substitute; sheets are clustering-bound, so post-rekey maps need rebuild +
+    panel re-run.

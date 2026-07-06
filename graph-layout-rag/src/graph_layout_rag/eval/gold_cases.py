@@ -114,7 +114,7 @@ GOLD_CASES: tuple[EvalCase, ...] = (
         query="sifting crossing minimization layered graph",
         relevant_doc_ids=frozenset(
             {
-                "matuszewski-sifting-crossing-minimization",
+                "forward-10-1007-3-540-46648-7-22",
                 "openalex-10-1007-3-540-44541-2-24",
             }
         ),
@@ -128,7 +128,7 @@ GOLD_CASES: tuple[EvalCase, ...] = (
             {
                 "doi-10-1007-bfb0021817",
                 "doi-10-7155-jgaa-00001",
-                "matuszewski-sifting-crossing-minimization",
+                "forward-10-1007-3-540-46648-7-22",
                 "handbook-hierarchical",
             }
         ),
@@ -141,7 +141,7 @@ GOLD_CASES: tuple[EvalCase, ...] = (
         relevant_doc_ids=frozenset(
             {
                 "openalex-10-1007-978-3-540-24595-7-2",
-                "matuszewski-sifting-crossing-minimization",
+                "forward-10-1007-3-540-46648-7-22",
                 "handbook-crossings",
             }
         ),
@@ -181,7 +181,7 @@ GOLD_CASES: tuple[EvalCase, ...] = (
             {
                 "research-thread-compound",
                 "sander-compound-directed-graphs",
-                "openalex-10-5120-16945-7012",
+                "forward-10-5120-16945-7012",
                 "openalex-10-1007-3-540-62495-3-41",
             }
         ),
@@ -192,7 +192,7 @@ GOLD_CASES: tuple[EvalCase, ...] = (
         query="ELK compound graph hierarchical layout",
         relevant_doc_ids=frozenset(
             {
-                "openalex-10-48550-arxiv-2311-00533",
+                "s2-10-48550-arxiv-2311-00533",
                 "research-thread-compound",
                 "sander-compound-directed-graphs",
                 "openalex-10-48550-arxiv-2312-07319",
@@ -483,7 +483,7 @@ GOLD_CASES: tuple[EvalCase, ...] = (
         relevant_doc_ids=frozenset(
             {
                 "doi-10-1109-tvcg-2021-3114795",
-                "openalex-10-1109-tvcg-2011-233",
+                "s2-10-1109-tvcg-2011-233",
                 "crossref-10-1007-978-3-642-18469-7-30",
                 "doi-10-1109-tvcg-2011-190",
             }
@@ -510,7 +510,7 @@ GOLD_CASES: tuple[EvalCase, ...] = (
         relevant_doc_ids=frozenset(
             {
                 "doi-10-1007-978-3-642-11805-0-14",
-                "elk-10-1016-j-comgeo-2022-101886",
+                "doi-10-1016-j-comgeo-2022-101886",
                 "thesis-schulze-layered-port-constraints",
                 "doi-10-1016-j-jvlc-2013-11-005",
             }
@@ -538,7 +538,7 @@ GOLD_CASES: tuple[EvalCase, ...] = (
             {
                 "gansner-gkn04-stress",
                 "graphviz-neatoguide",
-                "openalex-10-1007-11618058-14",
+                "s2-10-1007-11618058-14",
                 "doi-10-1007-978-3-030-35802-0-23",
             }
         ),
@@ -579,8 +579,8 @@ GOLD_CASES: tuple[EvalCase, ...] = (
         relevant_doc_ids=frozenset(
             {
                 "handbook-force-directed",
-                "openalex-10-1007-3-540-44541-2-17",
-                "openalex-10-1007-3-540-44541-2-20",
+                "s2-10-1007-3-540-44541-2-17",
+                "forward-10-1007-3-540-44541-2-20",
                 "arxiv-1608-08522v2",
             }
         ),
@@ -628,7 +628,7 @@ GOLD_CASES: tuple[EvalCase, ...] = (
         query="Eclipse Layout Kernel ELK layered algorithm",
         relevant_doc_ids=frozenset(
             {
-                "openalex-10-48550-arxiv-2311-00533",
+                "s2-10-48550-arxiv-2311-00533",
                 "doi-10-4230-lipics-gd-2024-56",
                 "elk-dagre-engine-docs",
                 "elk-layout-options-reference",
@@ -656,8 +656,8 @@ GOLD_CASES: tuple[EvalCase, ...] = (
             {
                 "research-thread-layer-assignment",
                 "research-thread-packing",
-                "openalex-10-21941-kcss-2018-1",
-                "elk-10-1007-978-3-319-50106-2-17",
+                "s2-10-21941-kcss-2018-1",
+                "doi-10-1007-978-3-319-50106-2-17",
             }
         ),
         category="layer-assignment",
@@ -669,8 +669,8 @@ GOLD_CASES: tuple[EvalCase, ...] = (
         relevant_doc_ids=frozenset(
             {
                 "doi-10-1007-3-540-45848-4-2",
-                "elk-10-1007-978-3-319-50106-2-17",
-                "forward-10-48550-arxiv-1609-01755",
+                "doi-10-1007-978-3-319-50106-2-17",
+                "arxiv-1609-01755v1",
                 "doi-10-1007-978-3-319-42333-3-16",
             }
         ),

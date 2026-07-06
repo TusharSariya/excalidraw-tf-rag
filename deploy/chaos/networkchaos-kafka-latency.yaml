@@ -1,0 +1,33 @@
+# NetworkChaos: inject 2s latency on the Kafka broker pod's network to
+# verify producers/consumers (share-group extract workers, D7 decision log)
+# tolerate slow broker I/O without falling over — e.g. that client timeouts
+# are set above this latency and share-group lock durations (600s, see
+# deploy/tofu/variables.tf kafka_share_group_lock_duration_ms) comfortably
+# absorb it.
+#
+# Selector matches the same broker pod as podchaos-kill-kafka.yaml.
+# No duration set at the top level — NetworkChaos is a standing effect until
+# deleted; run this for a bounded window manually
+# (kubectl apply ... && sleep N && kubectl delete ...) rather than relying
+# on an experiment self-terminating.
+#
+# Usage: kubectl apply -f networkchaos-kafka-latency.yaml
+#        kubectl delete -f networkchaos-kafka-latency.yaml
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: kafka-broker-latency
+  namespace: kafka
+spec:
+  action: delay
+  mode: one
+  selector:
+    namespaces:
+      - kafka
+    labelSelectors:
+      strimzi.io/cluster: pipeline-v2
+      strimzi.io/component-type: kafka
+  delay:
+    latency: "2s"
+    correlation: "0"
+    jitter: "0ms"

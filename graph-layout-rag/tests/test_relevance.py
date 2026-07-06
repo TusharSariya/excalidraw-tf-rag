@@ -110,6 +110,51 @@ def test_off_topic_substring_does_not_kill_layout_terms():
         assert layout_relevance_score(title, abstract) > 0, title
 
 
+# --- P1a graph-analytics expansion: new areas must pass, ML noise must not ---
+
+
+def test_graph_analytics_terms_pass_strict():
+    for title in [
+        "The PageRank Citation Ranking: Bringing Order to the Web",
+        "Authoritative Sources in a Hyperlinked Environment",
+        "From Louvain to Leiden: guaranteeing well-connected communities",
+        "Normalized Cuts and Image Segmentation",
+        "A Tutorial on Spectral Clustering",
+        "node2vec: Scalable Feature Learning for Networks",
+        "Hierarchical Edge Bundles",
+        "A Taxonomy and Survey of Dynamic Graph Visualization",
+    ]:
+        assert is_layout_relevant(title, strict=True), title
+
+
+def test_louvain_weak_title_passes_strict_with_abstract():
+    # Louvain's title ("...communities in large networks") carries no strong term
+    # on its own — like Sugiyama 1981, the abstract supplies the domain marker.
+    assert is_layout_relevant(
+        "Fast unfolding of communities in large networks",
+        "A heuristic for community detection by modularity optimization.",
+        strict=True,
+    )
+
+
+def test_bare_gnn_paper_does_not_pass_on_weak_terms():
+    # "graph neural network" is a weak term: without any drawing/visualization
+    # context it must NOT clear the threshold, so generic ML papers stay out.
+    assert not is_layout_relevant(
+        "Semi-Supervised Classification with Graph Convolutional Networks", strict=True
+    )
+    assert layout_relevance_score("A graph neural network for molecular property prediction") <= 2
+
+
+def test_gnn_for_layout_passes_with_drawing_context():
+    # The same broad terms DO count once the paper is about layout/drawing.
+    assert is_layout_relevant(
+        "Graph Neural Networks for Graph Drawing",
+        "A GNN that learns node-link layout coordinates.",
+        strict=True,
+    )
+
+
 def test_off_topic_word_boundary_still_rejects_real_offtopic():
     # Standalone off-topic words and intended morphological variants still fire.
     for title in [

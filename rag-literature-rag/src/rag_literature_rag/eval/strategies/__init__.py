@@ -645,6 +645,34 @@ class CitationGraphStrategy:
         return format_results(candidates, top=top, max_per_doc=2)
 
 
+@dataclass
+class GraphArmStrategy:
+    """HippoRAG-2-style personalized-PageRank graph arm (``query/graph_arm.py``).
+
+    Thin benchmark wrapper around ``graph_search``: hybrid seeds the restart
+    distribution, PPR walks the citation+kNN doc graph, and the blended score
+    (``alpha*PPR + (1-alpha)*hybrid``) is returned in the same doc-level shape as
+    every other strategy. A/B only (bake-off #10) — not part of the default
+    offline run; intended for use alongside the relational-regime router
+    (``query/routing.py::classify_query_regime``), which is expected to route
+    multi-hop/relational queries here and everything else to plain hybrid.
+    """
+
+    name: str = "graph_arm"
+    requires_llm: bool = False
+    requires_cloud_cost: bool = False
+
+    def run(self, case: EvalCase, *, embed_profile: str, top: int = 20) -> list[dict[str, Any]]:
+        from rag_literature_rag.query.graph_arm import graph_search
+
+        return graph_search(
+            case.query,
+            top=top,
+            embed_profile=embed_profile,
+            filters=_filters(case, use_category=False, use_pdf_only=False),
+        )
+
+
 def _filters(case: EvalCase, *, use_category: bool, use_pdf_only: bool) -> RetrieveFilters:
     return RetrieveFilters(
         category=case.category if use_category else None,
@@ -735,6 +763,10 @@ RAPTOR_STRATEGIES: tuple[str, ...] = (
     "raptor_fused_hybrid",
 )
 
+# HippoRAG-2-style graph/PPR arm (bake-off #10; A/B only, not in the default run —
+# the relational router, not a blanket swap-in, is the point).
+GRAPH_STRATEGIES: tuple[str, ...] = ("graph_arm",)
+
 ALL_STRATEGIES: tuple[str, ...] = (
     OFFLINE_STRATEGIES
     + FUSION_SWEEP_STRATEGIES
@@ -744,6 +776,7 @@ ALL_STRATEGIES: tuple[str, ...] = (
     + AGGREGATION_STRATEGIES
     + DOCSUMMARY_STRATEGIES
     + RAPTOR_STRATEGIES
+    + GRAPH_STRATEGIES
 )
 
 
@@ -822,6 +855,7 @@ def strategy_registry() -> dict[str, RetrievalStrategy]:
         HybridTunedStrategy(
             "fusion_d10_s05_k60", pool=80, rrf_k=60, dense_weight=1.0, sparse_weight=0.5
         ),
+        GraphArmStrategy(),
     ]
     return {strategy.name: strategy for strategy in strategies}
 

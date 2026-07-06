@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -33,8 +34,14 @@ RRF_K = 20
 # corpus today; sparse_weight=2.0 mainly claws back the equal-weight
 # baseline's loss to BM25, it does not represent a verified hybrid win.
 # Recorded honestly rather than oversold -- see docs/quality-campaign-2026-06-22.md.
-DENSE_WEIGHT = 1.0
-SPARSE_WEIGHT = 2.0
+# NOTE: sparse_weight=2.0 was swept with sparse=BM25. It is NOT valid for a
+# different sparse backend (e.g. GRAPH_RAG_SPARSE_BACKEND=learned / BGE-M3),
+# whose scores have a different distribution — blindly 2x-weighting a noisier
+# learned-sparse leg pushes hybrid below dense (measured: catalog 0.684 vs
+# dense 0.740). Weights are env-overridable so each backend can be swept
+# independently; default 1:1 is neutral when the sparse backend is not BM25.
+DENSE_WEIGHT = float(os.getenv("GRAPH_RAG_DENSE_WEIGHT", "1.0"))
+SPARSE_WEIGHT = float(os.getenv("GRAPH_RAG_SPARSE_WEIGHT", "2.0"))
 
 
 def merge_rankings(

@@ -32,7 +32,7 @@ from rag_literature_rag.harvest.rate_limit import (
     note_success,
     wait_for_domain,
 )
-from rag_literature_rag.manifest import Manifest, ManifestItem
+from rag_literature_rag.manifest import Manifest, ManifestItem, titles_similar
 
 _OPENALEX_DOMAIN = domain_from_url(OPENALEX_API)
 _CROSSREF_API = "https://api.crossref.org/works"
@@ -110,6 +110,23 @@ def _fetch_abstract(doi: str) -> str | None:
     return None
 
 
+def _fetch_title(doi: str) -> str | None:
+    """OpenAlex ``display_name`` for a DOI, used as a cross-check before
+    writing a fetched abstract onto an existing manifest item — a DOI lookup
+    hitting the wrong record (e.g. a synthesized arXiv DOI shared by two
+    unrelated papers) must not silently attach an unrelated abstract.
+    """
+    wait_for_domain(_OPENALEX_DOMAIN)
+    try:
+        work = _fetch_by_doi(doi)
+    except Exception:
+        return None
+    note_success(_OPENALEX_DOMAIN)
+    if not work:
+        return None
+    return _clean(work.get("display_name"))
+
+
 def enrich_manifest(
     manifest: Manifest,
     *,
@@ -143,8 +160,20 @@ def enrich_manifest(
     enriched = 0
     for item, abstract in zip(candidates, abstracts):
         if abstract and abstract.strip():
+            fetched_title = _fetch_title(item.doi or "")
+            if fetched_title and item.title and not titles_similar(item.title, fetched_title):
+                log.warning(
+                    "enrich: skipping abstract for id=%r doi=%r — fetched "
+                    "record title (%r) doesn't match item title (%r)",
+                    item.id,
+                    item.doi,
+                    fetched_title,
+                    item.title,
+                )
+                continue
             if not dry_run:
                 item.abstract = abstract
+                item.abstractSource = "enrich"
             enriched += 1
 
     log.info(

@@ -1,0 +1,26 @@
+# PodChaos: kill the single CloudNativePG instance pod (storage namespace,
+# Cluster pipeline-v2-pg) and verify CNPG reconciles a fresh instance pod
+# and it rejoins as primary. Single-instance cluster (deploy/tofu/cnpg.tf —
+# durability story is PITR/backup to SeaweedFS, not replica failover), so
+# this proves recovery-from-restart, not failover.
+#
+# Selector matches the live label set on the instance pod (verified via
+# `kubectl get pod -n storage pipeline-v2-pg-1 --show-labels` on
+# 2026-07-03):
+#   cnpg.io/cluster=pipeline-v2-pg
+#
+# Usage: kubectl apply -f podchaos-kill-cnpg.yaml
+#        kubectl delete -f podchaos-kill-cnpg.yaml
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: kill-cnpg-instance
+  namespace: storage
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - storage
+    labelSelectors:
+      cnpg.io/cluster: pipeline-v2-pg

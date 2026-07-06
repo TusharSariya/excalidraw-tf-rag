@@ -45,6 +45,31 @@ def test_identity_map_unions_doi_sha_and_provider_ids(monkeypatch):
     identity.clear_identity_cache()
 
 
+def test_identity_map_resolves_manifest_persisted_alias_ids(monkeypatch):
+    """A doc id absorbed by a past merge (aliasDocIds) must still resolve.
+
+    Regression for the sha256-collapse repair that deleted 42 records (e.g.
+    arxiv-2004-04906/DPR) whose ids qrels still reference: the surviving
+    record persists the old id in aliasDocIds, and the identity map must map
+    it onto the survivor's canonical id even though no manifest item with the
+    old id exists any more.
+    """
+    survivor = _item("arxiv-2004-04906v3", source="topic-seed")
+    survivor.aliasDocIds = ["arxiv-2004-04906"]
+    manifest = Manifest(items=[survivor, _item("unrelated")])
+    monkeypatch.setattr(identity, "load_manifest", lambda: manifest)
+    identity.clear_identity_cache()
+
+    identities = identity.canonical_identity_map()
+    assert identities.canonical_by_doc["arxiv-2004-04906"] == "arxiv-2004-04906v3"
+    assert identities.canonicalize_doc_id("arxiv-2004-04906") == "arxiv-2004-04906v3"
+    assert "arxiv-2004-04906" in identities.aliases_by_canonical["arxiv-2004-04906v3"]
+    # a live item id must never be shadowed by someone else's persisted alias
+    assert identities.canonical_by_doc["unrelated"] == "unrelated"
+
+    identity.clear_identity_cache()
+
+
 def test_format_results_groups_aliases_and_retains_ranked_evidence(monkeypatch):
     manifest = Manifest(
         items=[

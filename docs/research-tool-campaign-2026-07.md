@@ -251,11 +251,12 @@ command, not to reconciling it with the plan's headline figure.
   Not yet PROMOTE; the citation-signal edge-keying gap (3–5% both-endpoints-keyed vs. 71–76%
   doc-keyed) is the most likely lever, blocked on the OpenAlex quota reset (midnight UTC) —
   re-run `eval map-gate --alpha-sweep` on both tools once `cite enrich` resumes and re-keys.
-- **Judge calibration labeling sheet:** `eval judge-calibrate --build-sheet` was smoke-tested
-  on both tools (cluster-label-sanity slice — lineage/faithfulness calibration needs E1
-  lineage output + the user and is explicitly out of scope for this workstream). The
-  generated sheets (`data/eval/judge_calibration/cluster_label_sheet.md` in each tool) are
-  awaiting the user's hand labels before `--score` can report a real kappa.
+- **Judge calibration: DONE — verdict FAIL (judge not certified).** See "Judge calibration
+  via multi-model panel" below. Reference labels came from a 5-voter cross-family panel
+  (D7 amended, decisions log #38); deepseek-v4-flash scored κ=0.44 (RLR) / κ=0.51 (GLR)
+  after the one permitted rubric revision — below the 0.7 gate, so **cluster-label
+  judge-gated metrics stay panel/human-judged**. Rubric v2 (policy-encoded) is now the
+  canonical `_CLUSTER_LABEL_RUBRIC` in both tools' `eval/map_gate.py`.
 - **Profile-footgun fix (map-gate/`map` CLI):** `load_or_build_doc_vectors` (both tools'
   `query/litmap_support.py`) now falls back to the sole other built profile index (with a
   stderr warning) when the *default* profile has no index and exactly one alternative is
@@ -265,6 +266,38 @@ command, not to reconciling it with the plan's headline figure.
   `gemini-2-structure-v1` directory left over from the removed Gemini provider), so the
   ambiguous-error path is what actually fires there today, not the silent single-fallback —
   still strictly better than the prior unconditional error with no listed alternatives.
+
+## Judge calibration via multi-model panel (2026-07-02, post-PR-#6)
+
+D7 required hand labels before trusting any judge-gated metric. Executed with the user's
+approved amendment (decisions log #38): reference labels from a **5-voter cross-family
+panel** (LLM-jury pattern, PoLL / Verga 2024) instead of solo hand-labeling — glm-5.2,
+qwen3.7-max, kimi-k2.7-code (opencode CLI), codex CLI, and Claude (blind in-session votes
+recorded before any CLI voter ran). deepseek-* excluded: it is the judge under test.
+Orchestrated by `scripts/panel_calibrate.py` (vote → debate → tally → fill); full vote/
+rationale audit trail in `data/eval/judge_calibration/panel_votes.json` per tool.
+
+- **Protocol:** independent blind votes (round 1) → adversarial cross-exam shown only the
+  strongest opposing rationale, contested cases only (round 2, anti-herding) → ≥4/5
+  consensus, 3/2 splits escalated to the user. 32 cases (RLR 14, GLR 18 — every ≥2-member
+  cluster at the current fixed-seed clustering).
+- **Outcome:** 18/32 unanimous, 5 settled by debate, 9 escalated → user arbitrated via two
+  policy rulings + two case calls: (P1) 'doi / bibliography' labels are VALID for
+  predominantly-bare-DOI junk clusters; (P2) one provenance term ('arxiv', 'guest') does
+  not sink an otherwise-accurate label; RLR cluster-6 multimodal = yes; GLR cluster-10
+  bundling = no. Round 2 was substantive, not sycophantic: flips converged on a consistent
+  "provenance tags are not topics" policy with title-count evidence.
+- **Reference labels:** RLR 11 yes / 3 no; GLR 10 yes / 8 no. Per-voter deviation from
+  consensus ≤1 across all five voters (no rubber stamp).
+- **Judge scores (deepseek-v4-flash, opencode backend):** rubric v1: κ=0.000 RLR (said yes
+  on all 14 — pure rubber stamp), κ=0.299 GLR. After the one permitted revision (rubric v2
+  encodes P1/P2 + minority-topic strictness): **κ=0.440 RLR, κ=0.507 GLR — FAIL (<0.7)**.
+  Residual misses are the subtle cases: source-tag labels and minority-topic emphasis.
+- **Consequence:** cluster-label sanity metrics remain panel/human-judged. Re-running the
+  panel is cheap (`panel_calibrate.py` is resume-safe); certify a different judge model
+  later if desired. NOTE: the sheets/labels are tied to the current clustering — the
+  post-rekey `cite enrich` changes the citation graph, so a re-keyed map needs a rebuilt
+  sheet + re-run panel before any judge-gated eval on the new clusters.
 
 ## Next steps (state as of 2026-07-02 end-of-session)
 
@@ -281,9 +314,10 @@ token). In priority order:
 3. **Re-run `eval map-gate --alpha-sweep` on both tools** after the re-key. Two live
    hypotheses: (a) fuller edge keying differentiates hybrid from text-only; (b) GLR's
    α=0.75 > α=0.5 paired win (CI excluding 0) replicates — if so, bump GLR's default alpha.
-4. **User labels the judge-calibration sheets** (`data/eval/judge_calibration/…` in each
-   tool), then `eval judge-calibrate --score <sheet>`; κ ≥ 0.7 unlocks judge-gated metrics
-   (needed for lineage spot-eval at scale and everything in E2).
+4. ~~User labels the judge-calibration sheets~~ **DONE via multi-model panel — judge FAILED
+   certification** (κ=0.44/0.51 < 0.7 after one rubric revision; see section above).
+   Lineage spot-eval and E2 judge-gated metrics stay panel/human-judged; the panel harness
+   (`scripts/panel_calibrate.py`) is the reusable substitute.
 5. **E2 go/no-go** (cluster summaries + `synthesize`): decision input = post-rekey gate
    verdicts. Note the E1 map layer's *commands* are shipped and useful regardless of the
    TIE — the gate governs whether hybrid clustering is promoted as the default map, not

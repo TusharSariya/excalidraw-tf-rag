@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import json
 import os
+from collections import defaultdict
 from pathlib import Path
 from unittest import mock
 
 import pytest
 from graph_layout_rag.eval.gold_synth import (
     LEAKAGE_JACCARD_MAX,
+    MULTIHOP_STRATUM,
     Seed,
     _jaccard,
     _tokens,
+    append_synth_cases,
+    build_multihop_cases,
     category_for,
     load_synth_cases,
     quality_filters,
@@ -217,6 +221,175 @@ def test_quality_filters_jaccard_below_dup_threshold_kept() -> None:
     kept, stats = quality_filters(seeds, modes, queries)
     assert len(kept) == 2
     assert stats.duplicate == 0
+
+
+# --------------------------------------------------------------------------- #
+# Multi-hop stratum
+# --------------------------------------------------------------------------- #
+class _FakeGraph:
+    """Citation graph stub keyed like the real CitationGraph (oa-id space)."""
+
+    def __init__(self, edges: list[tuple[str, str]]) -> None:
+        self.doc_to_oa: dict[str, str] = {}
+        self.oa_to_doc: dict[str, str] = {}
+        self.undirected: dict[str, set[str]] = defaultdict(set)
+        for a, b in edges:
+            for d in (a, b):
+                self.doc_to_oa[d] = f"oa-{d}"
+                self.oa_to_doc[f"oa-{d}"] = d
+            self.undirected[f"oa-{a}"].add(f"oa-{b}")
+            self.undirected[f"oa-{b}"].add(f"oa-{a}")
+
+
+def _seed(doc_id: str, category: str, words: str) -> Seed:
+    return Seed(
+        doc_id=doc_id,
+        title=f"Paper {doc_id}",
+        abstract=words,
+        chunk_text="",
+        category=category,
+        year_bucket="2011-2020",
+        track="catalog",
+    )
+
+
+_GOOD_MH_QUERY = "how does one placement heuristic relate to and improve upon another approach"
+
+# Mutually-distinct, non-leaking queries so the near-dup filter does not collapse them.
+_MH_VARIANTS = [
+    "how do force directed layouts compare with orthogonal edge routing strategies overall",
+    "what distinguishes spectral partitioning from combinatorial clutter reduction in practice",
+    "when does incremental compaction outperform global coordinate placement for wide diagrams",
+    "why choose port anchoring over free channels when drawing compound cluster structures",
+]
+
+
+def _cycling_gen(monkeypatch: pytest.MonkeyPatch) -> None:
+    counter = {"n": 0}
+
+    def _gen(*_a: object, **_k: object) -> str:
+        v = _MH_VARIANTS[counter["n"] % len(_MH_VARIANTS)]
+        counter["n"] += 1
+        return v
+
+    monkeypatch.setattr("rag_common.local_llm.generate_text", _gen)
+
+
+def test_build_multihop_co_category(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Same-category seeds with no citation graph pair via co-category; both docs relevant."""
+    seeds = [
+        _seed("d1", "crossing", "barycenter sweeping alpha beta"),
+        _seed("d2", "crossing", "median ordering gamma delta"),
+        _seed("d3", "crossing", "sifting epsilon zeta"),
+        _seed("d4", "crossing", "greedy switch eta theta"),
+    ]
+    monkeypatch.setattr("graph_layout_rag.eval.gold_synth.GEN_CACHE_PATH", tmp_path / "gc.json")
+    monkeypatch.setattr("graph_layout_rag.eval.gold_synth._gen_model", lambda: "test-model")
+    _cycling_gen(monkeypatch)
+
+    cases, manifest = build_multihop_cases(
+        "prof", 2, seeds=seeds, graph=None, rng=__import__("random").Random(0)
+    )
+    assert len(cases) == 2
+    for c in cases:
+        assert c["stratum"] == MULTIHOP_STRATUM
+        assert len(c["relevant_ids"]) == 2
+        a, b = c["seed_doc_id"], c["partner_doc_id"]
+        assert set(c["relevant_ids"]) == {a, b}
+        assert c["grades"][a] == 3 and c["grades"][b] == 2
+        assert c["pairing"] == "co-category"
+    assert manifest["stratum"] == MULTIHOP_STRATUM
+
+
+def test_build_multihop_citation_pairing(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A citation edge across categories is preferred over (absent) co-category partners."""
+    seeds = [
+        _seed("a", "layer-assignment", "network simplex flow alpha"),
+        _seed("b", "routing", "orthogonal spline beta gamma"),
+    ]
+    graph = _FakeGraph([("a", "b")])
+    monkeypatch.setattr("graph_layout_rag.eval.gold_synth.GEN_CACHE_PATH", tmp_path / "gc.json")
+    monkeypatch.setattr("graph_layout_rag.eval.gold_synth._gen_model", lambda: "test-model")
+    monkeypatch.setattr("rag_common.local_llm.generate_text", lambda *a, **k: _GOOD_MH_QUERY)
+
+    cases, manifest = build_multihop_cases(
+        "prof", 1, seeds=seeds, graph=graph, rng=__import__("random").Random(0)
+    )
+    assert len(cases) == 1
+    assert cases[0]["pairing"] == "citation"
+    assert manifest["citation_linked"] == 1
+    assert set(cases[0]["relevant_ids"]) == {"a", "b"}
+
+
+def test_build_multihop_leakage_dropped(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """A generated query that echoes both seeds' words is dropped as leakage."""
+    seeds = [
+        _seed(
+            "d1", "crossing", "barycenter median sifting sweeping heuristics layered digraph dummy"
+        ),
+        _seed("d2", "crossing", "greedy switch ordering permutation adjacent transpositions"),
+    ]
+    leaky = (
+        "barycenter median sifting sweeping heuristics layered digraph dummy greedy switch "
+        "ordering permutation adjacent transpositions"
+    )
+    monkeypatch.setattr("graph_layout_rag.eval.gold_synth.GEN_CACHE_PATH", tmp_path / "gc.json")
+    monkeypatch.setattr("graph_layout_rag.eval.gold_synth._gen_model", lambda: "test-model")
+    monkeypatch.setattr("rag_common.local_llm.generate_text", lambda *a, **k: leaky)
+
+    cases, manifest = build_multihop_cases(
+        "prof", 1, seeds=seeds, graph=None, rng=__import__("random").Random(0)
+    )
+    assert len(cases) == 0
+    assert manifest["filters"]["leakage"] >= 1
+
+
+def test_append_synth_cases_additive(tmp_path: Path) -> None:
+    """append_synth_cases preserves existing cases, adds new ids, and skips duplicates."""
+    cases_file = tmp_path / "cases.json"
+    existing = {
+        "manifest": {"version": "synth-v1", "total_cases": 1},
+        "cases": [
+            {
+                "id": "synth-catalog-single-0000",
+                "query": "existing single-hop query about layering",
+                "relevant_ids": ["doc-x"],
+                "source": "synth",
+                "stratum": "single-hop",
+            }
+        ],
+    }
+    cases_file.write_text(json.dumps(existing), encoding="utf-8")
+    new = [
+        {
+            "id": "synth-catalog-multihop-0000",
+            "query": "q1",
+            "relevant_ids": ["a", "b"],
+            "stratum": MULTIHOP_STRATUM,
+        },
+        {
+            "id": "synth-catalog-multihop-0001",
+            "query": "q2",
+            "relevant_ids": ["c", "d"],
+            "stratum": MULTIHOP_STRATUM,
+        },
+    ]
+    with (
+        mock.patch("graph_layout_rag.eval.gold_synth.CASES_PATH", cases_file),
+        mock.patch("graph_layout_rag.eval.gold_synth.SYNTH_DIR", tmp_path),
+    ):
+        summary = append_synth_cases(new)
+        # Re-appending the same ids is a no-op (additive, idempotent).
+        summary2 = append_synth_cases(new)
+        result = load_synth_cases()
+
+    assert summary == {"added": 2, "total": 3, "skipped_existing": 0}
+    assert summary2["added"] == 0
+    ids = {c["id"] for c in result}
+    assert "synth-catalog-single-0000" in ids  # existing preserved
+    assert len([c for c in result if c["stratum"] == MULTIHOP_STRATUM]) == 2
+    payload = json.loads(cases_file.read_text(encoding="utf-8"))
+    assert payload["manifest"]["by_stratum"][MULTIHOP_STRATUM] == 2
 
 
 # --------------------------------------------------------------------------- #

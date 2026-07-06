@@ -18,7 +18,7 @@ Embeddings use shared [`tools/rag-common`](../rag-common) with named profiles (`
 | `cuda-qwen0.6b-section-v1` | Chunking campaign: enrich indexed text with document/section metadata |
 | `cuda-qwen0.6b-small2big-v1` | Chunking campaign: smaller child chunks (~350 target / 550 max) |
 | `cuda-qwen0.6b-small2big-dual-v1` | Parent-child A/B: retrieve small child chunks, return baseline-sized parent passages |
-| `cuda-qwen0.6b-contextual-v1` | Contextual Retrieval build with local LLM-generated context |
+| `cuda-qwen0.6b-contextual-v1` | Contextual Retrieval profile (local LLM-generated context lines are cached in `data/indexes/contextual_cache.json`; the index itself has not been built yet — run `ingest --embed-profile cuda-qwen0.6b-contextual-v1 --force --rebuild` to build it) |
 | `cuda-qwen0.6b-longrag-v1` | LongRAG/larger-unit A/B: larger section/page-span chunks (~1800 target / 2400 max) |
 | `cuda-qwen0.6b-512-v1` / `cuda-qwen0.6b-768-v1` | Qwen3-0.6B reduced-dimension smoke profiles; not promoted |
 | `cuda-qwen4b-1024` / `cuda-qwen4b-2560` | Qwen3-4B CUDA quality probes; skipped on RTX 3060 Ti 8 GB after OOM |
@@ -41,7 +41,7 @@ The 2026-06-18 quality campaign keeps the production default unchanged and adds 
 - `cuda-qwen0.6b-section-v1`: default chunk boundaries, but indexed dense/BM25 text is prefixed with document title, year, authors, source URL, section path, categories, tags, and aliases.
 - `cuda-qwen0.6b-small2big-v1`: smaller child chunks (`target=350`, `max=550`, `overlap=80`) with a distinct chunking fingerprint and chunk-cache key.
 - `cuda-qwen0.6b-small2big-dual-v1`: true small-to-big retrieval. Ingest builds child chunks (`target=350`, `max=550`, `min=120`, `overlap=80`) and parent chunks (`target=800`, `max=1200`, `min=200`, `overlap=120`) from the same structural blocks. Dense retrieval searches child rows, aggregates to parent rows, and `--small-to-big` returns parent evidence with child-hit metadata. Parent BM25 lives under `bm25_parent/`.
-- `cuda-qwen0.6b-contextual-v1`: default chunking plus local-LLM contextual prefixes through `rag_common.local_llm` (`RAG_LLM_BACKEND=ollama` on `desktop`).
+- `cuda-qwen0.6b-contextual-v1`: default chunking plus local-LLM contextual prefixes through `rag_common.local_llm` (`RAG_LLM_BACKEND=ollama` on `desktop`). Status: the generated context lines are cached in `data/indexes/contextual_cache.json` (~20k entries) so a build can reuse them cheaply, but the profile's LanceDB/BM25 index has not actually been built — `data/indexes/` only has `cuda-qwen0.6b-1024` on disk. Build pending; do not assume this profile is queryable yet.
 - `cuda-qwen0.6b-longrag-v1`: larger retrieval units (`target=1800`, `max=2400`, `min=600`, `overlap=240`) for a non-generation LongRAG probe.
 - `cuda-qwen0.6b-512-v1` / `cuda-qwen0.6b-768-v1`: reduced-dimension Qwen3-0.6B profiles. The 50-document smokes completed cleanly, but full-corpus benchmarks are required before recommendation.
 
@@ -91,6 +91,36 @@ yarn rag-lit:ingest -- --force --rebuild
 yarn rag-lit:query "GraphRAG community summary" --top 8 --json
 yarn rag-lit:catalog
 ```
+
+## Deep research (`research`)
+
+`research <question>` is the agentic synthesis arm on top of plain `query`: it decomposes
+the question into ≤4 sub-questions, runs hybrid retrieval per sub-question, follows the
+citation graph 1 hop from the top docs (keeping neighbors that clear an embed-similarity
+bar — no LLM), summarizes each unique doc, then writes a cited synthesis with inline
+`[bib_key]` citations, a references section, and a `SUFFICIENT: yes/no` self-report that
+gates at most one iterate round.
+
+```bash
+uv run rag-literature-rag research "What did contextual retrieval change about chunk augmentation?" \
+    --max-docs 6 --embed-profile cuda-qwen0.6b-1024      # human-readable markdown
+uv run rag-literature-rag research "..." --json          # structured agent surface
+uv run rag-literature-rag research "..." --dry-run        # retrieval + cite-expansion only, ZERO LLM calls
+```
+
+Flags: `--top` (retrieval depth/sub-question), `--max-docs` (≤12, caps evidence LLM calls),
+`--depth` (`1` single synthesis, `2` allow one iterate), `--dry-run`, plus the usual
+`query` filters (`--tag/--category/--source/--year-min/--pdf-only`). The end-of-run line
+prints the running LLM call count + a rough token/USD estimate.
+
+**LLM backends** (two lanes, all env-overridable). Cheap steps (decompose, follow-up) route
+through `rag_common.local_llm` by default (`RAG_LIT_RESEARCH_CHEAP_BACKEND`, default `local`);
+synthesis + evidence summaries default to a direct-HTTP DeepSeek helper
+(`RAG_LIT_RESEARCH_SYNTH_BACKEND`, default `deepseek`, `deepseek-chat` via `DEEPSEEK_API_KEY`).
+Set either lane to `deepseek`/`opencode`/`local`. On a box with no local Ollama models, run the
+cheap lane on DeepSeek too: `RAG_LIT_RESEARCH_CHEAP_BACKEND=deepseek`. A typical `--max-docs 6`
+run is ~8–14 calls (well under a cent on DeepSeek). If `query/graph_arm.py` is present it is used
+as the retrieval strategy automatically (soft optional; `--no-graph-arm` to force plain hybrid).
 
 ### Harvest sources
 

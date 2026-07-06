@@ -24,6 +24,10 @@ def _doc() -> dict:
 
 
 def test_judge_one_routes_to_local_llm_when_ollama(monkeypatch):
+    # Explicit opt-out: the judge now defaults to the direct-HTTP dual backend
+    # (DeepSeek primary / opencode-go fallback); GRAPH_RAG_JUDGE_BACKEND=local
+    # is required to route through rag_common.local_llm instead.
+    monkeypatch.setenv("GRAPH_RAG_JUDGE_BACKEND", "local")
     monkeypatch.setenv("RAG_LLM_BACKEND", "ollama")
     captured: dict = {}
 
@@ -35,8 +39,9 @@ def test_judge_one_routes_to_local_llm_when_ollama(monkeypatch):
 
     monkeypatch.setattr("rag_common.local_llm.generate_text", fake_generate_text)
 
-    grade, reason = _judge_one("layer assignment", _doc(), "llama3.1:8b")
+    grade, reason, actual_model = _judge_one("layer assignment", _doc(), "llama3.1:8b")
     assert (grade, reason) == (3, "spot on")
+    assert actual_model == "llama3.1:8b"
     # transport got the resolved model and deterministic temperature
     assert captured["model"] == "llama3.1:8b"
     assert captured["temperature"] == 0.0
@@ -50,12 +55,14 @@ def test_judge_one_routes_to_local_llm_when_ollama(monkeypatch):
 
 
 def test_judge_model_resolves_ollama_model(monkeypatch):
+    monkeypatch.setenv("GRAPH_RAG_JUDGE_BACKEND", "local")
     monkeypatch.setenv("RAG_LLM_BACKEND", "ollama")
     monkeypatch.setenv("RAG_OLLAMA_MODEL", "mistral-small:24b")
     assert judge_model() == "mistral-small:24b"
 
 
 def test_cache_key_carries_ollama_model(monkeypatch, tmp_path):
+    monkeypatch.setenv("GRAPH_RAG_JUDGE_BACKEND", "local")
     monkeypatch.setenv("RAG_LLM_BACKEND", "ollama")
     monkeypatch.setenv("RAG_OLLAMA_MODEL", "mistral-small:24b")
 

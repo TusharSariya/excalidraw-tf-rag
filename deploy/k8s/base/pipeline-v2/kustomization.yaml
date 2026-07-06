@@ -1,0 +1,16 @@
+# deploy/k8s/base/pipeline-v2/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: pipeline
+
+resources:
+  - extract-deployment.yaml
+  - embed-deployment.yaml
+  - indexer-deployment.yaml
+
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/part-of: excalidraw-tf-rag
+      app.kubernetes.io/managed-by: kustomize

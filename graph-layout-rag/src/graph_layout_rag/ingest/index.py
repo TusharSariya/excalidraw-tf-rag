@@ -38,6 +38,7 @@ METADATA_KEYS = frozenset(
         "embed_dims",
         "embed_profile",
         "embed_quant",
+        "resolved_embed_backend",
         "pdf_backend",
         "chunking_fingerprint",
         "total_tokens_embedded",
@@ -349,6 +350,15 @@ def upsert_chunks(
             phase_stats.bm25_seconds += bm25_s
         log.info("bm25 phase done rows=%d elapsed_s=%.1f", len(chunks), bm25_s)
 
+    # Optional learned-sparse index (off by default — set GRAPH_RAG_SPARSE_INGEST=1).
+    # Nothing changes for existing profiles; the encoder is only imported/loaded
+    # when the flag is on, and per-chunk encodings are served from sparse_cache so
+    # a resumed/--force run is incremental (same guarantee as the dense cache).
+    if sparse_ingest_enabled():
+        sparse_started = time.monotonic()
+        n = _index_sparse_batch(chunks, texts, paths=paths, rebuild=rebuild)
+        log.info("sparse phase done rows=%d elapsed_s=%.1f", n, time.monotonic() - sparse_started)
+
     log.info(
         "index batch phases done chunks=%d embed_s=%.1f lancedb_s=%.1f bm25_s=%.1f total_s=%.1f",
         len(chunks),
@@ -358,6 +368,40 @@ def upsert_chunks(
         time.monotonic() - t0,
     )
     return len(rows)
+
+
+def sparse_ingest_enabled() -> bool:
+    """Whether ingest should also build the learned-sparse index (off by default)."""
+    return os.getenv("GRAPH_RAG_SPARSE_INGEST", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _index_sparse_batch(
+    chunks: list[TextChunk],
+    texts: list[str],
+    *,
+    paths: ProfileIndexPaths,
+    rebuild: bool,
+) -> int:
+    """Encode ``texts`` (cache-backed) and upsert them into the learned-sparse index."""
+    from rag_common.sparse_encode import resolve_sparse_encoder
+
+    from graph_layout_rag.ingest import sparse_cache, sparse_index
+
+    encoder = resolve_sparse_encoder(
+        encoder=os.getenv("GRAPH_RAG_SPARSE_ENCODER", "bgem3"),
+        model_id=os.getenv("GRAPH_RAG_SPARSE_MODEL") or None,
+    )
+    token_dicts = sparse_cache.encode_documents_cached(texts, encoder=encoder)
+    sparse_dir = paths.sparse_dir or (paths.root / "sparse")
+    return sparse_index.upsert_chunks(
+        chunks,
+        texts,
+        token_dicts,
+        index_dir=sparse_dir,
+        model_id=encoder.model_id,
+        version=encoder.version,
+        rebuild=rebuild,
+    )
 
 
 def describe_profile_index(profile: str | ProfileIndexPaths) -> dict[str, Any]:

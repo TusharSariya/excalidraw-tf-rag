@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import math
+import os
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
 import lancedb
+from rag_common.config import resolved_embed_backend
 from rag_literature_rag.catalog.classify import build_catalog
 from rag_literature_rag.catalog.taxonomy import PIPELINE_CATEGORIES
 from rag_literature_rag.ingest import bm25
@@ -81,6 +84,9 @@ _CONTEXT_CACHE: dict[str, RetrieveContext] = {}
 _VECTOR_CACHE: dict[tuple[str, int, str], list[float]] = {}
 _PARENT_ROW_CACHE: dict[str, dict[str, dict[str, Any]]] = {}
 _SUMMARY_ROW_CACHE: dict[str, dict[str, dict[str, Any]]] = {}
+# Loaded lazily and once per (encoder kind, model) — the learned-sparse query
+# encoder holds model weights, so it is cached across queries.
+_SPARSE_ENCODER_CACHE: dict[tuple[str, str], Any] = {}
 
 
 def clear_retrieve_caches() -> None:
@@ -88,7 +94,85 @@ def clear_retrieve_caches() -> None:
     _VECTOR_CACHE.clear()
     _PARENT_ROW_CACHE.clear()
     _SUMMARY_ROW_CACHE.clear()
+    _SPARSE_ENCODER_CACHE.clear()
     clear_identity_cache()
+
+
+def resolve_sparse_backend(explicit: str | None = None) -> str:
+    """Sparse retrieval channel: ``tantivy``/``bm25`` (default) or ``learned``.
+
+    Resolution order: explicit arg > ``RAG_LIT_SPARSE_BACKEND`` env > ``bm25``.
+    ``tantivy`` is accepted as an alias for ``bm25``.
+    """
+    value = (explicit or os.getenv(f"{ENV_PREFIX}SPARSE_BACKEND", "") or "bm25").strip().lower()
+    return "bm25" if value in {"", "tantivy"} else value
+
+
+def _resolve_sparse_encoder() -> Any:
+    """Instantiate (and cache) the learned-sparse query encoder from env config."""
+    kind = os.getenv(f"{ENV_PREFIX}SPARSE_ENCODER", "bgem3")
+    model_id = os.getenv(f"{ENV_PREFIX}SPARSE_MODEL") or None
+    key = (kind, model_id or "")
+    encoder = _SPARSE_ENCODER_CACHE.get(key)
+    if encoder is None:
+        from rag_common.sparse_encode import resolve_sparse_encoder as _make
+
+        encoder = _make(encoder=kind, model_id=model_id)
+        _SPARSE_ENCODER_CACHE[key] = encoder
+    return encoder
+
+
+def _sparse_search(
+    query: str,
+    ctx: RetrieveContext,
+    *,
+    limit: int,
+    backend: str = "bm25",
+    sparse_encoder: Any | None = None,
+) -> list[dict[str, Any]]:
+    """Sparse leg dispatch — same candidate shape whichever backend runs."""
+    if backend == "learned":
+        from rag_literature_rag.ingest import sparse_index
+
+        encoder = sparse_encoder or _resolve_sparse_encoder()
+        sparse_dir = ctx.paths.sparse_dir or (ctx.paths.root / "sparse")
+        sparse_index.assert_encoder_matches(sparse_dir, encoder)
+        return sparse_index.score(encoder.encode_query(query), index_dir=sparse_dir, limit=limit)
+    return bm25.search_bm25(query, index_dir=ctx.paths.bm25_dir, limit=limit)
+
+
+def _assert_backend_match(state: dict[str, Any], config: EmbedConfig, paths: Any) -> None:
+    """HG1: refuse to query an index whose vectors were built with a different
+    concrete embed backend than this host resolves to.
+
+    The model/dims/quant check (`ensure_embed_config_matches`) is blind to the plain-
+    vs-bitsandbytes split — both record backend "local", quant "4bit" — so a `cuda-*`
+    index benchmarked on a non-CUDA host silently scores queries against a mismatched
+    quant stack and produces meaningless scores that pass validation. Fail closed.
+
+    Legacy indexes built before this guard carry no `resolved_embed_backend`; we warn
+    rather than hard-fail (cannot reconstruct the quant stack from state alone) and
+    rely on backfilling the tag for indexes that matter.
+    """
+    recorded = state.get("resolved_embed_backend")
+    host = resolved_embed_backend(config)
+    if not recorded:
+        warnings.warn(
+            f"Index {getattr(paths, 'profile', '?')!r} has no recorded resolved embed "
+            f"backend (legacy build); HG1 cannot verify it was embedded with this "
+            f"host's '{host}' stack. Backfill resolved_embed_backend to enforce.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return
+    if host != recorded:
+        raise RuntimeError(
+            f"HG1 backend mismatch for index {getattr(paths, 'profile', '?')!r}: built "
+            f"with embed backend '{recorded}' but this host resolves '{host}'. "
+            f"Quantized local vectors are NOT portable across quant stacks — "
+            f"benchmark each rung on the machine that embedded it. Refusing to score "
+            f"a silent query/doc quant mismatch."
+        )
 
 
 def resolve_retrieve_context(*, embed_profile: str | None = None) -> RetrieveContext:
@@ -126,8 +210,11 @@ def resolve_retrieve_context(*, embed_profile: str | None = None) -> RetrieveCon
             from rag_literature_rag.ingest.index import ensure_embed_config_matches
 
             ensure_embed_config_matches(state, config)
+            _assert_backend_match(state, config, paths)
     else:
         config = indexed if indexed is not None else embed_config_from_env()
+        if indexed is not None:
+            _assert_backend_match(state, config, paths)
 
     tables = _table_names(db)
     parent_table = db.open_table(PARENTS_TABLE) if PARENTS_TABLE in tables else None
@@ -149,15 +236,37 @@ def _dense_where(year_min: int | None) -> str | None:
     return f"(year >= {int(year_min)}) OR (year IS NULL)"
 
 
-def _pool_size(*, top: int, filters: RetrieveFilters) -> int:
-    selective = bool(
+def _has_selective_filters(filters: RetrieveFilters) -> bool:
+    return bool(
         filters.category or filters.pdf_only or filters.tag or filters.source or filters.year_min
     )
+
+
+def _pool_size(*, top: int, filters: RetrieveFilters) -> int:
+    selective = _has_selective_filters(filters)
     # Floor of 80 fused candidates: the de-biased bake-off found pool 80 matched
     # or beat the old 40-deep default on both tracks (the deeper fusion pool
     # surfaces more distinct papers before per-doc grouping). Selective filters
     # still widen further since they prune post-fusion.
     return max(80, top * (12 if selective else 4))
+
+
+def _sparse_pool_size(*, top: int, filters: RetrieveFilters, pool: int) -> int:
+    """Tantivy/BM25 fetch size for the sparse leg.
+
+    Unlike the dense leg (LanceDB `WHERE ... prefilter=True`, which filters BEFORE
+    ranking so its `pool` results already satisfy year_min exactly), Tantivy has no
+    prefilter hook: `search_bm25` returns the raw top-`pool` lexical hits and
+    `_apply_filters` prunes them afterward. A selective filter can therefore discard
+    most of a fixed-size BM25 pool and starve the sparse side of the fusion even when
+    `pool` itself was already sized for the dense leg (e.g. an explicit `pool=`
+    override from a caller that didn't account for filter selectivity). Apply the
+    same top*12 widening rule directly to the sparse fetch so it always has
+    equivalent headroom to survive post-hoc filtering.
+    """
+    if not _has_selective_filters(filters):
+        return pool
+    return max(pool, top * 12)
 
 
 def _embed_vector(query: str, *, config: EmbedConfig) -> list[float]:
@@ -397,18 +506,28 @@ def retrieve_candidates(
     rrf_k: int = 20,
     dense_weight: float = 1.0,
     sparse_weight: float = 1.0,
+    sparse_backend: str | None = None,
+    sparse_encoder: Any | None = None,
 ) -> list[dict[str, Any]]:
-    """Retrieve ranked chunk rows before reranking or JSON formatting."""
+    """Retrieve ranked chunk rows before reranking or JSON formatting.
+
+    ``sparse_backend`` selects the sparse leg: ``bm25`` (tantivy, default) or
+    ``learned`` (impact-weighted inverted index). Both feed the SAME RRF fusion.
+    """
     filters = filters or RetrieveFilters()
     ctx = context or resolve_retrieve_context(embed_profile=embed_profile)
     pool = pool or _pool_size(top=top, filters=filters)
+    sparse_pool = _sparse_pool_size(top=top, filters=filters, pool=pool)
 
+    backend = resolve_sparse_backend(sparse_backend)
     sparse_query = bm25_query if bm25_query is not None else query
     if sparse_only:
-        sparse_results = bm25.search_bm25(
+        sparse_results = _sparse_search(
             sparse_query,
-            index_dir=ctx.paths.bm25_dir,
-            limit=pool,
+            ctx,
+            limit=sparse_pool,
+            backend=backend,
+            sparse_encoder=sparse_encoder,
         )
         return _apply_filters(sparse_results, filters)
 
@@ -421,10 +540,12 @@ def retrieve_candidates(
     )
 
     if hybrid:
-        sparse_results = bm25.search_bm25(
+        sparse_results = _sparse_search(
             sparse_query,
-            index_dir=ctx.paths.bm25_dir,
-            limit=pool,
+            ctx,
+            limit=sparse_pool,
+            backend=backend,
+            sparse_encoder=sparse_encoder,
         )
         candidates = reciprocal_rank_fusion(
             dense_results,
@@ -466,7 +587,8 @@ def retrieve_small_to_big_candidates(
     if mode == "dense":
         return _apply_filters(dense_parent_results, filters)
 
-    sparse_parent_results = bm25.search_bm25(query, index_dir=parent_bm25_dir, limit=pool)
+    sparse_pool = _sparse_pool_size(top=top, filters=filters, pool=pool)
+    sparse_parent_results = bm25.search_bm25(query, index_dir=parent_bm25_dir, limit=sparse_pool)
     sparse_parent_results = _apply_filters(sparse_parent_results, filters)
     if mode == "parent_bm25":
         return sparse_parent_results
@@ -494,6 +616,7 @@ def retrieve_docsummary_candidates(
     ctx = resolve_retrieve_context(embed_profile=embed_profile)
     _require_summary_indexes(ctx)
     pool = pool or _pool_size(top=top, filters=filters)
+    sparse_pool = _sparse_pool_size(top=top, filters=filters, pool=pool)
     summary_bm25_dir = ctx.paths.bm25_summary_dir or (ctx.paths.root / "bm25_summary")
 
     dense_summary_results: list[dict[str, Any]] = []
@@ -509,7 +632,7 @@ def retrieve_docsummary_candidates(
 
     sparse_summary_results: list[dict[str, Any]] = []
     if mode in {"bm25", "hybrid", "then_chunks", "fused_hybrid"}:
-        sparse_hits = bm25.search_bm25(query, index_dir=summary_bm25_dir, limit=pool)
+        sparse_hits = bm25.search_bm25(query, index_dir=summary_bm25_dir, limit=sparse_pool)
         sparse_summary_results = _apply_filters(_hydrate_summary_bm25(ctx, sparse_hits), filters)
 
     if mode == "dense":
@@ -588,8 +711,10 @@ def _summary_hybrid_results(
     filters: RetrieveFilters,
     pool: int,
     rrf_k: int,
+    top: int = 20,
 ) -> list[dict[str, Any]]:
     summary_bm25_dir = ctx.paths.bm25_summary_dir or (ctx.paths.root / "bm25_summary")
+    sparse_pool = _sparse_pool_size(top=top, filters=filters, pool=pool)
     query_vector = _embed_vector(query, config=ctx.config)
     dense_summary_results = _dense_search(
         ctx.summary_table,
@@ -598,7 +723,7 @@ def _summary_hybrid_results(
         year_min=filters.year_min,
     )
     dense_summary_results = _apply_filters(dense_summary_results, filters)
-    sparse_hits = bm25.search_bm25(query, index_dir=summary_bm25_dir, limit=pool)
+    sparse_hits = bm25.search_bm25(query, index_dir=summary_bm25_dir, limit=sparse_pool)
     sparse_summary_results = _apply_filters(_hydrate_summary_bm25(ctx, sparse_hits), filters)
     return reciprocal_rank_fusion(
         dense_summary_results,
@@ -629,6 +754,7 @@ def retrieve_raptor_candidates(
         filters=filters,
         pool=pool,
         rrf_k=rrf_k,
+        top=top,
     )
 
     if mode == "tree_only_hybrid":
@@ -697,13 +823,14 @@ def retrieve_multi_query(
     filters = filters or RetrieveFilters()
     ctx = context or resolve_retrieve_context(embed_profile=embed_profile)
     pool = pool or _pool_size(top=top, filters=filters)
+    sparse_pool = _sparse_pool_size(top=top, filters=filters, pool=pool)
 
     per_query: list[list[dict[str, Any]]] = []
     for query in queries:
         vector = _embed_vector(query, config=ctx.config)
         dense = _dense_search(ctx.table, vector, pool=pool, year_min=filters.year_min)
         if hybrid:
-            sparse = bm25.search_bm25(query, index_dir=ctx.paths.bm25_dir, limit=pool)
+            sparse = bm25.search_bm25(query, index_dir=ctx.paths.bm25_dir, limit=sparse_pool)
             per_query.append(reciprocal_rank_fusion(dense, sparse, top=pool))
         else:
             per_query.append(dense)

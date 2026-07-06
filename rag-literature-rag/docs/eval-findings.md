@@ -102,3 +102,27 @@ RAG_LIT_SYNTH_GOLD=1 uv run rag-literature-rag eval diagnostics \
 ```
 
 Detailed per-iteration ledger (local, gitignored): `data/eval/campaign/findings.md`.
+
+---
+
+## 8. 2026-07-05 — local-stack re-baseline + Phase-2 retrieval bake-offs
+
+The Gemini embed/judge stack above (`gemini-2-structure-v1`, `gemini-3.5-flash`) was removed. Retrieval is now **local-only** — `cuda-qwen0.6b-1024` (Qwen3-Embedding-0.6B, bitsandbytes 4-bit) + Tantivy BM25 + BGE-M3 learned-sparse — and judging moved to **DeepSeek** (`deepseek-chat`, direct API, dual-backend with opencode-go fallback). This section re-establishes the baseline on that stack and settles four Phase-2 upgrades. The Section 2–5 theses all held.
+
+**De-biased judging again flipped the naive read.** Rebuilt local index, complete 5-system pool re-judged on DeepSeek (4,632 new pairs), scored with `--qrels` overlay:
+
+| LIT nDCG@10   | dense | bm25  | hybrid    |
+| ------------- | ----- | ----- | --------- |
+| catalog       | 0.715 | 0.648 | **0.747** |
+| pdf-deep-read | 0.715 | 0.668 | **0.752** |
+
+Confirms the campaign ranking: **dense ≥ hybrid lead, bm25 trails.** A first benchmark pass scored **gold-only** (missing `--qrels`) and understated dense — the overlay is mandatory; omitting it silently discards the judged pool (a real incident this run).
+
+**Four Phase-2 upgrades — all settled NULL vs hybrid (bootstrap 95% CI):**
+
+- **Learned-sparse (BGE-M3 sparse head):** LIT hybrid−learned Δ indistinguishable from 0 at n=13 test cases (CI straddles 0). Not a win; needs a wider eval before any decision. (On the GLR fork it lost *significantly* — after fixing a fusion-weight bug that had 2×-weighted the learned leg.)
+- **Graph-arm (HippoRAG-2 personalized-PageRank + relational router):** the 2026 "graph helps multi-hop" hypothesis **did not hold** — the multi-hop-stratum CI includes 0; graph_arm is a small *general* re-rank lift only, at **5–6× latency**. No-ship as a routed arm; registered for A/B.
+- **ColBERT (GTE-ModernColBERT via PyLate/PLAID):** settled NULL at the **environment stage** — pylate pins `sentence-transformers==5.3.0`, incompatible with the `5.5.1` the local dense embedder requires. Blocked on dependency isolation, **not measured to lose**. The existing Qdrant-MaxSim `colbert` strategy remains for a separate late-interaction test.
+- **Agentic `research` CLI:** faithful skeleton — **0 hallucinated citations in 10/10 answers**, honestly declares "insufficient" rather than fabricating — but **not ship-quality**: decompose silently broke on a dead default Ollama model, cite-following was inert (`cap=0` in the default max-docs regime), coverage bimodal (~0.45).
+
+**Net:** consistent with the campaign — no algorithmic upgrade beat hybrid; the durable win remains the *trustworthy eval*, now portable to the local stack. Full incident/decision log: `docs/research-tool-upgrade-log-2026-07-04.md` (repo root).

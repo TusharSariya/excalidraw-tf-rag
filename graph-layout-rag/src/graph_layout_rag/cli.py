@@ -233,6 +233,58 @@ def cite_coverage_cmd(as_json: bool) -> None:
         click.echo("Duplicate doc_id keyings: none")
 
 
+@cite_group.command("gaps")
+@click.option("--top", default=50, show_default=True, help="Max gap works to list.")
+@click.option(
+    "--min-citations",
+    default=2,
+    show_default=True,
+    help="Min distinct in-corpus citers for a work to qualify.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+@click.option(
+    "--resolve-titles",
+    is_flag=True,
+    help="Batch-resolve missing titles/year/DOI/arXiv id for gap works via the "
+    "OpenAlex works API (keyless polite pool) and persist them to the citation store.",
+)
+def cite_gaps_cmd(top: int, min_citations: int, as_json: bool, resolve_titles: bool) -> None:
+    """Corpus gap detection: external works cited BY the corpus but not IN it.
+
+    Ranks every work in the citation graph that in-corpus documents cite but that was
+    never itself harvested, by distinct in-corpus citer count -- turning the citation
+    graph into a harvest-priority queue. See `rag_common.citation_gaps.compute_gaps`.
+    """
+    from rag_common.citation_gaps import compute_gaps, resolve_gap_titles
+
+    from graph_layout_rag import citation_store as cs
+
+    if not cs.CITATIONS_DB_PATH.exists():
+        click.echo("No citation store yet. Run: graph-layout-rag cite enrich", err=True)
+        sys.exit(1)
+
+    db = cs.connect()
+    gaps = compute_gaps(db, min_citations=min_citations, top=top)
+    if resolve_titles and gaps:
+        gaps = resolve_gap_titles(db, gaps, mailto="tushar.sariya77@gmail.com")
+    db.close()
+
+    if as_json:
+        click.echo(json.dumps([g.to_dict() for g in gaps], indent=2))
+        return
+
+    if not gaps:
+        click.echo("No gap works found (try lowering --min-citations).")
+        return
+
+    click.echo(f"{'CITES':>6}  {'YEAR':<6} {'DOI/ID':<28} TITLE")
+    for g in gaps:
+        year = str(g.year) if g.year else "?"
+        ident = g.doi or g.arxiv_id or g.oa_id
+        label = g.title or "(title unknown)"
+        click.echo(f"{g.cited_by_count:>6}  {year:<6} {ident:<28.28} {label}")
+
+
 @cite_group.command("neighbors")
 @click.argument("doc_id")
 @click.option(
@@ -548,14 +600,16 @@ def embed_indexes_cmd(as_json: bool) -> None:
 @main.command("route")
 @click.argument("text")
 def route_cmd(text: str) -> None:
-    """Print the retrieval regime for a query: 'keyword' or 'nl'.
+    """Print the retrieval regime for a query: 'keyword', 'nl', or 'relational'.
 
-    Used by scripts/query_auto.sh to dispatch keyword queries to the local
-    0.6B index and natural-language queries to the remote 4B index.
+    'keyword'/'nl' dispatch keyword queries to the local 0.6B index and
+    natural-language queries to the remote 4B index (scripts/query_auto.sh).
+    'relational' marks a multi-hop/relational query that ``query`` routes to the
+    graph retrieval arm (--graph auto).
     """
-    from graph_layout_rag.query.routing import classify_query_mode
+    from graph_layout_rag.query.routing import classify_query_regime
 
-    click.echo(classify_query_mode(text))
+    click.echo(classify_query_regime(text))
 
 
 @main.command("query")
@@ -604,6 +658,13 @@ def route_cmd(text: str) -> None:
     "auto = only when the query looks vague/under-served; force = always.",
 )
 @click.option(
+    "--sparse-backend",
+    type=click.Choice(["bm25", "learned"]),
+    default=None,
+    help="Sparse retrieval channel fused with dense: bm25 (tantivy, default) or "
+    "learned (impact-weighted inverted index). Default = GRAPH_RAG_SPARSE_BACKEND or bm25.",
+)
+@click.option(
     "--sparse-weight",
     type=float,
     default=SPARSE_WEIGHT,
@@ -636,6 +697,14 @@ def route_cmd(text: str) -> None:
     "prior): cited-by = global citation count; in-corpus-cited-by = citers within "
     "this corpus. Relevance keeps retrieval order.",
 )
+@click.option(
+    "--graph/--no-graph",
+    "graph",
+    default=None,
+    help="Graph retrieval arm (HippoRAG-2-style citation+kNN PPR) for relational/multi-hop "
+    "queries. Default (unset) = auto: the router runs the graph arm only for queries it "
+    "classifies as 'relational' (see: route). --graph forces it; --no-graph disables it.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON for LLM agents.")
 def query_cmd(
     text: str,
@@ -654,10 +723,12 @@ def query_cmd(
     rerank: bool | None,
     hybrid: bool,
     expand: str,
+    sparse_backend: str | None,
     sparse_weight: float,
     dense_weight: float,
     citation_prior_weight: float,
     sort_by: str,
+    graph: bool | None,
     as_json: bool,
 ) -> None:
     """Semantic search over the graph layout corpus."""
@@ -668,11 +739,17 @@ def query_cmd(
         )
         sys.exit(1)
 
+    # Query router (P2.2): graph arm on for --graph, off for --no-graph, and for
+    # the default (auto) only when the query classifies as relational/multi-hop.
+    from graph_layout_rag.query.routing import classify_query_regime
+
+    use_graph = graph if graph is not None else (classify_query_regime(text) == "relational")
+
     # Gateway delegation: when GRAPH_RAG_GATEWAY_SEARCH=1, run on desktop via HTTP.
     # The gateway runs the full search (embed + LanceDB) and streams JSON back.
     # No local index required on the Mac.
     _gw_url = os.environ.get("RAG_GPU_GATEWAY_URL", "")
-    if os.environ.get("GRAPH_RAG_GATEWAY_SEARCH") and _gw_url:
+    if os.environ.get("GRAPH_RAG_GATEWAY_SEARCH") and _gw_url and not use_graph:
         import urllib.error
         import urllib.request
 
@@ -707,6 +784,8 @@ def query_cmd(
             _flags.append("--no-hybrid")
         if expand != "off":
             _flags += ["--expand", expand]
+        if sparse_backend:
+            _flags += ["--sparse-backend", sparse_backend]
         if sparse_weight != SPARSE_WEIGHT:
             _flags += ["--sparse-weight", str(sparse_weight)]
         if dense_weight != DENSE_WEIGHT:
@@ -762,27 +841,51 @@ def query_cmd(
         return
 
     try:
-        results = search(
-            text,
-            top=top,
-            tag=tag,
-            category=category,
-            pdf_only=pdf_only,
-            source=source,
-            year_min=year_min,
-            venue=venue,
-            arxiv_category=arxiv_category,
-            genre=genre,
-            exclude_retracted=exclude_retracted,
-            embed_profile=embed_profile,
-            rerank=rerank,
-            hybrid=hybrid,
-            max_per_doc=max_per_doc,
-            expand=expand,
-            sparse_weight=sparse_weight,
-            dense_weight=dense_weight,
-            citation_prior_weight=citation_prior_weight,
-        )
+        if use_graph:
+            from graph_layout_rag.query.graph_arm import graph_search
+            from graph_layout_rag.query.retrieve import RetrieveFilters
+
+            results = graph_search(
+                text,
+                top=top,
+                embed_profile=embed_profile,
+                hybrid=hybrid,
+                max_per_doc=max_per_doc,
+                filters=RetrieveFilters(
+                    tag=tag,
+                    source=source,
+                    year_min=year_min,
+                    category=category,
+                    pdf_only=pdf_only,
+                    venue=venue,
+                    arxiv_category=arxiv_category,
+                    genre=genre,
+                    exclude_retracted=exclude_retracted,
+                ),
+            )
+        else:
+            results = search(
+                text,
+                top=top,
+                tag=tag,
+                category=category,
+                pdf_only=pdf_only,
+                source=source,
+                year_min=year_min,
+                venue=venue,
+                arxiv_category=arxiv_category,
+                genre=genre,
+                exclude_retracted=exclude_retracted,
+                embed_profile=embed_profile,
+                rerank=rerank,
+                hybrid=hybrid,
+                max_per_doc=max_per_doc,
+                expand=expand,
+                sparse_weight=sparse_weight,
+                dense_weight=dense_weight,
+                citation_prior_weight=citation_prior_weight,
+                sparse_backend=sparse_backend,
+            )
     except ValueError as exc:
         click.echo(str(exc), err=True)
         sys.exit(1)
@@ -816,6 +919,97 @@ def query_cmd(
             )
         click.echo(f"   {r['excerpt'][:200]}...")
         click.echo()
+
+
+@main.command("research")
+@click.argument("question")
+@click.option(
+    "--top", default=8, show_default=True, help="Hybrid retrieval depth per sub-question."
+)
+@click.option(
+    "--max-docs",
+    default=12,
+    show_default=True,
+    type=click.IntRange(min=1, max=12),
+    help="Cap on unique docs summarized/synthesized (also caps evidence LLM calls).",
+)
+@click.option(
+    "--depth",
+    default=2,
+    show_default=True,
+    type=click.IntRange(min=1, max=2),
+    help="1 = single synthesis; 2 = allow one iterate round if evidence is insufficient.",
+)
+@click.option(
+    "--dry-run", is_flag=True, help="Retrieval + citation expansion only; ZERO LLM calls."
+)
+@click.option("--embed-profile", default=None, help="Named embed profile (must match index).")
+@click.option("--rerank/--no-rerank", "rerank", default=None, help="Local cross-encoder rerank.")
+@click.option("--hybrid/--no-hybrid", "hybrid", default=DEFAULT_HYBRID, show_default=True)
+@click.option(
+    "--graph-arm/--no-graph-arm",
+    "graph_arm",
+    default=True,
+    show_default=True,
+    help="Use query/graph_arm.py as the retrieval strategy if present (else plain hybrid).",
+)
+@click.option("--tag", default=None, help="Filter by tag substring.")
+@click.option("--category", default=None, help="Filter by pipeline category slug.")
+@click.option("--source", default=None, help="Filter by source.")
+@click.option("--year-min", type=int, default=None)
+@click.option("--pdf-only", is_flag=True, help="Exclude metadata-only documents.")
+@click.option("--json", "as_json", is_flag=True, help="Emit the structured JSON agent surface.")
+def research_cmd(
+    question: str,
+    top: int,
+    max_docs: int,
+    depth: int,
+    dry_run: bool,
+    embed_profile: str | None,
+    rerank: bool | None,
+    hybrid: bool,
+    graph_arm: bool,
+    tag: str | None,
+    category: str | None,
+    source: str | None,
+    year_min: int | None,
+    pdf_only: bool,
+    as_json: bool,
+) -> None:
+    """Deep-research a QUESTION: decompose, gather+cite-expand, summarize, synthesize (cited)."""
+    from graph_layout_rag.query.research import render_markdown, research
+
+    if category and category not in PIPELINE_CATEGORIES:
+        click.echo(
+            f"Unknown category {category!r}. Choose from: {', '.join(PIPELINE_CATEGORIES)}",
+            err=True,
+        )
+        sys.exit(1)
+    try:
+        result = research(
+            question,
+            top=top,
+            max_docs=max_docs,
+            depth=depth,
+            dry_run=dry_run,
+            embed_profile=embed_profile,
+            rerank=rerank,
+            hybrid=hybrid,
+            graph_arm=graph_arm,
+            tag=tag,
+            category=category,
+            source=source,
+            year_min=year_min,
+            pdf_only=pdf_only,
+        )
+    except ValueError as exc:
+        click.echo(str(exc), err=True)
+        sys.exit(1)
+
+    if as_json:
+        click.echo(json.dumps(result, indent=2))
+        return
+    click.echo(render_markdown(result))
 
 
 @main.command("catalog")

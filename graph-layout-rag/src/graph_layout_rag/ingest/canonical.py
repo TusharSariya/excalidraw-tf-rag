@@ -14,7 +14,12 @@ class IngestDocument:
 
     @property
     def alias_doc_ids(self) -> list[str]:
-        return sorted({item.id for item in self.aliases})
+        ids = {item.id for item in self.aliases}
+        # Manifest-persisted aliases: ids absorbed by past merges/collapses
+        # whose records no longer exist (ManifestItem.aliasDocIds).
+        ids.update(alias for item in (self.item, *self.aliases) for alias in item.aliasDocIds)
+        ids.discard(self.item.id)
+        return sorted(ids)
 
     @property
     def alias_source_urls(self) -> list[str]:

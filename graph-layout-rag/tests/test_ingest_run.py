@@ -1,7 +1,9 @@
 import logging
+import os
 import pickle
+import socket
 import threading
-from concurrent.futures import Future
+from concurrent.futures import Future, ProcessPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -148,8 +150,9 @@ def test_pool_is_bounded_and_completes_out_of_order(tmp_path, monkeypatch):
     tracker = {"active": 0, "max_active": 0}
 
     class FakeExecutor:
-        def __init__(self, max_workers):
+        def __init__(self, max_workers, initializer=None):
             self.max_workers = max_workers
+            self.initializer = initializer
 
         def __enter__(self):
             return self
@@ -167,7 +170,7 @@ def test_pool_is_bounded_and_completes_out_of_order(tmp_path, monkeypatch):
             tracker["max_active"] = max(tracker["max_active"], tracker["active"])
             return future
 
-    def fake_wait(pending, return_when):
+    def fake_wait(pending, timeout=None, return_when=None):
         future = list(pending)[-1]
         tracker["active"] -= 1
         return {future}, set(pending) - {future}
@@ -349,7 +352,7 @@ def test_iter_extraction_outcomes_force_shutdown_on_interrupt(monkeypatch):
     shutdown_calls = []
 
     class SlowExecutor:
-        def __init__(self, max_workers):
+        def __init__(self, max_workers, initializer=None):
             self._processes = {}
 
         def submit(self, fn, task):
@@ -616,3 +619,104 @@ def test_checkpoint_does_not_advance_when_index_write_fails(tmp_path, monkeypatc
             pdf_backend="pymupdf",
         )
     assert all("0" not in checkpoint for checkpoint in checkpoints)
+
+
+def _report_worker_socket_state() -> tuple[float | None, str | None, str | None]:
+    """Picklable top-level probe run inside a pool worker by the test below."""
+    return (
+        socket.getdefaulttimeout(),
+        os.environ.get("HF_HUB_ETAG_TIMEOUT"),
+        os.environ.get("HF_HUB_DOWNLOAD_TIMEOUT"),
+    )
+
+
+def test_extract_worker_init_sets_socket_timeout():
+    """Extraction-pool workers must get a bounded socket default timeout.
+
+    Regression for a hang where a fresh docling extraction triggered a
+    HuggingFace-CDN model download inside a worker process; the connection
+    stalled with no client timeout and the worker (and eventually the whole
+    ProcessPoolExecutor) blocked forever. _extract_worker_init is the pool's
+    ``initializer=`` and must leave every worker with a global socket
+    default timeout, independent of whether huggingface_hub's own env-var
+    timeouts take effect (those are read once at import time and are a
+    best-effort layer, not the primary guard).
+    """
+    with ProcessPoolExecutor(max_workers=1, initializer=run._extract_worker_init) as pool:
+        timeout, etag_timeout, download_timeout = pool.submit(_report_worker_socket_state).result(
+            timeout=30
+        )
+    assert timeout == 60
+    assert etag_timeout == "60"
+    assert download_timeout == "60"
+
+
+def test_drain_one_times_out_lost_future():
+    """A future that never resolves must be abandoned past its deadline (extraction_timeout)."""
+    import time as _time
+
+    stuck: Future = Future()
+    stuck.set_running_or_notify_cancel()  # running: cancel() will fail, must still be abandoned
+    task = run.ExtractionTask(_item("stuck"), "docling", ["layering"])
+    pending = {stuck: task}
+    deadlines = {stuck: _time.monotonic() - 1.0}
+
+    outcomes = list(run._drain_one(pending, threading.Event(), deadlines))
+
+    assert len(outcomes) == 1
+    assert outcomes[0].reason == "extraction_timeout_metadata_fallback"
+    assert outcomes[0].item.id == "stuck"
+    assert not pending and not deadlines
+
+
+def test_drain_one_no_timeout_before_deadline():
+    stuck: Future = Future()
+    task = run.ExtractionTask(_item("slow"), "docling", ["layering"])
+    pending = {stuck: task}
+    import time as _time
+
+    deadlines = {stuck: _time.monotonic() + 300.0}
+    outcomes = list(run._drain_one(pending, threading.Event(), deadlines))
+    assert outcomes == []
+    assert stuck in pending and stuck in deadlines
+
+
+def test_extract_timeout_env(monkeypatch):
+    monkeypatch.delenv("GRAPH_RAG_EXTRACT_TIMEOUT_S", raising=False)
+    assert run._extract_timeout_s() == 300.0
+    monkeypatch.setenv("GRAPH_RAG_EXTRACT_TIMEOUT_S", "0")
+    assert run._extract_timeout_s() == 0.0
+    monkeypatch.setenv("GRAPH_RAG_EXTRACT_TIMEOUT_S", "bogus")
+    assert run._extract_timeout_s() == 300.0
+
+
+def test_drain_one_queued_task_never_expires():
+    """A queued (not yet running) task must not get a deadline — the pool may
+    serialize it behind slow docs for arbitrarily long."""
+
+    queued: Future = Future()  # PENDING state: running() is False
+    task = run.ExtractionTask(_item("queued"), "docling", ["layering"])
+    pending = {queued: task}
+    deadlines: dict = {}
+    for _ in range(3):
+        assert list(run._drain_one(pending, threading.Event(), deadlines, 0.0)) == []
+    assert queued in pending and queued not in deadlines
+
+
+def test_drain_one_running_task_gets_deadline_then_expires():
+    stuck: Future = Future()
+    stuck.set_running_or_notify_cancel()
+    task = run.ExtractionTask(_item("running"), "docling", ["layering"])
+    pending = {stuck: task}
+    deadlines: dict = {}
+
+    # First poll assigns the deadline (budget 0 → now+0, not yet strictly past).
+    assert list(run._drain_one(pending, threading.Event(), deadlines, 0.0)) == []
+    assert stuck in deadlines
+    import time as _time
+
+    _time.sleep(0.01)
+    outcomes = list(run._drain_one(pending, threading.Event(), deadlines, 0.0))
+    assert len(outcomes) == 1
+    assert outcomes[0].reason == "extraction_timeout_metadata_fallback"
+    assert not pending and not deadlines

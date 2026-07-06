@@ -1,8 +1,13 @@
+import hashlib
+import sqlite3
+
 from rag_literature_rag.catalog.taxonomy import RAG_CATEGORIES
 from rag_literature_rag.harvest.topic_seeds import (
+    SPARSE_LATE_INTERACTION_PDF_SEEDS,
     TOPIC_DOI_SEEDS,
     TOPIC_METADATA_SEEDS,
     TOPIC_PDF_SEEDS,
+    _download_pdf_seed,
     harvest_topic_seeds,
 )
 
@@ -13,6 +18,25 @@ def test_topic_pdf_seed_ids():
     assert "arxiv-2004-04906" in ids
     assert "arxiv-2004-12832" in ids
     assert "arxiv-2312-10997" in ids
+
+
+def test_sparse_late_interaction_seed_ids():
+    ids = {s["id"] for s in SPARSE_LATE_INTERACTION_PDF_SEEDS}
+    assert len(SPARSE_LATE_INTERACTION_PDF_SEEDS) >= 15
+    # SPLADE family
+    assert "arxiv-2107-05720" in ids  # SPLADE v1
+    assert "arxiv-2109-10086" in ids  # SPLADE v2
+    assert "arxiv-2403-06789" in ids  # SPLADE-v3
+    # late interaction / multi-vector
+    assert "arxiv-2112-01488" in ids  # ColBERTv2
+    assert "arxiv-2205-09707" in ids  # PLAID
+    assert "arxiv-2508-03555" in ids  # PyLate
+    # embedding evaluation benchmarks
+    assert "arxiv-2210-07316" in ids  # MTEB
+    assert "arxiv-2502-13595" in ids  # MMTEB
+    # embedding tech reports
+    assert "arxiv-2409-10173" in ids  # jina-embeddings-v3
+    assert "arxiv-2205-13147" in ids  # Matryoshka Representation Learning
 
 
 def test_topic_doi_seed_count():
@@ -73,7 +97,12 @@ def test_topic_seed_tags_use_rag_taxonomy():
         "context",
         "metrics",
     }
-    for spec in [*TOPIC_PDF_SEEDS, *TOPIC_DOI_SEEDS, *TOPIC_METADATA_SEEDS]:
+    for spec in [
+        *TOPIC_PDF_SEEDS,
+        *SPARSE_LATE_INTERACTION_PDF_SEEDS,
+        *TOPIC_DOI_SEEDS,
+        *TOPIC_METADATA_SEEDS,
+    ]:
         for tag in spec.get("tags", []):
             assert tag in allowed, f"unknown tag {tag!r} on {spec.get('id') or spec.get('doi')}"
 
@@ -88,5 +117,44 @@ def test_harvest_topic_seeds_dry_run():
     items = harvest_topic_seeds(dry_run=True)
     ids = {i.id for i in items}
     assert "arxiv-2005-11401" in ids
+    assert "arxiv-2112-01488" in ids  # ColBERTv2, from SPARSE_LATE_INTERACTION_PDF_SEEDS
     assert "anthropic-contextual-retrieval-cookbook" in ids
     assert any(i.tags and "topic-seed" in i.tags for i in items)
+
+
+def test_download_pdf_seed_survives_ledger_write_failure(tmp_path, monkeypatch):
+    """A ledger-logging failure after a successful write must not delete the PDF.
+
+    Regression for a bug where download_to_file writes the PDF to disk and
+    only then logs the attempt to the harvest sqlite ledger. If that logging
+    step raises (e.g. sqlite3.OperationalError: no such table, from a ledger
+    that hasn't been initialized), download_to_file propagates the exception,
+    and _download_pdf_seed's broad `except Exception` used to delete the
+    just-downloaded, perfectly valid PDF. It must now survive.
+    """
+    import rag_literature_rag.harvest.topic_seeds as topic_seeds
+
+    monkeypatch.setattr(topic_seeds, "PDF_DIR", tmp_path)
+    monkeypatch.setattr(topic_seeds, "relative_local_path", lambda path: str(path))
+    pdf_bytes = b"%PDF-1.4\n" + b"0" * 20_000
+
+    def fake_download_to_file(dest, url, **kwargs):
+        # Mirrors the real download_to_file: write the file first, then blow
+        # up as if the ledger's log_attempt() call failed.
+        dest.write_bytes(pdf_bytes)
+        raise sqlite3.OperationalError("no such table: download_attempts")
+
+    monkeypatch.setattr(topic_seeds, "download_to_file", fake_download_to_file)
+
+    spec = {
+        "id": "regression-ledger-failure",
+        "title": "Regression Ledger Failure",
+        "url": "https://example.com/paper.pdf",
+    }
+    item = _download_pdf_seed(spec, dry_run=False)
+
+    dest = tmp_path / "regression-ledger-failure.pdf"
+    assert dest.exists(), "downloaded PDF must survive a ledger-logging failure"
+    assert dest.read_bytes() == pdf_bytes
+    assert item.status == "ok"
+    assert item.sha256 == hashlib.sha256(pdf_bytes).hexdigest()

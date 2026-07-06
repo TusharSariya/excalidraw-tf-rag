@@ -175,6 +175,7 @@ def search(
     small_to_big: bool = False,
     raptor: bool = False,
     raptor_mode: str = "hybrid",
+    sparse_backend: str | None = None,
 ) -> list[dict[str, Any]]:
     if category and category not in PIPELINE_CATEGORIES:
         raise ValueError(
@@ -213,6 +214,7 @@ def search(
             embed_profile=embed_profile,
             hybrid=hybrid,
             filters=filters,
+            sparse_backend=sparse_backend,
         )
     if (
         not small_to_big

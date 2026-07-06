@@ -1,0 +1,54 @@
+{
+  "description": "Envelope for every ``deadletter.<stage>`` topic.\n\nWraps the original message's identity plus why it died and how many\ndelivery attempts it had accrued. ``original_topic`` records where the\npoisoned/exhausted record came from so a human triaging the DLQ doesn't\nhave to guess.",
+  "properties": {
+    "attempt": {
+      "default": 1,
+      "title": "Attempt",
+      "type": "integer"
+    },
+    "content_sha256": {
+      "title": "Content Sha256",
+      "type": "string"
+    },
+    "corpus": {
+      "title": "Corpus",
+      "type": "string"
+    },
+    "doc_id": {
+      "title": "Doc Id",
+      "type": "string"
+    },
+    "original_topic": {
+      "title": "Original Topic",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "title": "Payload",
+      "type": "object"
+    },
+    "reason": {
+      "title": "Reason",
+      "type": "string"
+    },
+    "stage": {
+      "title": "Stage",
+      "type": "string"
+    },
+    "stage_fingerprint": {
+      "title": "Stage Fingerprint",
+      "type": "string"
+    }
+  },
+  "required": [
+    "doc_id",
+    "corpus",
+    "content_sha256",
+    "stage_fingerprint",
+    "reason",
+    "original_topic",
+    "stage"
+  ],
+  "title": "DeadLetterMessage",
+  "type": "object"
+}

@@ -231,6 +231,58 @@ def cite_coverage_cmd(as_json: bool) -> None:
         click.echo("Duplicate doc_id keyings: none")
 
 
+@cite_group.command("gaps")
+@click.option("--top", default=50, show_default=True, help="Max gap works to list.")
+@click.option(
+    "--min-citations",
+    default=2,
+    show_default=True,
+    help="Min distinct in-corpus citers for a work to qualify.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Emit machine-readable JSON.")
+@click.option(
+    "--resolve-titles",
+    is_flag=True,
+    help="Batch-resolve missing titles/year/DOI/arXiv id for gap works via the "
+    "OpenAlex works API (keyless polite pool) and persist them to the citation store.",
+)
+def cite_gaps_cmd(top: int, min_citations: int, as_json: bool, resolve_titles: bool) -> None:
+    """Corpus gap detection: external works cited BY the corpus but not IN it.
+
+    Ranks every work in the citation graph that in-corpus documents cite but that was
+    never itself harvested, by distinct in-corpus citer count -- turning the citation
+    graph into a harvest-priority queue. See `rag_common.citation_gaps.compute_gaps`.
+    """
+    from rag_common.citation_gaps import compute_gaps, resolve_gap_titles
+
+    from rag_literature_rag import citation_store as cs
+
+    if not cs.CITATIONS_DB_PATH.exists():
+        click.echo("No citation store yet. Run: rag-literature-rag cite enrich", err=True)
+        sys.exit(1)
+
+    db = cs.connect()
+    gaps = compute_gaps(db, min_citations=min_citations, top=top)
+    if resolve_titles and gaps:
+        gaps = resolve_gap_titles(db, gaps, mailto="tushar.sariya77@gmail.com")
+    db.close()
+
+    if as_json:
+        click.echo(json.dumps([g.to_dict() for g in gaps], indent=2))
+        return
+
+    if not gaps:
+        click.echo("No gap works found (try lowering --min-citations).")
+        return
+
+    click.echo(f"{'CITES':>6}  {'YEAR':<6} {'DOI/ID':<28} TITLE")
+    for g in gaps:
+        year = str(g.year) if g.year else "?"
+        ident = g.doi or g.arxiv_id or g.oa_id
+        label = g.title or "(title unknown)"
+        click.echo(f"{g.cited_by_count:>6}  {year:<6} {ident:<28.28} {label}")
+
+
 @cite_group.command("embed-related")
 @click.option(
     "--model",
@@ -456,6 +508,19 @@ def embed_indexes_cmd(as_json: bool) -> None:
         )
 
 
+@main.command("route")
+@click.argument("text")
+def route_cmd(text: str) -> None:
+    """Print the retrieval regime for a query: 'keyword', 'nl', or 'relational'.
+
+    'relational' marks a multi-hop/relational query that ``query`` routes to the
+    graph retrieval arm (--graph auto).
+    """
+    from rag_literature_rag.query.routing import classify_query_regime
+
+    click.echo(classify_query_regime(text))
+
+
 @main.command("query")
 @click.argument("text")
 @click.option("--top", default=8, show_default=True)
@@ -517,6 +582,21 @@ def embed_indexes_cmd(as_json: bool) -> None:
     help="LLM query expansion (multi-query + step-back) for vague queries. "
     "auto = only when the query looks vague/under-served; force = always.",
 )
+@click.option(
+    "--sparse-backend",
+    type=click.Choice(["bm25", "learned"]),
+    default=None,
+    help="Sparse retrieval channel fused with dense: bm25 (tantivy, default) or "
+    "learned (impact-weighted inverted index). Default = RAG_LIT_SPARSE_BACKEND or bm25.",
+)
+@click.option(
+    "--graph/--no-graph",
+    "graph",
+    default=None,
+    help="Graph retrieval arm (HippoRAG-2-style citation+kNN PPR) for relational/multi-hop "
+    "queries. Default (unset) = auto: the router runs the graph arm only for queries it "
+    "classifies as 'relational' (see: route). --graph forces it; --no-graph disables it.",
+)
 @click.option("--json", "as_json", is_flag=True, help="Emit JSON for LLM agents.")
 def query_cmd(
     text: str,
@@ -534,6 +614,8 @@ def query_cmd(
     raptor: bool,
     raptor_mode: str,
     expand: str,
+    sparse_backend: str | None,
+    graph: bool | None,
     as_json: bool,
 ) -> None:
     """Semantic search over the graph layout corpus."""
@@ -543,24 +625,50 @@ def query_cmd(
             err=True,
         )
         sys.exit(1)
+
+    # Query router (P2.2): graph arm on for --graph, off for --no-graph, and for
+    # the default (auto) only when the query classifies as relational/multi-hop.
+    from rag_literature_rag.query.routing import classify_query_regime
+
+    use_graph = graph if graph is not None else (classify_query_regime(text) == "relational")
     try:
-        results = search(
-            text,
-            top=top,
-            tag=tag,
-            category=category,
-            pdf_only=pdf_only,
-            source=source,
-            year_min=year_min,
-            embed_profile=embed_profile,
-            rerank=rerank,
-            hybrid=hybrid,
-            small_to_big=small_to_big,
-            raptor=raptor,
-            raptor_mode=raptor_mode,
-            max_per_doc=max_per_doc,
-            expand=expand,
-        )
+        if use_graph:
+            from rag_literature_rag.query.graph_arm import graph_search
+            from rag_literature_rag.query.retrieve import RetrieveFilters
+
+            results = graph_search(
+                text,
+                top=top,
+                embed_profile=embed_profile,
+                hybrid=hybrid,
+                max_per_doc=max_per_doc,
+                filters=RetrieveFilters(
+                    tag=tag,
+                    source=source,
+                    year_min=year_min,
+                    category=category,
+                    pdf_only=pdf_only,
+                ),
+            )
+        else:
+            results = search(
+                text,
+                top=top,
+                tag=tag,
+                category=category,
+                pdf_only=pdf_only,
+                source=source,
+                year_min=year_min,
+                embed_profile=embed_profile,
+                rerank=rerank,
+                hybrid=hybrid,
+                small_to_big=small_to_big,
+                raptor=raptor,
+                raptor_mode=raptor_mode,
+                max_per_doc=max_per_doc,
+                expand=expand,
+                sparse_backend=sparse_backend,
+            )
     except ValueError as exc:
         click.echo(str(exc), err=True)
         sys.exit(1)
@@ -580,6 +688,97 @@ def query_cmd(
         click.echo(f"   {r['source_url']}")
         click.echo(f"   {r['excerpt'][:200]}...")
         click.echo()
+
+
+@main.command("research")
+@click.argument("question")
+@click.option(
+    "--top", default=8, show_default=True, help="Hybrid retrieval depth per sub-question."
+)
+@click.option(
+    "--max-docs",
+    default=12,
+    show_default=True,
+    type=click.IntRange(min=1, max=12),
+    help="Cap on unique docs summarized/synthesized (also caps evidence LLM calls).",
+)
+@click.option(
+    "--depth",
+    default=2,
+    show_default=True,
+    type=click.IntRange(min=1, max=2),
+    help="1 = single synthesis; 2 = allow one iterate round if evidence is insufficient.",
+)
+@click.option(
+    "--dry-run", is_flag=True, help="Retrieval + citation expansion only; ZERO LLM calls."
+)
+@click.option("--embed-profile", default=None, help="Named embed profile (must match index).")
+@click.option("--rerank/--no-rerank", "rerank", default=None, help="Local cross-encoder rerank.")
+@click.option("--hybrid/--no-hybrid", "hybrid", default=DEFAULT_HYBRID, show_default=True)
+@click.option(
+    "--graph-arm/--no-graph-arm",
+    "graph_arm",
+    default=True,
+    show_default=True,
+    help="Use query/graph_arm.py as the retrieval strategy if present (else plain hybrid).",
+)
+@click.option("--tag", default=None, help="Filter by tag substring.")
+@click.option("--category", default=None, help="Filter by pipeline category slug.")
+@click.option("--source", default=None, help="Filter by source.")
+@click.option("--year-min", type=int, default=None)
+@click.option("--pdf-only", is_flag=True, help="Exclude metadata-only documents.")
+@click.option("--json", "as_json", is_flag=True, help="Emit the structured JSON agent surface.")
+def research_cmd(
+    question: str,
+    top: int,
+    max_docs: int,
+    depth: int,
+    dry_run: bool,
+    embed_profile: str | None,
+    rerank: bool | None,
+    hybrid: bool,
+    graph_arm: bool,
+    tag: str | None,
+    category: str | None,
+    source: str | None,
+    year_min: int | None,
+    pdf_only: bool,
+    as_json: bool,
+) -> None:
+    """Deep-research a QUESTION: decompose, gather+cite-expand, summarize, synthesize (cited)."""
+    from rag_literature_rag.query.research import render_markdown, research
+
+    if category and category not in PIPELINE_CATEGORIES:
+        click.echo(
+            f"Unknown category {category!r}. Choose from: {', '.join(PIPELINE_CATEGORIES)}",
+            err=True,
+        )
+        sys.exit(1)
+    try:
+        result = research(
+            question,
+            top=top,
+            max_docs=max_docs,
+            depth=depth,
+            dry_run=dry_run,
+            embed_profile=embed_profile,
+            rerank=rerank,
+            hybrid=hybrid,
+            graph_arm=graph_arm,
+            tag=tag,
+            category=category,
+            source=source,
+            year_min=year_min,
+            pdf_only=pdf_only,
+        )
+    except ValueError as exc:
+        click.echo(str(exc), err=True)
+        sys.exit(1)
+
+    if as_json:
+        click.echo(json.dumps(result, indent=2))
+        return
+    click.echo(render_markdown(result))
 
 
 @main.command("catalog")
