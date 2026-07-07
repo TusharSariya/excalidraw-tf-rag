@@ -2,7 +2,10 @@ name: Build & Push Images
 
 on:
   push:
+    branches: [master] # prod — a merge is a push to master, no separate trigger needed
+  pull_request:
     branches: [master]
+    types: [opened, synchronize] # staging — every push to an open PR
   workflow_dispatch:
 
 permissions:
@@ -11,8 +14,11 @@ permissions:
 
 # A distinct group from ci.yml's, so the two workflows never cancel each other.
 # cancel-in-progress is safe here (not just convenient): the "image already
-# exists for this SHA" check in build-push makes a cancelled/superseded run
-# for an older commit harmless to skip.
+# exists for this tag" check in build-push makes a cancelled/superseded run
+# harmless to skip. For pull_request events github.ref is the stable
+# refs/pull/<N>/merge ref (unchanged across pushes to the same PR), so
+# repeated pushes to one open PR naturally cancel/queue against each other
+# here too — no special-casing needed for the staging case.
 concurrency:
   group: build-push-images-${{ github.ref }}
   cancel-in-progress: true
@@ -37,7 +43,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          BASE="${{ github.event.before }}"
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            ENVIRONMENT="staging"
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            ENVIRONMENT="prod"
+            BASE="${{ github.event.before }}"
+          fi
+
           BUILD_ALL=false
           if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]] || ! git cat-file -e "$BASE" 2>/dev/null; then
             # No usable base ref (first push of a branch, force-push, or a
@@ -71,8 +84,8 @@ jobs:
             # Validate the derived ECR repo name against ECR's allowed
             # charset/case before ever including it in the matrix — fail
             # loudly rather than silently mis-deriving a name like
-            # "excalidraw-tf-rag/." for a root-level Dockerfile.
-            image_name="excalidraw-tf-rag/${dir}"
+            # "excalidraw-tf-rag/./staging" for a root-level Dockerfile.
+            image_name="excalidraw-tf-rag/${dir}/${ENVIRONMENT}"
             if [[ ! "$image_name" =~ ^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$ ]]; then
               echo "::error::derived ECR repo name '${image_name}' (from ${df}) is invalid — refusing to build"
               exit 1
@@ -86,8 +99,8 @@ jobs:
             fi
 
             if [[ "$changed" == true ]]; then
-              entry=$(jq -nc --arg dir "$dir" --arg dockerfile "$df" --arg image "$image_name" \
-                '{context: $dir, dockerfile: $dockerfile, image_name: $image}')
+              entry=$(jq -nc --arg dir "$dir" --arg dockerfile "$df" --arg image "$image_name" --arg env "$ENVIRONMENT" \
+                '{context: $dir, dockerfile: $dockerfile, image_name: $image, environment: $env}')
               MATRIX_JSON=$(jq -c --argjson e "$entry" '. + [$e]' <<<"$MATRIX_JSON")
             fi
           done
@@ -95,7 +108,7 @@ jobs:
           COUNT=$(jq 'length' <<<"$MATRIX_JSON")
           echo "matrix={\"include\":$MATRIX_JSON}" >> "$GITHUB_OUTPUT"
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
-          echo "::notice::discovered $COUNT changed image(s): $MATRIX_JSON"
+          echo "::notice::discovered $COUNT changed image(s) for $ENVIRONMENT: $MATRIX_JSON"
 
   # ---- Build & push each changed image --------------------------------
   build-push:
@@ -162,20 +175,39 @@ jobs:
           aws ecr put-lifecycle-policy --repository-name "$NAME" \
             --lifecycle-policy-text file://.github/ecr-lifecycle-policy.json
 
-      - name: Check if this commit's image already exists
+      - name: Determine image tag
+        id: tag
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.environment }}" == "staging" ]]; then
+            # A version number means nothing per-commit on an in-progress PR —
+            # tag staging images by commit SHA instead.
+            echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            # prod: tag with this package's own pyproject.toml version. Not
+            # enforced to have been bumped — if it wasn't, the push below
+            # fails on ImageTagAlreadyExistsException (IMMUTABLE repo), which
+            # is the only guardrail for now, not a dedicated PR gate. All
+            # current image directories are uv-managed Python packages
+            # (this repo's CLAUDE.md); a future non-Python Dockerfile'd
+            # package without a pyproject.toml isn't handled here.
+            VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('${{ matrix.context }}/pyproject.toml','rb'))['project']['version'])")
+            echo "tag=${VERSION}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check if this image tag already exists
         id: check-existing
         run: |
           set -euo pipefail
           NAME="${{ matrix.image_name }}"
-          SHA="${{ github.sha }}"
+          TAG="${{ steps.tag.outputs.tag }}"
           # IMMUTABLE repos reject re-pushing an existing tag. A workflow
           # re-run (manual retry, workflow_dispatch on an unchanged tree)
-          # for the same commit must not hard-fail on
-          # ImageTagAlreadyExistsException.
+          # must not hard-fail on ImageTagAlreadyExistsException.
           EXISTS=$(aws ecr batch-get-image --repository-name "$NAME" \
-            --image-ids imageTag="$SHA" --query 'images[0]' --output text)
+            --image-ids imageTag="$TAG" --query 'images[0]' --output text)
           if [[ "$EXISTS" != "None" ]]; then
-            echo "::notice::image ${NAME}:${SHA} already exists — skipping build"
+            echo "::notice::image ${NAME}:${TAG} already exists — skipping build"
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"
@@ -193,6 +225,6 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             --file "${{ matrix.dockerfile }}" \
-            --tag "${REPO_URL}:${{ github.sha }}" \
+            --tag "${REPO_URL}:${{ steps.tag.outputs.tag }}" \
             --push \
             "${{ matrix.context }}"
