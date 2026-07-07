@@ -1,0 +1,230 @@
+name: Build & Push Images
+
+on:
+  push:
+    branches: [master] # prod — a merge is a push to master, no separate trigger needed
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize] # staging — every push to an open PR
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # required for aws-actions/configure-aws-credentials OIDC
+
+# A distinct group from ci.yml's, so the two workflows never cancel each other.
+# cancel-in-progress is safe here (not just convenient): the "image already
+# exists for this tag" check in build-push makes a cancelled/superseded run
+# harmless to skip. For pull_request events github.ref is the stable
+# refs/pull/<N>/merge ref (unchanged across pushes to the same PR), so
+# repeated pushes to one open PR naturally cancel/queue against each other
+# here too — no special-casing needed for the staging case.
+concurrency:
+  group: build-push-images-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---- Discover every Dockerfile, filter to directories that changed -------
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build-matrix.outputs.matrix }}
+      count: ${{ steps.build-matrix.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # actions/checkout defaults to fetch-depth: 1, which makes
+          # github.event.before unreachable — without full history the diff
+          # step below always falls through to "build everything".
+          fetch-depth: 0
+
+      - name: Discover changed Dockerfile directories
+        id: build-matrix
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            ENVIRONMENT="staging"
+            BASE="${{ github.event.pull_request.base.sha }}"
+          else
+            ENVIRONMENT="prod"
+            BASE="${{ github.event.before }}"
+          fi
+
+          BUILD_ALL=false
+          if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]] || ! git cat-file -e "$BASE" 2>/dev/null; then
+            # No usable base ref (first push of a branch, force-push, or a
+            # shallow-history edge case) — build everything rather than
+            # silently building nothing. Deliberately NOT falling back to
+            # HEAD~1: a push can contain multiple commits, and diffing only
+            # the last one can miss an earlier commit's changes in the same
+            # push.
+            echo "::notice::no usable base ref ($BASE) — building everything"
+            BUILD_ALL=true
+          fi
+
+          CHANGED_FILES=""
+          if [[ "$BUILD_ALL" == false ]]; then
+            CHANGED_FILES="$(git diff -z --name-only "$BASE" "${{ github.sha }}" | tr '\0' '\n')"
+          fi
+
+          mapfile -d '' -t DOCKERFILES < <(
+            find . -type f -name Dockerfile \
+              -not -path '*/.venv/*' \
+              -not -path '*/node_modules/*' \
+              -not -path '*/.git/*' \
+              -print0 | sort -z
+          )
+
+          MATRIX_JSON='[]'
+          for df in "${DOCKERFILES[@]}"; do
+            df="${df#./}"
+            dir="$(dirname "$df")"
+
+            # Validate the derived ECR repo name against ECR's allowed
+            # charset/case before ever including it in the matrix — fail
+            # loudly rather than silently mis-deriving a name like
+            # "excalidraw-tf-rag/./staging" for a root-level Dockerfile.
+            image_name="excalidraw-tf-rag/${dir}/${ENVIRONMENT}"
+            if [[ ! "$image_name" =~ ^[a-z0-9]+([._-][a-z0-9]+)*(/[a-z0-9]+([._-][a-z0-9]+)*)*$ ]]; then
+              echo "::error::derived ECR repo name '${image_name}' (from ${df}) is invalid — refusing to build"
+              exit 1
+            fi
+
+            changed=false
+            if [[ "$BUILD_ALL" == true ]]; then
+              changed=true
+            elif grep -qF "${dir}/" <<<"$CHANGED_FILES"; then
+              changed=true
+            fi
+
+            if [[ "$changed" == true ]]; then
+              entry=$(jq -nc --arg dir "$dir" --arg dockerfile "$df" --arg image "$image_name" --arg env "$ENVIRONMENT" \
+                '{context: $dir, dockerfile: $dockerfile, image_name: $image, environment: $env}')
+              MATRIX_JSON=$(jq -c --argjson e "$entry" '. + [$e]' <<<"$MATRIX_JSON")
+            fi
+          done
+
+          COUNT=$(jq 'length' <<<"$MATRIX_JSON")
+          echo "matrix={\"include\":$MATRIX_JSON}" >> "$GITHUB_OUTPUT"
+          echo "count=$COUNT" >> "$GITHUB_OUTPUT"
+          echo "::notice::discovered $COUNT changed image(s) for $ENVIRONMENT: $MATRIX_JSON"
+
+  # ---- Build & push each changed image --------------------------------
+  build-push:
+    needs: discover
+    if: needs.discover.outputs.count != '0'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
+    env:
+      AWS_REGION: us-east-1
+      AWS_ACCOUNT_ID: "992382747916"
+      # Constructed from a fixed account ID + fixed IAM role name, not copied
+      # from a Terraform output — the role name is static
+      # (aws-account-infra live/aws/staging/workloads/rag/image_push_oidc.tf,
+      # aws_iam_role.github_ecr_push.name = "github-ci-ecr-push"), so the ARN
+      # is fully deterministic.
+      ECR_PUSH_ROLE_ARN: arn:aws:iam::992382747916:role/github-ci-ecr-push
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.ECR_PUSH_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Log in to ECR
+        # configure-aws-credentials only sets up AWS API credentials — it does
+        # NOT authenticate the Docker CLI to ECR. This step is separate and
+        # required.
+        run: |
+          aws ecr get-login-password --region "$AWS_REGION" \
+            | docker login --username AWS --password-stdin \
+              "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
+
+      - name: Ensure ECR repository exists
+        run: |
+          set -euo pipefail
+          NAME="${{ matrix.image_name }}"
+
+          # Attempt creation directly rather than describe-then-create: two
+          # concurrent runs for a brand-new image could otherwise both see
+          # "not found" before either create call lands (TOCTOU). Tolerate
+          # only "already exists"; any other failure must still fail the job.
+          set +e
+          CREATE_ERR=$(aws ecr create-repository --repository-name "$NAME" \
+            --image-tag-mutability IMMUTABLE \
+            --image-scanning-configuration scanOnPush=true 2>&1)
+          CREATE_EXIT=$?
+          set -e
+          if [[ $CREATE_EXIT -ne 0 ]] && ! grep -q "RepositoryAlreadyExistsException" <<<"$CREATE_ERR"; then
+            echo "$CREATE_ERR" >&2
+            exit 1
+          fi
+
+          # Apply scanning + lifecycle policy on EVERY run, unconditionally —
+          # not gated on "did we just create it". A prior run could have
+          # created the repo but failed before this step, and a
+          # describe-then-skip approach would permanently never retry it.
+          # Both calls are idempotent.
+          aws ecr put-image-scanning-configuration --repository-name "$NAME" \
+            --image-scanning-configuration scanOnPush=true
+          aws ecr put-lifecycle-policy --repository-name "$NAME" \
+            --lifecycle-policy-text file://.github/ecr-lifecycle-policy.json
+
+      - name: Determine image tag
+        id: tag
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.environment }}" == "staging" ]]; then
+            # A version number means nothing per-commit on an in-progress PR —
+            # tag staging images by commit SHA instead.
+            echo "tag=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            # prod: tag with this package's own pyproject.toml version. Not
+            # enforced to have been bumped — if it wasn't, the push below
+            # fails on ImageTagAlreadyExistsException (IMMUTABLE repo), which
+            # is the only guardrail for now, not a dedicated PR gate. All
+            # current image directories are uv-managed Python packages
+            # (this repo's CLAUDE.md); a future non-Python Dockerfile'd
+            # package without a pyproject.toml isn't handled here.
+            VERSION=$(python3 -c "import tomllib; print(tomllib.load(open('${{ matrix.context }}/pyproject.toml','rb'))['project']['version'])")
+            echo "tag=${VERSION}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check if this image tag already exists
+        id: check-existing
+        run: |
+          set -euo pipefail
+          NAME="${{ matrix.image_name }}"
+          TAG="${{ steps.tag.outputs.tag }}"
+          # IMMUTABLE repos reject re-pushing an existing tag. A workflow
+          # re-run (manual retry, workflow_dispatch on an unchanged tree)
+          # must not hard-fail on ImageTagAlreadyExistsException.
+          EXISTS=$(aws ecr batch-get-image --repository-name "$NAME" \
+            --image-ids imageTag="$TAG" --query 'images[0]' --output text)
+          if [[ "$EXISTS" != "None" ]]; then
+            echo "::notice::image ${NAME}:${TAG} already exists — skipping build"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Set up Docker Buildx
+        if: steps.check-existing.outputs.skip == 'false'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        if: steps.check-existing.outputs.skip == 'false'
+        run: |
+          set -euo pipefail
+          REPO_URL="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/${{ matrix.image_name }}"
+          docker buildx build \
+            --platform linux/amd64 \
+            --file "${{ matrix.dockerfile }}" \
+            --tag "${REPO_URL}:${{ steps.tag.outputs.tag }}" \
+            --push \
+            "${{ matrix.context }}"
