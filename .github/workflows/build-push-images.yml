@@ -145,6 +145,54 @@ jobs:
             | docker login --username AWS --password-stdin \
               "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 
+      - name: Verify prod version doesn't already exist (pre-merge check)
+        # Only for staging (pull_request) runs — this is the pre-merge gate:
+        # if the eventual prod push would collide on an un-bumped version,
+        # fail fast here, before any AWS mutation (repo creation below), not
+        # after merge. Deliberate tradeoff: this also blocks this image's own
+        # staging build/push for this PR until the version is bumped.
+        if: matrix.environment == 'staging'
+        run: |
+          set -euo pipefail
+          PROD_NAME="excalidraw-tf-rag/${{ matrix.context }}/prod"
+          VERSION=$(python3 -c "
+          import tomllib
+          with open('${{ matrix.context }}/pyproject.toml', 'rb') as f:
+              try:
+                  print(tomllib.load(f)['project']['version'])
+              except (tomllib.TOMLDecodeError, KeyError) as e:
+                  raise SystemExit(f'malformed pyproject.toml or missing [project].version: {e}')
+          ")
+
+          set +e
+          OUTPUT=$(aws ecr batch-get-image --repository-name "$PROD_NAME" \
+            --image-ids imageTag="$VERSION" 2>&1)
+          EXIT=$?
+          set -e
+
+          if [[ $EXIT -ne 0 ]]; then
+            # Only tolerate the prod repo not existing yet (brand-new image,
+            # nothing to collide with). Every other error (throttling,
+            # access-denied, network) must fail closed, not silently pass.
+            if grep -q "RepositoryNotFoundException" <<<"$OUTPUT"; then
+              echo "::notice::prod repo $PROD_NAME doesn't exist yet — version $VERSION is fine"
+            else
+              echo "$OUTPUT" >&2
+              exit 1
+            fi
+          else
+            # batch-get-image exits 0 even when the repo exists but the tag
+            # doesn't — absence shows up as a failure entry, not a nonzero
+            # exit. Check the actual images array, don't infer from exit
+            # code alone.
+            IMAGE_COUNT=$(jq '.images | length' <<<"$OUTPUT")
+            if [[ "$IMAGE_COUNT" -gt 0 ]]; then
+              echo "::error::prod tag ${PROD_NAME}:${VERSION} already exists — bump pyproject.toml's version before merging"
+              exit 1
+            fi
+            echo "::notice::prod tag ${PROD_NAME}:${VERSION} does not exist yet — OK to merge"
+          fi
+
       - name: Ensure ECR repository exists
         run: |
           set -euo pipefail
@@ -228,3 +276,40 @@ jobs:
             --tag "${REPO_URL}:${{ steps.tag.outputs.tag }}" \
             --push \
             "${{ matrix.context }}"
+
+  # ---- Stable-named aggregator: the required status check for branch
+  # protection. `build-push` is a dynamic per-Dockerfile matrix, so its check
+  # name isn't fixed as images get added/removed — branch protection can't
+  # point at it directly. This job has one fixed name and reports overall
+  # pass/fail instead.
+  build-push-images-gate:
+    needs: [discover, build-push]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check pipeline results
+        run: |
+          set -euo pipefail
+          DISCOVER="${{ needs.discover.result }}"
+          BUILD_PUSH="${{ needs.build-push.result }}"
+          COUNT="${{ needs.discover.outputs.count }}"
+
+          if [[ "$DISCOVER" != "success" ]]; then
+            echo "::error::discover job did not succeed ($DISCOVER)"
+            exit 1
+          fi
+
+          if [[ "$BUILD_PUSH" == "success" ]]; then
+            echo "gate passed"
+            exit 0
+          fi
+          # Only accept "skipped" for the ONE legitimate reason (discover
+          # found nothing to build) — not skipped-for-any-reason. GitHub
+          # treats a skipped required check as passing, so accepting any
+          # skip unconditionally would be a bypass for a required check.
+          if [[ "$BUILD_PUSH" == "skipped" && "$COUNT" == "0" ]]; then
+            echo "gate passed (nothing to build)"
+            exit 0
+          fi
+          echo "::error::build-push job did not succeed ($BUILD_PUSH, discover count=$COUNT)"
+          exit 1
