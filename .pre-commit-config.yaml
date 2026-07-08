@@ -38,6 +38,15 @@ repos:
       # .gitignore, in case a secret is ever staged directly.
       - id: gitleaks
 
+  - repo: https://github.com/rhysd/actionlint
+    rev: v1.7.7
+    hooks:
+      # Schema + expression validation for workflow YAML — catches things
+      # like referencing `secrets` directly inside an `if:` (invalid GH
+      # Actions syntax that breaks the whole workflow file, not just one
+      # step) before it ever reaches GitHub.
+      - id: actionlint
+
   - repo: local
     hooks:
       - id: check-supabase-migrations
@@ -45,3 +54,12 @@ repos:
         entry: scripts/check-supabase-migrations.sh
         language: script
         pass_filenames: false
+      - id: act-workflow-checks
+        name: dry-run changed workflows with act
+        entry: scripts/run-act-checks.sh
+        language: script
+        # Only fires when a workflow file is actually part of the push —
+        # everyday pushes stay fast; the Docker/act cost is paid only when
+        # you're editing .github/workflows/ (the situation this session's
+        # two bugs both came from).
+        files: ^\.github/workflows/.*\.ya?ml$
