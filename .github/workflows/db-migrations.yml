@@ -22,14 +22,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      - name: Confirm deploy secrets are configured
+        if: ${{ secrets.SUPABASE_ACCESS_TOKEN == '' || secrets.SUPABASE_DB_PASSWORD == '' }}
+        run: |
+          echo "::error::SUPABASE_ACCESS_TOKEN and/or SUPABASE_DB_PASSWORD repo secrets are not set — the post-merge apply job will fail. Set them before merging (gh secret set SUPABASE_ACCESS_TOKEN / SUPABASE_DB_PASSWORD)."
+          exit 1
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
         with:
           version: "2.109.1" # pinned, not "latest" — reproducible runs
       - name: Apply migrations against a fresh local Postgres
         run: |
-          supabase start --workdir v3/supabase
-          supabase db reset --workdir v3/supabase
+          supabase start --workdir v3
+          supabase db reset --workdir v3
 
   apply:
     if: github.event_name == 'push'
@@ -44,8 +49,20 @@ jobs:
         with:
           version: "2.109.1"
       - name: Link project
-        run: supabase link --project-ref vumvzcugxbnkfnujpjjc --workdir v3/supabase
+        run: supabase link --project-ref vumvzcugxbnkfnujpjjc --workdir v3
       - name: Apply migrations
-        run: supabase db push --workdir v3/supabase
+        run: supabase db push --workdir v3
       - name: Verify applied
-        run: supabase migration list --linked --workdir v3/supabase
+        run: |
+          set -euo pipefail
+          OUTPUT=$(supabase migration list --linked --workdir v3 --output-format json)
+          echo "$OUTPUT"
+          # Fail loudly on any local migration whose remote column is empty —
+          # db push can silently no-op (e.g. a workdir/path mismatch pointing
+          # it at an empty migrations dir) and still exit 0. Don't let that
+          # report as a successful deploy again.
+          UNAPPLIED=$(jq '[.migrations[] | select(.remote == "")] | length' <<<"$OUTPUT")
+          if [[ "$UNAPPLIED" -gt 0 ]]; then
+            echo "::error::$UNAPPLIED local migration(s) are not applied on the remote database"
+            exit 1
+          fi
