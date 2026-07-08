@@ -37,3 +37,11 @@ repos:
       # Catches OPENAI/OPENALEX/Gemini tokens etc. — defence in depth beyond
       # .gitignore, in case a secret is ever staged directly.
       - id: gitleaks
+
+  - repo: local
+    hooks:
+      - id: check-supabase-migrations
+        name: check supabase migrations (filename + RLS)
+        entry: scripts/check-supabase-migrations.sh
+        language: script
+        pass_filenames: false
