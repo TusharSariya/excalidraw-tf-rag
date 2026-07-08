@@ -1,9 +1,10 @@
 import os
-from pydantic import Field
-from pydantic_settings import BaseSettings,SettingsConfigDict
+
 import arxiv
-from urllib.request import urlretrieve
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from semanticscholar import SemanticScholar
+
 
 def main() -> None:
     print("Hello from harvest!")
@@ -19,11 +20,10 @@ def main() -> None:
 
     sch = SemanticScholar()
 
-
-    schpaper_id ="ARXIV:"+settings.arxiv_id 
-    authors = sch.get_paper_authors(schpaper_id, fields=["name","authorId"])
-    references = sch.get_paper_references(schpaper_id, ["title","paperId"])
-    citations = sch.get_paper_citations(schpaper_id, fields=["title","paperId"],limit=100)
+    schpaper_id = "ARXIV:" + settings.arxiv_id
+    authors = sch.get_paper_authors(schpaper_id, fields=["name", "authorId"])
+    references = sch.get_paper_references(schpaper_id, ["title", "paperId"])
+    citations = sch.get_paper_citations(schpaper_id, fields=["title", "paperId"], limit=100)
 
     print("authors:")
     for author in authors:
@@ -31,11 +31,11 @@ def main() -> None:
 
     print("refferences:")
     for ref in references:
-        print(ref.paper.paperId,ref.paper.title)
+        print(ref.paper.paperId, ref.paper.title)
 
     print("citations (first 100):")
     for cite in citations.items:
-        print(cite.paper.paperId,cite.paper.title)
+        print(cite.paper.paperId, cite.paper.title)
 
 
 class HarvestSettings(BaseSettings):
