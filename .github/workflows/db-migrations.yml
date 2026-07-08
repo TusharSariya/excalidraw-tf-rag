@@ -3,10 +3,8 @@ name: DB Migrations
 on:
   pull_request:
     branches: [master]
-    paths: ["v3/supabase/migrations/**"]
   push:
     branches: [master]
-    paths: ["v3/supabase/migrations/**"]
   workflow_dispatch:
 
 permissions:
@@ -23,13 +21,48 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check for migration changes
+        id: changed
+        run: |
+          set -euo pipefail
+          BASE="${{ github.event.pull_request.base.sha }}"
+          if git diff --name-only "$BASE" "${{ github.sha }}" | grep -q '^v3/supabase/migrations/'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::no migration files changed — skipping validate"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+      # No path filter on the workflow trigger itself — required status checks
+      # need to report on every PR, including ones that don't touch migrations
+      # (a required-but-path-filtered check never runs at all, which GitHub
+      # treats as permanently pending and blocks the merge indefinitely).
+      # Gating steps instead of the trigger keeps the job always reporting a
+      # real pass/fail while still skipping the actual work when unneeded.
+      - name: Confirm deploy secrets are configured
+        if: steps.changed.outputs.changed == 'true'
+        # GitHub Actions doesn't allow referencing `secrets` directly inside
+        # an `if:` conditional — route through env first. These two env vars
+        # hold only a boolean (secrets.X != ''), never the real secret value,
+        # so this doesn't expose real credentials on a PR-triggered run.
+        env:
+          HAS_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+          HAS_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD != '' }}
+        run: |
+          if [[ "$HAS_ACCESS_TOKEN" != "true" || "$HAS_DB_PASSWORD" != "true" ]]; then
+            echo "::error::SUPABASE_ACCESS_TOKEN and/or SUPABASE_DB_PASSWORD repo secrets are not set — the post-merge apply job will fail. Set them before merging (gh secret set SUPABASE_ACCESS_TOKEN / SUPABASE_DB_PASSWORD)."
+            exit 1
+          fi
       - uses: supabase/setup-cli@v1
+        if: steps.changed.outputs.changed == 'true'
         with:
           version: "2.109.1" # pinned, not "latest" — reproducible runs
       - name: Apply migrations against a fresh local Postgres
+        if: steps.changed.outputs.changed == 'true'
         run: |
-          supabase start --workdir v3/supabase
-          supabase db reset --workdir v3/supabase
+          supabase start --workdir v3
+          supabase db reset --workdir v3
 
   apply:
     if: github.event_name == 'push'
@@ -40,12 +73,46 @@ jobs:
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check for migration changes
+        id: changed
+        run: |
+          set -euo pipefail
+          BASE="${{ github.event.before }}"
+          BUILD_ALL=false
+          if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]] || ! git cat-file -e "$BASE" 2>/dev/null; then
+            echo "::notice::no usable base ref ($BASE) — checking anyway"
+            BUILD_ALL=true
+          fi
+          if [[ "$BUILD_ALL" == true ]] || git diff --name-only "$BASE" "${{ github.sha }}" | grep -q '^v3/supabase/migrations/'; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::no migration files changed — skipping apply"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: supabase/setup-cli@v1
+        if: steps.changed.outputs.changed == 'true'
         with:
           version: "2.109.1"
       - name: Link project
-        run: supabase link --project-ref vumvzcugxbnkfnujpjjc --workdir v3/supabase
+        if: steps.changed.outputs.changed == 'true'
+        run: supabase link --project-ref vumvzcugxbnkfnujpjjc --workdir v3
       - name: Apply migrations
-        run: supabase db push --workdir v3/supabase
+        if: steps.changed.outputs.changed == 'true'
+        run: supabase db push --workdir v3
       - name: Verify applied
-        run: supabase migration list --linked --workdir v3/supabase
+        if: steps.changed.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          OUTPUT=$(supabase migration list --linked --workdir v3 --output-format json)
+          echo "$OUTPUT"
+          # Fail loudly on any local migration whose remote column is empty —
+          # db push can silently no-op (e.g. a workdir/path mismatch pointing
+          # it at an empty migrations dir) and still exit 0. Don't let that
+          # report as a successful deploy again.
+          UNAPPLIED=$(jq '[.migrations[] | select(.remote == "")] | length' <<<"$OUTPUT")
+          if [[ "$UNAPPLIED" -gt 0 ]]; then
+            echo "::error::$UNAPPLIED local migration(s) are not applied on the remote database"
+            exit 1
+          fi
