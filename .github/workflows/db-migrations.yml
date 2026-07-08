@@ -1,0 +1,51 @@
+name: DB Migrations
+
+on:
+  pull_request:
+    branches: [master]
+    paths: ["v3/supabase/migrations/**"]
+  push:
+    branches: [master]
+    paths: ["v3/supabase/migrations/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-migrations-vumvzcugxbnkfnujpjjc
+  cancel-in-progress: false # never cancel an in-flight apply; queue instead
+
+jobs:
+  validate:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: "2.109.1" # pinned, not "latest" — reproducible runs
+      - name: Apply migrations against a fresh local Postgres
+        run: |
+          supabase start --workdir v3/supabase
+          supabase db reset --workdir v3/supabase
+
+  apply:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: "2.109.1"
+      - name: Link project
+        run: supabase link --project-ref vumvzcugxbnkfnujpjjc --workdir v3/supabase
+      - name: Apply migrations
+        run: supabase db push --workdir v3/supabase
+      - name: Verify applied
+        run: supabase migration list --linked --workdir v3/supabase
