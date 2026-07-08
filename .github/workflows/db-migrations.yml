@@ -41,10 +41,19 @@ jobs:
       # Gating steps instead of the trigger keeps the job always reporting a
       # real pass/fail while still skipping the actual work when unneeded.
       - name: Confirm deploy secrets are configured
-        if: steps.changed.outputs.changed == 'true' && (secrets.SUPABASE_ACCESS_TOKEN == '' || secrets.SUPABASE_DB_PASSWORD == '')
+        if: steps.changed.outputs.changed == 'true'
+        # GitHub Actions doesn't allow referencing `secrets` directly inside
+        # an `if:` conditional — route through env first. These two env vars
+        # hold only a boolean (secrets.X != ''), never the real secret value,
+        # so this doesn't expose real credentials on a PR-triggered run.
+        env:
+          HAS_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+          HAS_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD != '' }}
         run: |
-          echo "::error::SUPABASE_ACCESS_TOKEN and/or SUPABASE_DB_PASSWORD repo secrets are not set — the post-merge apply job will fail. Set them before merging (gh secret set SUPABASE_ACCESS_TOKEN / SUPABASE_DB_PASSWORD)."
-          exit 1
+          if [[ "$HAS_ACCESS_TOKEN" != "true" || "$HAS_DB_PASSWORD" != "true" ]]; then
+            echo "::error::SUPABASE_ACCESS_TOKEN and/or SUPABASE_DB_PASSWORD repo secrets are not set — the post-merge apply job will fail. Set them before merging (gh secret set SUPABASE_ACCESS_TOKEN / SUPABASE_DB_PASSWORD)."
+            exit 1
+          fi
       - uses: supabase/setup-cli@v1
         if: steps.changed.outputs.changed == 'true'
         with:
