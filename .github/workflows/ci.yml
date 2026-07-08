@@ -15,6 +15,19 @@ permissions:
   contents: read
 
 jobs:
+  # ---- Workflow file validation: schema + expression syntax ---------------
+  # Same check as the local pre-push hook (.pre-commit-config.yaml), run for
+  # real here so a bypassed/missing local hook doesn't slip a broken workflow
+  # file (e.g. `secrets` referenced directly inside an `if:`) past review.
+  workflow-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download actionlint
+        run: bash <(curl -s https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.7
+      - name: Run actionlint
+        run: ./actionlint -color
+
   # ---- Lint & format: standalone ruff, no package install needed ----------
   lint:
     runs-on: ubuntu-latest
