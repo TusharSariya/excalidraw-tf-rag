@@ -12,5 +12,5 @@ RUN useradd --create-home --uid 1000 --shell /usr/sbin/nologin harvest \
 COPY --from=builder --chown=harvest:harvest /app/.venv /app/.venv
 COPY --from=builder --chown=harvest:harvest /app/src /app/src
 USER harvest
-ENV PATH="/app/.venv/bin:$PATH" HOME=/home/harvest
+ENV PATH="/app/.venv/bin:$PATH" HOME=/home/harvest PYTHONUNBUFFERED=1
 ENTRYPOINT ["harvest"]

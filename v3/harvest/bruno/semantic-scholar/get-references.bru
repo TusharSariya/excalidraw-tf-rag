@@ -1,0 +1,21 @@
+meta {
+  name: Get references
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{ss_base}}/paper/ARXIV:{{arxiv_id}}/references?fields=title,externalIds&limit=100
+  body: none
+  auth: none
+}
+
+params:query {
+  fields: title,externalIds
+  limit: 100
+}
+
+docs {
+  Papers this paper cites. limit=100 matches the cap used in
+  fetch_semantic_scholar_metadata() / SemanticScholarSource.get_references.
+}

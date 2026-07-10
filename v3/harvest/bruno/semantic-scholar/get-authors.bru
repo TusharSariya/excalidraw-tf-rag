@@ -1,0 +1,20 @@
+meta {
+  name: Get authors
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{ss_base}}/paper/ARXIV:{{arxiv_id}}/authors?fields=name,authorId
+  body: none
+  auth: none
+}
+
+params:query {
+  fields: name,authorId
+}
+
+docs {
+  Author list for the paper. Matches the (name, authorId) fields consumed by
+  SemanticScholarSource.get_authors in src/harvest/sources/semantic_scholar.py.
+}
