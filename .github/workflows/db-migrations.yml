@@ -63,6 +63,20 @@ jobs:
         run: |
           supabase start --workdir v3
           supabase db reset --workdir v3
+      - uses: astral-sh/setup-uv@v5
+        if: steps.changed.outputs.changed == 'true'
+      - name: Fan-out end-to-end test (local stack)
+        if: steps.changed.outputs.changed == 'true'
+        # Pre-merge proof of the actual fan-out, against the ephemeral stack this
+        # job just provisioned — no secrets, no staging pollution. The post-merge
+        # `e2e` job re-runs the same script against real staging.
+        run: |
+          set -euo pipefail
+          SUPABASE_KEY="$(supabase status --workdir v3 -o env | sed -n 's/^SERVICE_ROLE_KEY=//p' | tr -d '"')"
+          export SUPABASE_URL=http://127.0.0.1:54321
+          export SUPABASE_KEY
+          export SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres
+          uv run v3/supabase/tests/e2e_fanout.py
 
   apply:
     if: github.event_name == 'push'
