@@ -53,6 +53,17 @@ uv run --no-project --with pytest --with pytest-asyncio pytest tests/test_schedu
 
 Changing a package's dependencies requires re-running `uv lock` in that package — CI's `lock-check` job fails on `pyproject.toml`/`uv.lock` drift (`gpu-gateway` ships no lock; torch is installed out-of-band).
 
+## Versioned packages & changelogs
+
+Some packages publish a Docker image via the `build-push` CI workflow, tagged with the `version` in their `pyproject.toml` (e.g. `v3/harvest`). The workflow's version guard **rejects re-publishing a tag that already exists in prod ECR** — prod publishes on merge to `master`, so a merged version is permanently taken.
+
+**When you change a versioned package and push, keep three things in sync:**
+1. **Bump `version` in its `pyproject.toml`** (and re-run `uv lock`).
+2. **Add a `CHANGELOG.md` entry** under that version.
+3. **Update its `README.md`** if the architecture, configuration, or usage changed.
+
+(Docs-only edits that don't ship in the image don't need a bump. A package may carry its own `CLAUDE.md` with additional, package-specific rules.)
+
 ## Embedding profiles
 
 Both RAG tools resolve embeddings through named profiles in `rag-common/src/rag_common/embed_profiles.toml` (built-ins) merged with a tool-local `embed_profiles.toml` override (see `ingest/embed.py` in each tool). List them with `uv run <tool> embed profiles`. Production profiles are the `cuda-*` (CUDA/bitsandbytes 4-bit) and `local-fp16-*`/`qwen3-code` (plain sentence-transformers) profiles — pick a profile by the quant/device it names, not by assuming a specific backend.
