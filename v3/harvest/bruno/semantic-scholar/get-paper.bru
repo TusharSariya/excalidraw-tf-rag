@@ -1,0 +1,21 @@
+meta {
+  name: Get paper
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{ss_base}}/paper/ARXIV:{{arxiv_id}}?fields=title,externalIds,openAccessPdf
+  body: none
+  auth: none
+}
+
+params:query {
+  fields: title,externalIds,openAccessPdf
+}
+
+docs {
+  Mirrors fetch_semantic_scholar_metadata() — the paper lookup keyed by ARXIV:<id>.
+  externalIds yields the DOI; openAccessPdf feeds find_open_access_pdf_url().
+  Unauthenticated (public) tier — no API key.
+}

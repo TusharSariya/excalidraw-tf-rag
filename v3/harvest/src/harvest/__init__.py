@@ -1,49 +1,68 @@
+import io
+import logging
 import os
+import sys
 
-import arxiv
-from pydantic import Field
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from semanticscholar import SemanticScholar
+import pdfplumber
+import requests
+from supabase import Client, create_client
+
+from .settings import HarvestSettings
+from .sources import ArxivSource, SemanticScholarSource
+
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    stream=sys.stdout,
+)
+logger = logging.getLogger("harvest")
+
+
+def paper_exists(supabase: Client, arxiv_id: str) -> bool:
+    logger.info("checking papers table for existing arxiv_id=%s", arxiv_id)
+    existing = supabase.table("papers").select("paper_id").eq("arxiv_id", arxiv_id).execute()
+    if existing.data:
+        logger.info("paper already in db, paper_id=%s", existing.data[0]["paper_id"])
+        return True
+    logger.info("paper not found in db, proceeding to harvest")
+    return False
+
+
+def download_and_extract_text(pdf_url: str) -> str:
+    resp = requests.get(pdf_url)
+    resp.raise_for_status()
+    with pdfplumber.open(io.BytesIO(resp.content)) as pdf:
+        return "\n".join(page.extract_text() or "" for page in pdf.pages)
 
 
 def main() -> None:
-    print("Hello from harvest!")
-    openalex_api_key = os.environ.get("OPENALEX_API_KEY")
-    print(openalex_api_key)
+    logger.info("starting harvest")
     settings = HarvestSettings()
-    print(settings.openalex_api_key)
-    print(settings.arxiv_id)
-    paper = next(arxiv.Client().results(arxiv.Search(id_list=[settings.arxiv_id])))
-    print(paper)
-    print(paper.pdf_url)
-    print(paper.source_url())
+    logger.info("settings loaded: arxiv_id=%s", settings.arxiv_id)
 
-    sch = SemanticScholar()
+    supabase = create_client(settings.supabase_url, settings.supabase_key)
+    if paper_exists(supabase, settings.arxiv_id):
+        return
 
-    schpaper_id = "ARXIV:" + settings.arxiv_id
-    authors = sch.get_paper_authors(schpaper_id, fields=["name", "authorId"])
-    references = sch.get_paper_references(schpaper_id, ["title", "paperId"])
-    citations = sch.get_paper_citations(schpaper_id, fields=["title", "paperId"], limit=100)
+    arxiv_source = ArxivSource()
+    arxiv_paper = arxiv_source.get_paper(settings.arxiv_id)
+    if arxiv_paper is None:
+        return
 
-    print("authors:")
-    for author in authors:
-        print(author.name, author.authorId)
-
-    print("refferences:")
-    for ref in references:
-        print(ref.paper.paperId, ref.paper.title)
-
-    print("citations (first 100):")
-    for cite in citations.items:
-        print(cite.paper.paperId, cite.paper.title)
-
-
-class HarvestSettings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_prefix="",
-        env_file=".env",
-        cli_parse_args=True,
+    s2_source = SemanticScholarSource()
+    authors = s2_source.get_authors(settings.arxiv_id)
+    references = s2_source.get_references(settings.arxiv_id)
+    citations = s2_source.get_citations(settings.arxiv_id)
+    logger.info(
+        "semantic scholar: authors=%d references=%d citations=%d",
+        len(authors),
+        len(references),
+        len(citations),
     )
 
-    openalex_api_key: str | None = None
-    arxiv_id: str | None = Field(default=None, description="Seed arXiv identifier")
+    open_access_url = s2_source.get_pdf_url(settings.arxiv_id)
+    pdf_url = open_access_url or arxiv_paper.pdf_url
+    text = download_and_extract_text(pdf_url)
+    logger.info("extracted %d chars of text from %s", len(text), pdf_url)
+
+    logger.info("harvest run complete for arxiv_id=%s", settings.arxiv_id)

@@ -1,0 +1,20 @@
+meta {
+  name: Fetch arXiv paper
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{arxiv_base}}/query?id_list={{arxiv_id}}
+  body: none
+  auth: none
+}
+
+params:query {
+  id_list: {{arxiv_id}}
+}
+
+docs {
+  Mirrors fetch_arxiv_paper() in src/harvest/__init__.py (the `arxiv` client library).
+  Returns Atom XML metadata for the paper. No auth.
+}

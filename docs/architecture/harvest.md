@@ -191,19 +191,42 @@ anything already harvested.
 
 ### Source APIs
 
-All free. The goal for each is **search → downloadable PDF URL**, so the table notes which
-field yields the PDF. Almost every service wants your email (`mailto=` / `email=` / API
-key) — it's the fast lane, so set a real address from day one.
+The data is free, but **access tiers shifted in 2025–2026 — don't trust old numbers.** Two
+changes matter for an individual on a free-domain email (e.g. `gmail.com`) who isn't paying:
 
-| Source | Base URL | Docs | PDF via | Auth / limits |
+- **Semantic Scholar API keys are effectively unobtainable** for free-domain emails and
+  third-party apps (policy since Sep 2024) — you're stuck on the throttled *shared* pool
+  that returns frequent `429`s.<sup>[5][6]</sup> Treat S2 as best-effort enrichment, never a
+  blocker.
+- **OpenAlex is metered since 13 Feb 2026** — the old "free `mailto=` polite pool, 100k/day"
+  is retired, replaced by a per-day credit *budget*.<sup>[1][2]</sup> A free key (any
+  account) still gets you a usable daily allowance; just not unlimited.
+
+The goal for each source is **search → downloadable PDF URL**, so the table notes which field
+yields the PDF. Set a real email from day one for the polite pools. **Rate limits below
+verified July 2026** — figures are per-source and cite the source doc.
+
+| Source | Base URL | Docs | PDF via | Auth / free-tier limits (verified Jul 2026) |
 |---|---|---|---|---|
-| **OpenAlex** | `https://api.openalex.org` | [docs](https://docs.openalex.org) | `best_oa_location.pdf_url` | none; `mailto=` polite pool; 100k/day |
-| **arXiv** | `http://export.arxiv.org/api/query` | [user manual](https://info.arxiv.org/help/api/user-manual.html) | `<link title="pdf">` or `arxiv.org/pdf/{id}` | none; **≤1 req / 3 s**; returns **Atom XML** |
-| **Unpaywall** | `https://api.unpaywall.org/v2` | [docs](https://unpaywall.org/products/api) | `best_oa_location.url_for_pdf` | `email=` **required**; 100k/day |
-| **Semantic Scholar** | `https://api.semanticscholar.org/graph/v1` | [API docs](https://api.semanticscholar.org/api-docs/) | `openAccessPdf.url` | key recommended; shared pool is throttled |
-| **Crossref** | `https://api.crossref.org` | [docs](https://www.crossref.org/documentation/retrieve-metadata/rest-api/) | — (metadata/refs only) | none; `mailto=` polite pool |
-| **PubMed** (E-utilities) | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/` | [docs](https://www.ncbi.nlm.nih.gov/books/NBK25501/) | — (abstracts only) | 3/s, or 10/s with `api_key=` |
-| **Europe PMC** | `https://www.ebi.ac.uk/europepmc/webservices/rest` | [docs](https://europepmc.org/RestfulWebService) | `fullTextXML` for OA subset | none |
+| **OpenAlex** | `https://api.openalex.org` | [docs](https://docs.openalex.org) | `best_oa_location.pdf_url` | Free key ($1/day budget ≈ **10k list / 1k search / 100 PDF-download** calls; unlimited single-entity lookups); no key = 1/10 that. Metered since 13 Feb 2026.<sup>[1][2]</sup> |
+| **arXiv** | `http://export.arxiv.org/api/query` | [user manual](https://info.arxiv.org/help/api/user-manual.html) | `<link title="pdf">` or `arxiv.org/pdf/{id}` | No key; **≤1 req / 3 s**; returns **Atom XML**.<sup>[3]</sup> |
+| **Unpaywall** | `https://api.unpaywall.org/v2` | [docs](https://unpaywall.org/products/api) | `best_oa_location.url_for_pdf` | `email=` **required** (free, any address); **100k/day**.<sup>[4]</sup> |
+| **Semantic Scholar** | `https://api.semanticscholar.org/graph/v1` | [API docs](https://api.semanticscholar.org/api-docs/) | `openAccessPdf.url` | **No key for free-domain emails / 3rd-party apps** (since Sep 2024) → shared pool only, frequently `429`s. Existing keys ≈1 req/s.<sup>[5][6]</sup> |
+| **Crossref** | `https://api.crossref.org` | [docs](https://www.crossref.org/documentation/retrieve-metadata/rest-api/) | — (metadata/refs only) | No key. Polite pool via `mailto=`: **10 req/s single, 3 req/s lists** (3 concurrent); public pool: 5 / 1. New limits 1 Dec 2025.<sup>[7]</sup> |
+| **PubMed** (E-utilities) | `https://eutils.ncbi.nlm.nih.gov/entrez/eutils/` | [docs](https://www.ncbi.nlm.nih.gov/books/NBK25501/) | — (abstracts only) | **3 req/s** no key; **10 req/s** with a free NCBI `api_key=` (any account can create one).<sup>[8]</sup> |
+| **Europe PMC** | `https://www.ebi.ac.uk/europepmc/webservices/rest` | [docs](https://europepmc.org/RestfulWebService) | `fullTextXML` for OA subset | No key; no hard published limit — stay polite (~a few req/s).<sup>[9]</sup> |
+
+**References** (accessed Jul 2026):
+
+1. OpenAlex — Authentication & pricing: <https://developers.openalex.org/guides/authentication>
+2. OpenAlex — "API keys required starting Feb 13": <https://groups.google.com/g/openalex-users/c/rI1GIAySpVQ>
+3. arXiv — API user manual (rate limits): <https://info.arxiv.org/help/api/user-manual.html>
+4. Unpaywall — REST API (`email=`, 100k/day): <https://unpaywall.org/products/api>
+5. Semantic Scholar — Academic Graph API: <https://www.semanticscholar.org/product/api>
+6. Semantic Scholar — key policy for free-domain emails (Sep 2024): <https://x.com/SemanticScholar/status/1834334430237958546>
+7. Crossref — REST API rate-limit changes (eff. 1 Dec 2025): <https://www.crossref.org/blog/announcing-changes-to-rest-api-rate-limits/>
+8. NCBI — New API keys for the E-utilities (3→10 req/s): <https://ncbiinsights.ncbi.nlm.nih.gov/2017/11/02/new-api-keys-for-the-e-utilities/>
+9. Europe PMC — RESTful web service: <https://europepmc.org/RestfulWebService>
 
 Example calls:
 
@@ -229,12 +252,16 @@ curl 'https://api.crossref.org/works?query=diffusion+models&filter=type:journal-
 **Recommended flow for a paper-heavy (arXiv-dominant) corpus:**
 
 1. **Discover + metadata → OpenAlex** — one clean JSON API, best coverage, OA PDF links,
-   filter by date/topic/venue.
+   filter by date/topic/venue. Use it for *metadata/discovery*, not bulk PDF pulls — the
+   free key's ~100 PDF-download calls/day is the binding cap (see table).
 2. **arXiv preprints → arXiv API** — the PDFs are always freely downloadable
-   (`arxiv.org/pdf/{id}`).
-3. **PDF rescue → Unpaywall** — whenever steps 1–2 didn't yield a `pdf_url`.
-4. *(later, not v1)* **Crossref** for authoritative references, **Semantic Scholar** for
-   the citation graph.
+   (`arxiv.org/pdf/{id}`), and don't touch OpenAlex's download budget. Route PDF *fetching*
+   here first.
+3. **PDF rescue → Unpaywall** — whenever steps 1–2 didn't yield a `pdf_url` (100k/day, free).
+4. *(later, not v1)* **Crossref** for authoritative references (free polite pool), and
+   **Semantic Scholar** for the citation graph — but S2 is **best-effort only**: no key is
+   obtainable for free-domain emails, so keep it off the critical path and back off hard on
+   `429` (see table).
 
 **Gotchas:** arXiv returns **XML** while everything else is JSON; deep pagination uses
 cursors (`cursor=*`) on OpenAlex/Crossref; and bulk arXiv backfill should go through

@@ -1,0 +1,27 @@
+meta {
+  name: Paper exists
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{supabase_url}}/rest/v1/papers?arxiv_id=eq.{{arxiv_id}}&select=paper_id
+  body: none
+  auth: none
+}
+
+params:query {
+  arxiv_id: eq.{{arxiv_id}}
+  select: paper_id
+}
+
+headers {
+  apikey: {{supabase_key}}
+  Authorization: Bearer {{supabase_key}}
+}
+
+docs {
+  Mirrors paper_exists() — the dedupe lookup against the Supabase `papers` table (PostgREST).
+  An empty array in the response means the paper is not yet present.
+  Requires the `supabase_key` secret var (set it in the Bruno app or via --env-var on the CLI).
+}
