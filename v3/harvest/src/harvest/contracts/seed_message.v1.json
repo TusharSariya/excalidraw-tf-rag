@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://excalidraw-tf-rag/harvest/seed_message/v1",
+  "title": "Harvest seed message (v1)",
+  "description": "The envelope public.publish_seed enqueues onto every active harvest_* queue. Thin: it carries only the seed's bigint paper_id; a consumer resolves identity (arxiv_id/doi/corpus) from public.seeds. The `v` field versions the wire format so the payload can evolve without breaking existing consumers.",
+  "type": "object",
+  "required": ["v", "paper_id"],
+  "additionalProperties": false,
+  "properties": {
+    "v": {
+      "const": 1,
+      "description": "Envelope schema version."
+    },
+    "paper_id": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "bigint identity from public.seeds.paper_id."
+    }
+  }
+}
