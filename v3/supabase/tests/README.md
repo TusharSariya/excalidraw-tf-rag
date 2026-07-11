@@ -2,47 +2,45 @@
 
 ## `e2e_fanout.py` — fan-out end-to-end
 
-Proves a seed fans out to every harvest queue, end-to-end, against the
-`_test` mirror surface (`seeds_test`, `publish_seed_test`, `harvest_*_test`
-queues — created by the `create_test_surface` migration). It never touches real
-data or the real `harvest_*` queues, and purges everything it created at the end.
+Proves a seed fans out to every harvest queue, end-to-end, against the **real**
+objects — `public.seeds`, `public.publish_seed`, and the `harvest_arxiv` /
+`harvest_openalex` / `harvest_s2` queues.
 
-Faithful to how the real system works: the **write** goes through the Supabase
-client (the way the seeder pushes); **verify + purge** go over a direct Postgres
-connection (the way the KEDA scaler / worker read pgmq — pgmq is never in the
-REST path).
+It's faithful to how the real system works: a single **direct Postgres**
+connection does the write (the way the seeder pushes — connecting directly and
+calling the `SECURITY INVOKER` `publish_seed`, never PostgREST), the verify, and
+the purge.
 
 It's a self-contained [PEP 723](https://peps.python.org/pep-0723/) script — `uv`
-resolves its deps (`supabase`, `psycopg`) on the fly; no `uv sync` needed.
+resolves its one dep (`psycopg`) on the fly; no `uv sync` needed.
 
-### Run against a local ephemeral stack (no staging pollution)
+> [!WARNING]
+> **This test is destructive.** It purges the real `harvest_*` queues and
+> `truncate`s `public.seeds`. Run it **only against a disposable, ephemeral
+> database** — the local `supabase start` stack (below), or a throwaway preview
+> branch. **Never** point it at staging or prod.
+>
+> As a guard, the script **refuses to run** unless `SUPABASE_DB_URL` points at a
+> loopback host (`127.0.0.1` / `localhost` / `::1`). For a deliberately-disposable
+> remote DB (e.g. a preview branch) set `E2E_ALLOW_NONLOCAL=1` to override.
+
+### Run against a local ephemeral stack
 
 ```bash
 supabase start --workdir v3
-supabase db reset --workdir v3          # replays all migrations, incl. the _test surface
+supabase db reset --workdir v3          # replays all migrations onto a fresh Postgres
 
-# service_role key + DB URL come from `supabase status`
-SUPABASE_URL=http://127.0.0.1:54321 \
-SUPABASE_KEY="$(supabase status --workdir v3 -o env | sed -n 's/^SERVICE_ROLE_KEY=//p' | tr -d '"')" \
 SUPABASE_DB_URL=postgresql://postgres:postgres@127.0.0.1:54322/postgres \
 uv run v3/supabase/tests/e2e_fanout.py
 ```
 
-Expected: each of the three `harvest_*_test` queues shows depth 1 with the
-published `paper_id`, then the finale purge empties them.
-
-### Run against staging
-
-Same command, pointing at staging:
-
-- `SUPABASE_URL=https://vumvzcugxbnkfnujpjjc.supabase.co`
-- `SUPABASE_KEY=<staging service_role key>`
-- `SUPABASE_DB_URL=postgresql://postgres.vumvzcugxbnkfnujpjjc:<DB password>@aws-0-us-east-2.pooler.supabase.com:5432/postgres`
-  (session pooler — IPv4; direct `db.<ref>.supabase.co` is IPv6-only)
+Expected: each of the three `harvest_*` queues shows depth 1 with the published
+`paper_id`, then the finale purge empties them.
 
 ### CI
 
-The `e2e` job in `.github/workflows/db-migrations.yml` runs this on push to
-`master` after the `apply` job has pushed migrations to staging. It needs the
-`SUPABASE_SERVICE_KEY` repo secret (the DB URL is built from the existing
-`SUPABASE_DB_PASSWORD` secret).
+The `validate` job in `.github/workflows/db-migrations.yml` runs this on every PR
+that touches `v3/supabase/migrations/`. It spins up an ephemeral local stack
+(`supabase start` + `supabase db reset`) — a fresh, isolated Postgres built from
+the same migrations and destroyed when the job ends — and runs the script against
+it (`SUPABASE_DB_URL` pointing at `127.0.0.1:54322`). No secrets required.
