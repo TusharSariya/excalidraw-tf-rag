@@ -20,12 +20,7 @@ logger = logging.getLogger("harvest")
 
 def paper_exists(supabase: Client, arxiv_id: str) -> bool:
     logger.info("checking papers table for existing arxiv_id=%s", arxiv_id)
-    existing = (
-        supabase.table("papers")
-        .select("paper_id")
-        .eq("arxiv_id", arxiv_id)
-        .execute()
-    )
+    existing = supabase.table("papers").select("paper_id").eq("arxiv_id", arxiv_id).execute()
     if existing.data:
         logger.info("paper already in db, paper_id=%s", existing.data[0]["paper_id"])
         return True
@@ -60,7 +55,9 @@ def main() -> None:
     citations = s2_source.get_citations(settings.arxiv_id)
     logger.info(
         "semantic scholar: authors=%d references=%d citations=%d",
-        len(authors), len(references), len(citations),
+        len(authors),
+        len(references),
+        len(citations),
     )
 
     open_access_url = s2_source.get_pdf_url(settings.arxiv_id)

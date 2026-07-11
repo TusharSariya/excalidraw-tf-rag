@@ -1,7 +1,7 @@
 import logging
+import pprint
 from dataclasses import dataclass
 from datetime import datetime
-import pprint
 
 import arxiv
 
@@ -51,7 +51,7 @@ class ArxivSource:
             logger.info("search: %s", search)
             results = self._client.results(search)
             logger.info("results: %s", results)
-            paper =next(results)
+            paper = next(results)
             logger.info("paper: %s", paper)
             arxiv_paper = ArxivPaper.from_result(paper)
             logger.info("arxiv_paper: %s", pprint.pformat(arxiv_paper, sort_dicts=False, width=100))

@@ -26,7 +26,6 @@ class SemanticScholarSource:
         logger.info("fetching paper for %s", schpaper_id)
         try:
             paper = self._client.get_paper(schpaper_id)
-            logger.info("paper: %s", pprint.pformat(paper, sort_dicts=False, width=100))
         except ObjectNotFoundException:
             logger.warning("no result for %s (not found)", schpaper_id)
             return None
@@ -47,9 +46,7 @@ class SemanticScholarSource:
         schpaper_id = self._schpaper_id(identifier)
         logger.info("fetching authors for %s", schpaper_id)
         try:
-            authors = self._client.get_paper_authors(
-                schpaper_id, fields=["name", "authorId"]
-            )
+            authors = self._client.get_paper_authors(schpaper_id, fields=["name", "authorId"])
         except ObjectNotFoundException:
             logger.warning("no result for %s (not found)", schpaper_id)
             return []
@@ -62,9 +59,7 @@ class SemanticScholarSource:
         schpaper_id = self._schpaper_id(identifier)
         logger.info("fetching references for %s", schpaper_id)
         try:
-            references = self._client.get_paper_references(
-                schpaper_id, fields=["title", "paperId"]
-            )
+            references = self._client.get_paper_references(schpaper_id, fields=["title", "paperId"])
         except ObjectNotFoundException:
             logger.warning("no result for %s (not found)", schpaper_id)
             return []
