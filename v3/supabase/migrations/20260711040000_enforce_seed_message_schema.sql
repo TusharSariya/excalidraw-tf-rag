@@ -27,9 +27,9 @@ as $$
       "$id": "https://excalidraw-tf-rag/harvest/seed_message/v1",
       "title": "Harvest seed message (v1)",
       "description": "The envelope public.publish_seed enqueues onto every active harvest_* queue. Thin: it carries only the seed's bigint paper_id; a consumer resolves identity (arxiv_id/doi/corpus) from public.seeds. The `v` field versions the wire format so the payload can evolve without breaking existing consumers.",
+      "$comment": "Open content model on purpose (no additionalProperties:false): consumers are tolerant readers — unknown fields are logged and ignored, so an additive producer change never breaks an un-upgraded consumer. required + types stay strict, so a missing/mistyped field or an unrecognized version still fails hard.",
       "type": "object",
       "required": ["v", "paper_id"],
-      "additionalProperties": false,
       "properties": {
         "v": {
           "const": 1,

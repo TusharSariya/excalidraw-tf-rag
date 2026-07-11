@@ -48,8 +48,11 @@ db.py                # NEW — psycopg helpers
 seeder.py            # NEW — harvest-seed  entrypoint
 worker.py            # NEW — harvest-work --source X  entrypoint
 contracts/           # NEW — the seed->message wire contract
-  __init__.py        #   SCHEMA + SeedMessage + parse()
+  __init__.py        #   SCHEMA + parse() (tolerant reader); re-exports SeedMessage
   seed_message.v1.json  # canonical JSON Schema (DB enforces the same one)
+  _seed_message_v1.py   # SeedMessage — GENERATED from the .json (do not hand-edit)
+scripts/
+  regenerate-contracts.sh  # regen _seed_message_v1.py from the .json (pinned)
 sources/
   base.py
   arxiv.py           # fixed: strip stray debug + unreachable code; add typed accessor
@@ -60,18 +63,28 @@ sources/
 ### Message contract (`contracts/`) — **built**
 The seed→message wire format is codified once, portably, and enforced on both ends:
 - **Canonical:** `contracts/seed_message.v1.json` — a versioned JSON Schema.
-  v1 is the thin envelope `{"v": 1, "paper_id": <bigint>}`.
+  v1 is the thin envelope `{"v": 1, "paper_id": <bigint>}`. **Open content model**
+  (no `additionalProperties: false`) on purpose — see the tolerant-reader rule below.
 - **DB (producer) enforcement:** migration `20260711040000` adds `pg_jsonschema`,
   stores the schema as `public.seed_message_schema()`, and makes `publish_seed`
   build `{"v":1,"paper_id":…}` and `jsonb_matches_schema(...)`-validate it before
-  every `pgmq.send` — a drifted payload raises instead of shipping.
-- **Python (consumer) exposure:** `contracts/__init__.py` loads that JSON file and
-  exposes `SCHEMA`, a pydantic `SeedMessage` (`extra="forbid"`), and `parse()`.
-  The worker does `contracts.parse(rec["message"]).paper_id`.
+  every `pgmq.send` — a payload violating the contract (e.g. a null `paper_id`)
+  raises instead of shipping.
+- **Python (consumer) exposure:** `SeedMessage` is **generated** from the `.json`
+  (`_seed_message_v1.py`, via `scripts/regenerate-contracts.sh`, generator pinned);
+  `contracts/__init__.py` re-exports it plus `SCHEMA` and `parse()`. The worker does
+  `contracts.parse(rec["message"]).paper_id`.
+- **Tolerant reader (additive vs breaking):** `parse()` distinguishes change classes
+  by how strictly it reacts — an **additive** unknown field is **logged + ignored**
+  (a new producer never breaks an un-upgraded consumer, so additive needs no
+  synchronized deploy); a **subtractive/modified** message (missing required field,
+  wrong type, unrecognized `v`) raises `ValidationError`. This is why the sync
+  burden (drift tests, expand-contract) only applies to breaking changes.
 - **Two physical copies** (the `.json` file + the SQL literal in
   `seed_message_schema()`) because SQL migrations can't read files. **Add a drift
   guard test** (local stack): assert `select public.seed_message_schema()` equals
-  `contracts.SCHEMA`.
+  `contracts.SCHEMA`. A second guard: `regenerate-contracts.sh` + `git diff --exit-code`
+  proves the committed model matches the schema.
 
 ### `settings.py`
 Add `corpus: str | None`, `doi: str | None`, `source: str | None`, and
