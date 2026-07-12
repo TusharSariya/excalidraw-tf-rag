@@ -651,6 +651,21 @@ Verify: a `papers` row (`status='succeeded'`), a `source_arxiv` + `source_semant
 
 ## Repo 3 — Ansible/Helm (`aws-account-infra/ansible/`)
 
+> [!NOTE]
+> **Reconciled build (2026-07-11).** The sketch below predates the shipped worker; the
+> actual deployment (the `cluster_harvester` role in `aws-account-infra`) differs on a few
+> points — trust these where they disagree:
+> - **Worker transport is Supabase REST** (`pgmq_public`), so the pod env is
+>   `SUPABASE_URL` + `SUPABASE_SERVICE_KEY`, **not** a worker DB DSN. There is no
+>   `harvester_worker` DB role — only `harvester_keda_ro` (for the KEDA scaler).
+> - **Image is the versioned prod tag**
+>   `992382747916.dkr.ecr.us-east-1.amazonaws.com/excalidraw-tf-rag/v3/harvest/prod:<ver>`
+>   (published on merge to master). The container `ENTRYPOINT` is `["harvest"]`, so the
+>   ScaledJob overrides `command: ["harvest-work","--source","<src>"]`.
+> - **ECR pull** uses a node **kubelet credential provider** fed by a scoped read-only IAM
+>   user (provisioned in Terraform) — **no `imagePullSecret`**, no refresh CronJob.
+> - Schema is the current `seeds`/bigint model; `publish_seed(bigint)`.
+
 Mirror `roles/cluster_apps` exactly: Helmfile via `command`, raw manifests via
 Jinja→`kubectl apply`, vault→`kubectl create secret --dry-run|apply`, versions pinned in
 `defaults/main.yml`.
