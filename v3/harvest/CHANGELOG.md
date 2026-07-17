@@ -4,6 +4,58 @@ Notable changes to the `harvest` package. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions match `pyproject.toml`
 (the image tag the `build-push` CI guard checks against prod ECR).
 
+## [0.6.0]
+
+### Added
+- `OpenAlexSource` — the third `PaperSource`, backed by the **pyalex** SDK (OpenAlex's
+  own recommended Python client) rather than raw REST calls. Completes the source set
+  the queues have fanned out to since `20260710235341`; `harvest_openalex` messages
+  have been draining as no-ops until now.
+  - Unlike arXiv, OpenAlex has a citation graph, so `get_references` / `get_citations`
+    return real data. References resolve in batches (`openalex:W1|W2|…`) rather than
+    one lookup per reference.
+  - Retries 429/5xx (pyalex defaults to `max_retries=0`, which would turn a transient
+    rate-limit into a hard failure indistinguishable from a real fetch error).
+  - The API key is optional but raises the free allowance from ~$0.10/day to ~$1/day;
+    read from `OPENALEX_API_KEY`, and its absence is logged rather than assumed.
+
+### Fixed
+- **`ArxivSource.get_authors()` raised `AttributeError` on every call.** `_fetch` is
+  annotated `-> arxiv.Result | None` but actually returns an `ArxivPaper`, whose
+  `authors` was a `list[str]` — so `author.name` ran against a plain string. Nothing
+  caught it because no handler calls `get_authors` yet; it would have surfaced the
+  moment the per-source handler landed.
+- Removed unreachable code in `ArxivSource._fetch` (a `logger.info` + `return paper`
+  after the `except` blocks, which the `try` can never fall through to) and the
+  per-paper `pprint` dump left over from debugging.
+
+### Changed
+- **`ArxivPaper` no longer flattens nested library objects** — it was losing data on
+  the way in, which is the one thing a harvester must not do, since re-fetching is the
+  expensive, rate-limited step:
+  - `authors: list[str]` → `list[dict]`. `arxiv.Author` carries `affiliation` as well
+    as `name`; a name-only list dropped it.
+  - `links: list[str]` → `list[dict]`. `arxiv.Result.Link` carries `title`, `rel` and
+    `content_type` — the labels identifying *which* link is the PDF. Bare hrefs force
+    string-matching `arxiv.org/pdf` to find it back.
+  - New `as_raw()` for the `source_arxiv.raw` column. Note it is a faithful projection
+    of `arxiv.Result`, not the Atom XML: the client keeps no `_raw`, unlike the
+    OpenAlex/S2 SDKs which hand back dicts.
+  - Paired with migration `20260716200000_source_arxiv_lossless.sql`. Safe to reshape
+    in place — all three `source_*` tables are empty, since no handler writes yet.
+
+### Notes
+- **`OpenAlexSource`'s `identifier` is a DOI or OpenAlex id — NOT an arXiv id**, unlike
+  the other two sources. This is forced, not chosen: OpenAlex has no arXiv filter, and
+  arXiv's own DOI (`10.48550/arXiv.<id>`) does not resolve (404). Title search is not a
+  usable fallback — searching "Attention Is All You Need" returns a `type: preprint`
+  dated 2025 whose PDF sits on a scraping mirror. A harvester would upsert that
+  happily, so the source returns `None` rather than guessing.
+- `public.seeds` already carries `openalex_id` and `doi` columns, and the planned
+  `get_identity()` reads `arxiv_id`/`doi` — so the caller passes the identity that fits
+  the source. A seed with only an `arxiv_id` cannot be harvested from OpenAlex without
+  first resolving a DOI elsewhere (Semantic Scholar's `externalIds` carries one).
+
 ## [0.5.0]
 
 ### Added
