@@ -1,5 +1,4 @@
 import logging
-import pprint
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -30,7 +29,12 @@ class ArxivSource:
         result = self._fetch(identifier)
         if result is None:
             return []
-        return [Author(name=author.name) for author in result.authors]
+        # ArxivPaper.authors is [{"name", "affiliation"}] — arxiv.Author objects are
+        # kept whole rather than flattened, so read the key, not an attribute. (This
+        # line previously did `author.name` against a list[str] and raised
+        # AttributeError on every call; nothing caught it because no handler calls
+        # get_authors yet.) arXiv exposes no stable per-author id, hence no author_id.
+        return [Author(name=a["name"]) for a in result.authors if a.get("name")]
 
     def get_references(self, identifier: str) -> list[Paper]:
         # arXiv has no citation graph — always empty, by design.
@@ -44,19 +48,11 @@ class ArxivSource:
         result = self._fetch(identifier)
         return result.pdf_url if result else None
 
-    def _fetch(self, arxiv_id: str) -> arxiv.Result | None:
+    def _fetch(self, arxiv_id: str) -> "ArxivPaper | None":
         logger.info("fetching metadata for %s", arxiv_id)
         try:
-            search = arxiv.Search(id_list=[arxiv_id])
-            logger.info("search: %s", search)
-            results = self._client.results(search)
-            logger.info("results: %s", results)
-            paper = next(results)
-            logger.info("paper: %s", paper)
-            arxiv_paper = ArxivPaper.from_result(paper)
-            logger.info("arxiv_paper: %s", pprint.pformat(arxiv_paper, sort_dicts=False, width=100))
-            return arxiv_paper
-
+            results = self._client.results(arxiv.Search(id_list=[arxiv_id]))
+            paper = ArxivPaper.from_result(next(results))
         except StopIteration:
             logger.warning("no result for arxiv_id=%s (not found)", arxiv_id)
             return None
@@ -71,18 +67,22 @@ class ArxivSource:
 class ArxivPaper:
     """Every field from an ``arxiv.Result``, kept before projecting to ``Paper``.
 
-    Nested library objects are flattened: ``authors`` becomes a list of names
-    and ``links`` a list of hrefs.
+    Nested library objects are kept WHOLE, not flattened to strings. They used to be
+    (``authors`` as names, ``links`` as hrefs) and that quietly lost data: ``Author``
+    carries ``affiliation``, and ``Link`` carries ``title``/``rel``/``content_type`` —
+    the labels that identify which link is the PDF. Harvest is the expensive,
+    rate-limited step, so nothing is dropped on the way in; see migration
+    ``20260716200000_source_arxiv_lossless.sql``.
     """
 
     entry_id: str
     title: str
-    authors: list[str]
+    authors: list[dict]
     summary: str
     primary_category: str
     categories: list[str]
     pdf_url: str
-    links: list[str]
+    links: list[dict]
     published: datetime
     updated: datetime
     comment: str | None = None
@@ -94,15 +94,50 @@ class ArxivPaper:
         return cls(
             entry_id=result.entry_id,
             title=result.title,
-            authors=[author.name for author in result.authors],
+            authors=[
+                {"name": a.name, "affiliation": getattr(a, "affiliation", None)}
+                for a in result.authors
+            ],
             summary=result.summary,
             primary_category=result.primary_category,
             categories=list(result.categories),
             pdf_url=result.pdf_url,
-            links=[link.href for link in result.links],
+            links=[
+                {
+                    "href": link.href,
+                    "title": link.title,
+                    "rel": link.rel,
+                    "content_type": getattr(link, "content_type", None),
+                }
+                for link in result.links
+            ],
             published=result.published,
             updated=result.updated,
             comment=result.comment,
             journal_ref=result.journal_ref,
             doi=result.doi,
         )
+
+    def as_raw(self) -> dict:
+        """The payload for ``source_arxiv.raw``.
+
+        arxiv.Result has no ``_raw``, so the Atom XML the API actually returned is not
+        recoverable from the client — this is a faithful projection of every public
+        attribute instead. Datetimes are ISO strings so the dict is json-serialisable
+        straight into a jsonb column.
+        """
+        return {
+            "entry_id": self.entry_id,
+            "title": self.title,
+            "authors": self.authors,
+            "summary": self.summary,
+            "primary_category": self.primary_category,
+            "categories": self.categories,
+            "pdf_url": self.pdf_url,
+            "links": self.links,
+            "published": self.published.isoformat() if self.published else None,
+            "updated": self.updated.isoformat() if self.updated else None,
+            "comment": self.comment,
+            "journal_ref": self.journal_ref,
+            "doi": self.doi,
+        }

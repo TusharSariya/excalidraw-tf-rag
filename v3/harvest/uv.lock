@@ -225,11 +225,12 @@ wheels = [
 
 [[package]]
 name = "harvest"
-version = "0.5.0"
+version = "0.6.0"
 source = { editable = "." }
 dependencies = [
     { name = "arxiv" },
     { name = "pdfplumber" },
+    { name = "pyalex" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
     { name = "requests" },
@@ -241,6 +242,7 @@ dependencies = [
 requires-dist = [
     { name = "arxiv", specifier = ">=4.0.0" },
     { name = "pdfplumber", specifier = ">=0.11.10" },
+    { name = "pyalex", specifier = ">=0.21" },
     { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pydantic-settings", specifier = ">=2.14.2" },
     { name = "requests", specifier = ">=2.33.1" },
@@ -539,6 +541,19 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/88/fb/46dad6c0ae49ed230ab1b16c890c2b6314e2403e6c412976f4a72d64a527/propcache-0.5.2-cp314-cp314t-win_amd64.whl", hash = "sha256:d447bb0b3054be5818458fbb171208b1d9ff11eba14e18ca18b90cbb45767370", size = 47764, upload-time = "2026-05-08T21:02:07.353Z" },
     { url = "https://files.pythonhosted.org/packages/e7/c4/a47d0a63aa309d10d59ede6e9d4cff03a344a79d1f0f4cd0cd74997b53e0/propcache-0.5.2-cp314-cp314t-win_arm64.whl", hash = "sha256:fe67a3d11cd9b4efabfa45c3d00ffba2b26811442a73a581a94b67c2b5faccf6", size = 41140, upload-time = "2026-05-08T21:02:09.065Z" },
     { url = "https://files.pythonhosted.org/packages/3a/ed/1cdcab6ba3d6ab7feca11fc14f0eeea80755bb53ef4e892079f31b10a25f/propcache-0.5.2-py3-none-any.whl", hash = "sha256:be1ddfcbb376e3de5d2e2db1d58d6d67463e6b4f9f040c000de8e300295465fe", size = 14036, upload-time = "2026-05-08T21:02:10.673Z" },
+]
+
+[[package]]
+name = "pyalex"
+version = "0.21"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "urllib3" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c7/8a/5e270c3d6021a873667be7469fb95b00e0584593d57b7773ef0db6841cef/pyalex-0.21.tar.gz", hash = "sha256:39f470885187e0e411798d34163453361a3834c4dae53f0a18f272475b749741", size = 52593, upload-time = "2026-02-23T14:11:13.421Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c2/b6/714246176f5ad319dc1d06607a093570bc3d2c37de6d5583e106762883a5/pyalex-0.21-py3-none-any.whl", hash = "sha256:988c37eb31ee3d23176b431d37f7e18c37817317d976237abcc6f3c02f92396f", size = 15761, upload-time = "2026-02-23T14:11:12.523Z" },
 ]
 
 [[package]]
