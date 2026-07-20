@@ -1,4 +1,4 @@
-"""Mapper tests: PaperRecord → S2GraphWrite."""
+"""Mapper tests: S2Record → S2GraphWrite."""
 
 from __future__ import annotations
 
@@ -6,12 +6,12 @@ from dataclasses import replace
 
 import pytest
 from harvest.persistence.models.s2 import SPECTER_V1_DIM, from_paper_record
-from harvest.sources.models.s2 import Embedding, PaperRecord
+from harvest.sources.models.s2 import Embedding, S2Record
 
 
 def test_from_paper_record_builds_graph(s2_paper_forceatlas2: dict) -> None:
     # Fixture vector is truncated; strip so mapper does not require 768.
-    rec = replace(PaperRecord.from_dict(s2_paper_forceatlas2), embedding=None)
+    rec = replace(S2Record.from_dict(s2_paper_forceatlas2), embedding=None)
     write = from_paper_record(rec)
 
     assert rec.paper_id is not None
@@ -46,11 +46,11 @@ def test_from_paper_record_builds_graph(s2_paper_forceatlas2: dict) -> None:
 
 def test_from_paper_record_requires_paper_id() -> None:
     with pytest.raises(ValueError, match="paper_id is required"):
-        from_paper_record(PaperRecord())
+        from_paper_record(S2Record())
 
 
 def test_embedding_row_requires_specter_dim(s2_paper_forceatlas2: dict) -> None:
-    rec = PaperRecord.from_dict(s2_paper_forceatlas2)
+    rec = S2Record.from_dict(s2_paper_forceatlas2)
     assert rec.embedding is not None
     assert rec.embedding.vector is not None
     assert len(rec.embedding.vector) != SPECTER_V1_DIM
@@ -59,7 +59,7 @@ def test_embedding_row_requires_specter_dim(s2_paper_forceatlas2: dict) -> None:
 
 
 def test_embedding_row_accepts_specter_dim(s2_paper_forceatlas2: dict) -> None:
-    rec = PaperRecord.from_dict(s2_paper_forceatlas2)
+    rec = S2Record.from_dict(s2_paper_forceatlas2)
     assert rec.paper_id is not None
     vector = [0.0] * SPECTER_V1_DIM
     rec = replace(

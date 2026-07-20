@@ -4,6 +4,39 @@ Notable changes to the `harvest` package. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions match `pyproject.toml`
 (the image tag the `build-push` CI guard checks against prod ECR).
 
+## [0.8.0]
+
+### Added
+- arXiv persistence: `harvest.persistence.models.arxiv` maps a fetched
+  `arxiv.Result` to a `source_arxiv` upsert (`SourceArxivRow` + `arxiv_write`),
+  wired into `harvest-work` as the arxiv source's `build_write`. Nested
+  `Author`/`Link` objects are projected to jsonb (affiliation and link labels
+  kept), alongside a faithful `raw` projection. No migration — `source_arxiv`
+  was already lossless (`20260716200000`).
+
+### Fixed
+- arXiv worker no longer crashes on persist. The arxiv source was wired to
+  `s2_write`, which requires an S2 record's `paper_id`; it raised
+  `AttributeError` on every fetched paper and left the message for redelivery
+  until the poison cap marked it error. It now uses the arxiv-specific writer.
+- `ArxivSource.get_paper` returns `arxiv.Result` directly and maps a genuine
+  not-found (`StopIteration` on an empty first page) to `None`; transient
+  failures (`HTTPError`/`ConnectionError`, after the client's own `num_retries`)
+  propagate so the worker leaves the message for pgmq redelivery rather than
+  mislabelling a live paper not-found.
+- `SupabaseSettings` loads `.env` with `extra="ignore"` and without
+  `cli_parse_args`, so instantiating it outside the entrypoint no longer tries
+  to re-parse `--source`.
+
+### Changed
+- Renamed `PaperRecord` → `S2Record` (the Semantic Scholar record DTO) across
+  sources, persistence, and tests — it is S2-specific, not a generic record.
+
+### Known gaps
+- `openalex` is still wired to `s2_write` and will raise the same way arxiv did
+  once a seed resolves an OpenAlex id; it needs its own `SourceOpenAlexRow` +
+  `openalex_write`.
+
 ## [0.7.0]
 
 ### Added

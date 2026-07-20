@@ -270,7 +270,7 @@ class RelatedPaper:
 
 
 @dataclass(frozen=True)
-class PaperRecord:
+class S2Record:
     """Full typed Semantic Scholar paper record (adapter over API / SDK payload)."""
 
     paper_id: str | None = None
@@ -300,10 +300,10 @@ class PaperRecord:
     references: list[RelatedPaper] | None = None
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> PaperRecord:
+    def from_dict(cls, data: dict[str, Any]) -> S2Record:
         unknown = set(data) - TOP_LEVEL_KEYS
         if unknown:
-            raise ValueError(f"PaperRecord: unknown top-level field(s) {sorted(unknown)}")
+            raise ValueError(f"S2Record: unknown top-level field(s) {sorted(unknown)}")
 
         citations_raw = data.get("citations")
         references_raw = data.get("references")
@@ -344,5 +344,5 @@ class PaperRecord:
         )
 
     @classmethod
-    def from_sdk(cls, paper: SemanticScholarPaper) -> PaperRecord:
+    def from_sdk(cls, paper: SemanticScholarPaper) -> S2Record:
         return cls.from_dict(dict(paper.raw_data))

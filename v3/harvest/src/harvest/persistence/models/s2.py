@@ -1,4 +1,4 @@
-"""Table-shaped DTOs for public.s2_* + PaperRecord → S2GraphWrite mapper."""
+"""Table-shaped DTOs for public.s2_* + S2Record → S2GraphWrite mapper."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ from harvest.persistence.base import TableRow, Write
 from harvest.sources.models.s2 import (
     Author,
     Embedding,
-    PaperRecord,
     RelatedPaper,
+    S2Record,
 )
 from pydantic import Field
 
@@ -150,7 +150,7 @@ class SourceSemanticScholarRow(TableRow):
 
 @dataclass(frozen=True)
 class S2GraphWrite:
-    """Multi-table upsert payload derived from one PaperRecord."""
+    """Multi-table upsert payload derived from one S2Record."""
 
     papers: list[S2PaperRow]
     authors: list[S2AuthorRow]
@@ -188,7 +188,7 @@ def _fos_json(
 
 
 def paper_row_from(
-    paper: PaperRecord | RelatedPaper,
+    paper: S2Record | RelatedPaper,
     *,
     fetched_at: datetime | None = None,
     include_tldr: bool = False,
@@ -201,7 +201,7 @@ def paper_row_from(
     oa = paper.open_access_pdf
     venue = paper.publication_venue
     tldr_model = tldr_text = None
-    if include_tldr and isinstance(paper, PaperRecord) and paper.tldr is not None:
+    if include_tldr and isinstance(paper, S2Record) and paper.tldr is not None:
         tldr_model = paper.tldr.model
         tldr_text = paper.tldr.text
 
@@ -303,18 +303,18 @@ def _absorb_authors(
 
 
 def from_paper_record(
-    record: PaperRecord,
+    record: S2Record,
     *,
     fetched_at: datetime | None = None,
 ) -> S2GraphWrite:
-    """Pure mapper: one API PaperRecord → multi-table upsert payload.
+    """Pure mapper: one API S2Record → multi-table upsert payload.
 
     Subject paper wins on id collisions with citation/reference stubs.
     Authors and edges are deduped by natural key. Papers without paper_id
     are dropped. Embedding is included only when present and dim == 768.
     """
     if not record.paper_id:
-        raise ValueError("PaperRecord.paper_id is required for S2GraphWrite")
+        raise ValueError("S2Record.paper_id is required for S2GraphWrite")
 
     now = fetched_at if fetched_at is not None else datetime.now(UTC)
     papers: dict[str, S2PaperRow] = {}
@@ -381,14 +381,14 @@ def from_paper_record(
 
 def outcome_row_from(
     seed_paper_id: int,
-    record: PaperRecord,
+    record: S2Record,
     *,
     fetched_at: datetime | None = None,
 ) -> SourceSemanticScholarRow:
     """Build the ``source_semantic_scholar`` success row for one fetched record.
 
     Keyed by the seed's bigint id; S2's own id lands in ``s2_paper_id``. ``raw``
-    stays None — PaperRecord does not retain the API payload (unlike the arxiv /
+    stays None — S2Record does not retain the API payload (unlike the arxiv /
     openalex adapters), so there is nothing faithful to store there yet.
     """
     oa = record.open_access_pdf
@@ -409,7 +409,7 @@ def outcome_row_from(
 
 def s2_write(
     seed_paper_id: int,
-    record: PaperRecord,
+    record: S2Record,
     *,
     fetched_at: datetime | None = None,
 ) -> Write:

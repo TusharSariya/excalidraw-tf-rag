@@ -24,7 +24,14 @@ class HarvestSettings(BaseSettings):
 
 
 class SupabaseSettings(BaseSettings):
-    """Settings for the Supabase client."""
+    """Settings for the Supabase client.
+
+    Loads `.env` like `HarvestSettings`, but without `cli_parse_args`: it is
+    instantiated on its own (not as the entrypoint's arg-parsing settings), so it
+    must not try to re-parse the CLI (e.g. `--source`).
+    """
+
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     supabase_url: str | None = None
     supabase_service_key: str | None = None

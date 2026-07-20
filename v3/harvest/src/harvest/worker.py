@@ -20,7 +20,7 @@ from typing import Any
 
 from . import contracts
 from .persistence.base import Write
-from .persistence.models import Seed, s2_write
+from .persistence.models import Seed, arxiv_write, s2_write
 from .persistence.supabase import SupabasePersistence
 from .settings import HarvestSettings, SupabaseSettings, WorkerSettings
 from .sources.arxiv import ArxivSource
@@ -51,7 +51,7 @@ SOURCES: dict[str, Source] = {
         "harvest_arxiv",
         lambda _: ArxivSource(),
         identify=[lambda seed: seed.arxiv_id],
-        build_write=s2_write,
+        build_write=arxiv_write,
     ),
     "openalex": Source(
         "harvest_openalex",
