@@ -1,0 +1,1973 @@
+{
+  "paperId": "443ee74236492a8863eacaf9fabbedf30827cc55",
+  "externalIds": {
+    "MAG": "2028695285",
+    "PubMedCentral": "4051631",
+    "DOI": "10.1371/journal.pone.0098679",
+    "CorpusId": 14763635,
+    "PubMed": "24914678"
+  },
+  "corpusId": 14763635,
+  "publicationVenue": {
+    "id": "0aed7a40-85f3-4c66-9e1b-c1556c57001b",
+    "name": "PLoS ONE",
+    "type": "journal",
+    "alternate_names": [
+      "Plo ONE",
+      "PLOS ONE",
+      "PLO ONE"
+    ],
+    "issn": "1932-6203",
+    "url": "https://journals.plos.org/plosone/",
+    "alternate_urls": [
+      "http://www.plosone.org/"
+    ]
+  },
+  "url": "https://www.semanticscholar.org/paper/443ee74236492a8863eacaf9fabbedf30827cc55",
+  "title": "ForceAtlas2, a Continuous Graph Layout Algorithm for Handy Network Visualization Designed for the Gephi Software",
+  "venue": "PLoS ONE",
+  "year": 2014,
+  "referenceCount": 26,
+  "citationCount": 2782,
+  "influentialCitationCount": 207,
+  "isOpenAccess": true,
+  "openAccessPdf": {
+    "url": "https://journals.plos.org/plosone/article/file?id=10.1371/journal.pone.0098679&type=printable",
+    "status": "GOLD",
+    "license": "CCBY",
+    "disclaimer": "Notice: Paper or abstract available at https://pmc.ncbi.nlm.nih.gov/articles/PMC4051631, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+  },
+  "fieldsOfStudy": [
+    "Medicine"
+  ],
+  "s2FieldsOfStudy": [
+    {
+      "category": "Medicine",
+      "source": "external"
+    },
+    {
+      "category": "Computer Science",
+      "source": "s2-fos-model"
+    },
+    {
+      "category": "Biology",
+      "source": "s2-fos-model"
+    }
+  ],
+  "tldr": {
+    "model": "tldr@v2.0.0",
+    "text": "ForceAtlas2 is a force-directed layout close to other algorithms used for network spatialization, designed for the Gephi user experience, and proposed for the first time as a benchmark for the compromise between performance and quality."
+  },
+  "publicationTypes": [
+    "JournalArticle"
+  ],
+  "publicationDate": "2014-06-10",
+  "journal": {
+    "name": "PLoS ONE",
+    "volume": "9"
+  },
+  "citationStyles": {
+    "bibtex": "@Article{Jacomy2014ForceAtlas2AC,\n author = {Mathieu Jacomy and T. Venturini and Sebastien Heymann and Mathieu Bastian},\n booktitle = {PLoS ONE},\n journal = {PLoS ONE},\n title = {ForceAtlas2, a Continuous Graph Layout Algorithm for Handy Network Visualization Designed for the Gephi Software},\n volume = {9},\n year = {2014}\n}\n"
+  },
+  "embedding": {
+    "model": "specter_v1",
+    "vector": [
+      -5.85711145401001,
+      -4.807072639465332,
+      -1.7123006582260132,
+      -0.2024673968553543,
+      -0.6760315895080566,
+      -2.2071590423583984,
+      -1.688475489616394,
+      -1.4647185802459717
+    ]
+  },
+  "authors": [
+    {
+      "authorId": "1933458",
+      "externalIds": {
+        "DBLP": [
+          "Mathieu Jacomy"
+        ]
+      },
+      "url": "https://www.semanticscholar.org/author/1933458",
+      "name": "Mathieu Jacomy",
+      "affiliations": [],
+      "homepage": null,
+      "paperCount": 54,
+      "citationCount": 14746,
+      "hIndex": 15
+    },
+    {
+      "authorId": "2223687",
+      "externalIds": {
+        "DBLP": [
+          "Tommaso Venturini"
+        ]
+      },
+      "url": "https://www.semanticscholar.org/author/2223687",
+      "name": "T. Venturini",
+      "affiliations": [],
+      "homepage": null,
+      "paperCount": 78,
+      "citationCount": 5645,
+      "hIndex": 25
+    },
+    {
+      "authorId": "2093416293",
+      "externalIds": {
+        "DBLP": [
+          "Sebastien Heymann",
+          "Sébastien Heymann"
+        ]
+      },
+      "url": "https://www.semanticscholar.org/author/2093416293",
+      "name": "Sebastien Heymann",
+      "affiliations": [],
+      "homepage": null,
+      "paperCount": 14,
+      "citationCount": 14261,
+      "hIndex": 7
+    },
+    {
+      "authorId": "2444251",
+      "externalIds": {
+        "DBLP": [
+          "Mathieu Bastian"
+        ]
+      },
+      "url": "https://www.semanticscholar.org/author/2444251",
+      "name": "Mathieu Bastian",
+      "affiliations": [],
+      "homepage": null,
+      "paperCount": 6,
+      "citationCount": 14321,
+      "hIndex": 5
+    }
+  ],
+  "citations": [
+    {
+      "paperId": "e8630b46838ebcfe138f56614a42f18942a4f51d",
+      "externalIds": {
+        "DOI": "10.1016/j.biocon.2026.111941",
+        "CorpusId": 289248198
+      },
+      "corpusId": 289248198,
+      "publicationVenue": {
+        "id": "0535c107-9d95-4d92-8b39-d8eca506d035",
+        "name": "Biological Conservation",
+        "type": "journal",
+        "alternate_names": [
+          "Biological Conserv"
+        ],
+        "issn": "0006-3207",
+        "url": "https://www.journals.elsevier.com/biological-conservation/",
+        "alternate_urls": [
+          "http://www.sciencedirect.com/science/journal/00063207"
+        ]
+      },
+      "url": "https://www.semanticscholar.org/paper/e8630b46838ebcfe138f56614a42f18942a4f51d",
+      "title": "Cross-realm biodiversity integration of the EU environmental policy mix",
+      "venue": "Biological Conservation",
+      "year": 2026,
+      "referenceCount": 47,
+      "citationCount": 0,
+      "influentialCitationCount": 0,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://doi.org/10.1016/j.biocon.2026.111941",
+        "status": "HYBRID",
+        "license": "CCBY",
+        "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1016/j.biocon.2026.111941?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1016/j.biocon.2026.111941, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": null,
+      "s2FieldsOfStudy": [
+        {
+          "category": "Environmental Science",
+          "source": "s2-fos-model"
+        },
+        {
+          "category": "Political Science",
+          "source": "s2-fos-model"
+        },
+        {
+          "category": "Biology",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle"
+      ],
+      "publicationDate": "2026-09-01",
+      "journal": {
+        "name": "Biological Conservation"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Wands2026CrossrealmBI,\n author = {Michael Wands and Katherine Yates and A. Zabel},\n booktitle = {Biological Conservation},\n journal = {Biological Conservation},\n title = {Cross-realm biodiversity integration of the EU environmental policy mix},\n year = {2026}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "2442516494",
+          "name": "Michael Wands"
+        },
+        {
+          "authorId": "2068652737",
+          "name": "Katherine Yates"
+        },
+        {
+          "authorId": "13667692",
+          "name": "A. Zabel"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "ddd51cd9832a2969abdd40c0c0af2ff64baba679",
+      "externalIds": {
+        "DOI": "10.1016/j.gmod.2026.101335",
+        "CorpusId": 290068203
+      },
+      "corpusId": 290068203,
+      "publicationVenue": {
+        "id": "7a47151b-7f64-4b33-958c-f2e80f18a4a7",
+        "name": "Graphical Models",
+        "type": "journal",
+        "alternate_names": [
+          "Graph Model",
+          "Graph Model gr Model Image Process \\/computer Vis Graph Image Process",
+          "Graphical Models \\/graphical Models and Image Processing \\/computer Vision, Graphics, and Image Processing"
+        ],
+        "issn": "1524-0703",
+        "url": "http://www.elsevier.com/wps/find/journaldescription.cws_home/622839/description#description",
+        "alternate_urls": [
+          "http://www.sciencedirect.com/science/journal/15240703"
+        ]
+      },
+      "url": "https://www.semanticscholar.org/paper/ddd51cd9832a2969abdd40c0c0af2ff64baba679",
+      "title": "Immersive analytics with HMDs and CAVEs: A user study on 3D graph interaction",
+      "venue": "Graphical Models",
+      "year": 2026,
+      "referenceCount": 34,
+      "citationCount": 0,
+      "influentialCitationCount": 0,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://www.sciencedirect.com/science/article/pii/S1524070326000160/pdf",
+        "status": "GOLD",
+        "license": "CCBYNCND",
+        "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1016/j.gmod.2026.101335?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1016/j.gmod.2026.101335, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": null,
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle"
+      ],
+      "publicationDate": "2026-08-01",
+      "journal": {
+        "name": "Graphical Models"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Capece2026ImmersiveAW,\n author = {N. Capece and Marta Mondellini and U. Erra and Gabriele Gilio and E. Balloni and P. Zingaretti},\n booktitle = {Graphical Models},\n journal = {Graphical Models},\n title = {Immersive analytics with HMDs and CAVEs: A user study on 3D graph interaction},\n year = {2026}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "144870574",
+          "name": "N. Capece"
+        },
+        {
+          "authorId": "2243454996",
+          "name": "Marta Mondellini"
+        },
+        {
+          "authorId": "2862655",
+          "name": "U. Erra"
+        },
+        {
+          "authorId": "2183489105",
+          "name": "Gabriele Gilio"
+        },
+        {
+          "authorId": "1912608907",
+          "name": "E. Balloni"
+        },
+        {
+          "authorId": "1695800",
+          "name": "P. Zingaretti"
+        }
+      ],
+      "abstract": null
+    }
+  ],
+  "abstract": "Gephi is a network visualization software used in various disciplines (social network analysis, biology, genomics…). One of its key features is the ability to display the spatialization process, aiming at transforming the network into a map, and ForceAtlas2 is its default layout algorithm. The latter is developed by the Gephi team as an all-around solution to Gephi users’ typical networks (scale-free, 10 to 10,000 nodes). We present here for the first time its functioning and settings. ForceAtlas2 is a force-directed layout close to other algorithms used for network spatialization. We do not claim a theoretical advance but an attempt to integrate different techniques such as the Barnes Hut simulation, degree-dependent repulsive force, and local and global adaptive temperatures. It is designed for the Gephi user experience (it is a continuous algorithm), and we explain which constraints it implies. The algorithm benefits from much feedback and is developed in order to provide many possibilities through its settings. We lay out its complete functioning for the users who need a precise understanding of its behaviour, from the formulas to graphic illustration of the result. We propose a benchmark for our compromise between performance and quality. We also explain why we integrated its various features and discuss our design choices.",
+  "references": [
+    {
+      "paperId": "4150895f17e4239b84b971e497378f4a7529a979",
+      "externalIds": {
+        "DBLP": "conf/chi/ObristSS13",
+        "MAG": "3022307797",
+        "DOI": "10.1145/2470654.2466220",
+        "CorpusId": 207203469
+      },
+      "corpusId": 207203469,
+      "publicationVenue": {
+        "id": "b55b50b1-aae7-47a7-b042-8aecc930073d",
+        "name": "International Conference on Human Factors in Computing Systems",
+        "type": "conference",
+        "alternate_names": [
+          "CHI",
+          "Int Conf Hum Factor Comput Syst",
+          "Human Factors in Computing Systems",
+          "Conference on Human Interface",
+          "Conf Hum Interface",
+          "Hum Factor Comput Syst"
+        ],
+        "url": "http://www.acm.org/sigchi/"
+      },
+      "url": "https://www.semanticscholar.org/paper/4150895f17e4239b84b971e497378f4a7529a979",
+      "title": "Talking about tactile experiences",
+      "venue": "International Conference on Human Factors in Computing Systems",
+      "year": 2013,
+      "referenceCount": 40,
+      "citationCount": 1489,
+      "influentialCitationCount": 10,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://figshare.com/articles/chapter/Talking_about_tactile_experiences/23398796",
+        "status": "GREEN",
+        "license": "CCBY",
+        "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1145/2470654.2466220?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1145/2470654.2466220, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Computer Science",
+        "Psychology"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Psychology",
+          "source": "external"
+        },
+        {
+          "category": "Engineering",
+          "source": "s2-fos-model"
+        },
+        {
+          "category": "Psychology",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle",
+        "Book",
+        "Conference"
+      ],
+      "publicationDate": "2013-04-27",
+      "journal": {
+        "name": "Proceedings of the SIGCHI Conference on Human Factors in Computing Systems"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Obrist2013TalkingAT,\n author = {Marianna Obrist and S. Seah and S. Subramanian},\n booktitle = {International Conference on Human Factors in Computing Systems},\n journal = {Proceedings of the SIGCHI Conference on Human Factors in Computing Systems},\n title = {Talking about tactile experiences},\n year = {2013}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "1763081",
+          "name": "Marianna Obrist"
+        },
+        {
+          "authorId": "1977953",
+          "name": "S. Seah"
+        },
+        {
+          "authorId": "144414903",
+          "name": "S. Subramanian"
+        }
+      ],
+      "abstract": "A common problem with designing and developing applications with tactile interfaces is the lack of a vocabulary that allows one to describe or communicate about haptics. Here we present the findings from a study exploring participants' verbalizations of their tactile experiences across two modulated tactile stimuli (16Hz and 250Hz) related to two important mechanoreceptors in the human hand. The study, with 14 participants, applied the explicitation interview technique to capture detailed descriptions of the diachronic and synchronic structure of tactile experiences. We propose 14 categories for a human-experiential vocabulary based on the categorization of the findings and tie them back to neurophysiological and psychophysical data on the human hand. We finally discuss design opportunities created through this experiential understanding in relation to the two mechanoreceptors."
+    },
+    {
+      "paperId": "391eeb0c5549c7519c95c02ecac5f5da9d2b5e2e",
+      "externalIds": {
+        "MAG": "2128965269",
+        "DBLP": "journals/bib/KrzywinskiBJM12",
+        "DOI": "10.1093/bib/bbr069",
+        "CorpusId": 31104798,
+        "PubMed": "22155641"
+      },
+      "corpusId": 31104798,
+      "publicationVenue": null,
+      "url": "https://www.semanticscholar.org/paper/391eeb0c5549c7519c95c02ecac5f5da9d2b5e2e",
+      "title": "Hive plots - rational approach to visualizing networks",
+      "venue": "Briefings Bioinform.",
+      "year": 2012,
+      "referenceCount": 67,
+      "citationCount": 257,
+      "influentialCitationCount": 19,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://academic.oup.com/bib/article-pdf/13/5/627/1147399/bbr069.pdf",
+        "status": "BRONZE",
+        "license": null,
+        "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1093/bib/bbr069?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1093/bib/bbr069, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Computer Science",
+        "Medicine"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Medicine",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle"
+      ],
+      "publicationDate": "2012-09-01",
+      "journal": {
+        "volume": "13 5",
+        "pages": "\n          627-44\n        ",
+        "name": "Briefings in bioinformatics"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Krzywinski2012HiveP,\n author = {M. Krzywinski and I. Birol and Steven J. M. Jones and M. Marra},\n booktitle = {Briefings Bioinform.},\n journal = {Briefings in bioinformatics},\n pages = {\n          627-44\n        },\n title = {Hive plots - rational approach to visualizing networks},\n volume = {13 5},\n year = {2012}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "2802123",
+          "name": "M. Krzywinski"
+        },
+        {
+          "authorId": "144831170",
+          "name": "I. Birol"
+        },
+        {
+          "authorId": "2235532848",
+          "name": "Steven J. M. Jones"
+        },
+        {
+          "authorId": "1778564",
+          "name": "M. Marra"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "f24cc93a25f39143919f671a8e4181da94c513ba",
+      "externalIds": {
+        "MAG": "2094176393",
+        "DBLP": "conf/vda/MartinBKB11",
+        "DOI": "10.1117/12.871402",
+        "CorpusId": 32859060
+      },
+      "corpusId": 32859060,
+      "publicationVenue": {
+        "id": "d068a5ed-de42-4f73-8312-51d07ecc19b7",
+        "name": "Electronic imaging",
+        "type": "journal",
+        "alternate_names": [
+          "Electron imaging",
+          "electron imaging",
+          "electronic imaging"
+        ],
+        "issn": "0737-6553"
+      },
+      "url": "https://www.semanticscholar.org/paper/f24cc93a25f39143919f671a8e4181da94c513ba",
+      "title": "OpenOrd: an open-source toolbox for large graph layout",
+      "venue": "Electronic imaging",
+      "year": 2011,
+      "referenceCount": 37,
+      "citationCount": 326,
+      "influentialCitationCount": 35,
+      "isOpenAccess": false,
+      "openAccessPdf": {
+        "url": "",
+        "status": "CLOSED",
+        "license": null,
+        "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1117/12.871402?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1117/12.871402, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Computer Science",
+        "Engineering"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Engineering",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle"
+      ],
+      "publicationDate": "2011-01-23",
+      "journal": {
+        "volume": "7868"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Martin2011OpenOrdAO,\n author = {Shawn Martin and W. M. Brown and R. Klavans and K. Boyack and White Horse},\n booktitle = {Electronic imaging},\n title = {OpenOrd: an open-source toolbox for large graph layout},\n volume = {7868},\n year = {2011}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "144002883",
+          "name": "Shawn Martin"
+        },
+        {
+          "authorId": "143691234",
+          "name": "W. M. Brown"
+        },
+        {
+          "authorId": "1754182",
+          "name": "R. Klavans"
+        },
+        {
+          "authorId": "1773125",
+          "name": "K. Boyack"
+        },
+        {
+          "authorId": "2254226334",
+          "name": "White Horse"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "3149a915f738f044778e3decdb4278e2bad17808",
+      "externalIds": {
+        "MAG": "2125910575",
+        "DBLP": "conf/icwsm/BastianHJ09",
+        "DOI": "10.1609/icwsm.v3i1.13937",
+        "CorpusId": 15996046
+      },
+      "corpusId": 15996046,
+      "publicationVenue": {
+        "id": "7dc964d5-49e6-4c37-b1c4-a7f0de1fa425",
+        "name": "International Conference on Web and Social Media",
+        "type": "conference",
+        "alternate_names": [
+          "Int Conf Weblogs Soc Media",
+          "International Conference on Weblogs and Social Media",
+          "Int Conf Web Soc Media",
+          "ICWSM"
+        ],
+        "url": "http://www.aaai.org/Library/ICWSM/icwsm-library.php"
+      },
+      "url": "https://www.semanticscholar.org/paper/3149a915f738f044778e3decdb4278e2bad17808",
+      "title": "Gephi: An Open Source Software for Exploring and Manipulating Networks",
+      "venue": "International Conference on Web and Social Media",
+      "year": 2009,
+      "referenceCount": 6,
+      "citationCount": 11447,
+      "influentialCitationCount": 1451,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://ojs.aaai.org/index.php/ICWSM/article/download/13937/13786",
+        "status": "GOLD",
+        "license": null,
+        "disclaimer": "Notice: Paper or abstract available at https://api.unpaywall.org/v2/10.1609/icwsm.v3i1.13937?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1609/icwsm.v3i1.13937, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Computer Science"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle"
+      ],
+      "publicationDate": "2009-03-19",
+      "journal": {
+        "name": "Proceedings of the International AAAI Conference on Web and Social Media"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Bastian2009GephiAO,\n author = {Mathieu Bastian and Sebastien Heymann and Mathieu Jacomy},\n booktitle = {International Conference on Web and Social Media},\n journal = {Proceedings of the International AAAI Conference on Web and Social Media},\n title = {Gephi: An Open Source Software for Exploring and Manipulating Networks},\n year = {2009}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "2444251",
+          "name": "Mathieu Bastian"
+        },
+        {
+          "authorId": "2093416293",
+          "name": "Sebastien Heymann"
+        },
+        {
+          "authorId": "1933458",
+          "name": "Mathieu Jacomy"
+        }
+      ],
+      "abstract": "\n \n Gephi is an open source software for graph and network analysis. It uses a 3D render engine to display large networks in real-time and to speed up the exploration. A flexible and multi-task architecture brings new possibilities to work with complex data sets and produce valuable visual results.  We present several key features of Gephi in the context of interactive exploration and interpretation of networks. It provides easy and broad access to network data and allows for spatializing, filtering, navigating, manipulating and clustering. Finally, by presenting dynamic features of Gephi, we highlight key aspects of dynamic network visualization.\n \n"
+    },
+    {
+      "paperId": "fe48dc4ede2c94dd16139c72601bc3ec922ca31e",
+      "externalIds": {
+        "MAG": "2065863018",
+        "DOI": "10.1177/0539018408096447",
+        "CorpusId": 144973427
+      },
+      "corpusId": 144973427,
+      "publicationVenue": null,
+      "url": "https://www.semanticscholar.org/paper/fe48dc4ede2c94dd16139c72601bc3ec922ca31e",
+      "title": "The connected migrant: an epistemological manifesto",
+      "venue": "",
+      "year": 2008,
+      "referenceCount": 3,
+      "citationCount": 431,
+      "influentialCitationCount": 22,
+      "isOpenAccess": false,
+      "openAccessPdf": {
+        "url": "",
+        "status": "CLOSED",
+        "license": null,
+        "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1177/0539018408096447?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1177/0539018408096447, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Sociology"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Sociology",
+          "source": "external"
+        }
+      ],
+      "publicationTypes": null,
+      "publicationDate": "2008-12-01",
+      "journal": {
+        "volume": "47",
+        "pages": "565 - 579",
+        "name": "Social Science Information"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Diminescu2008TheCM,\n author = {Dana Diminescu},\n journal = {Social Science Information},\n pages = {565 - 579},\n title = {The connected migrant: an epistemological manifesto},\n volume = {47},\n year = {2008}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "2858698",
+          "name": "Dana Diminescu"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "70588d5549b4d48b181cf66da74296564878ae10",
+      "externalIds": {
+        "ArXiv": "0807.4052",
+        "MAG": "2047583926",
+        "DBLP": "journals/corr/abs-0807-4052",
+        "DOI": "10.1103/PhysRevE.79.026102",
+        "CorpusId": 6366638,
+        "PubMed": "19391801"
+      },
+      "corpusId": 6366638,
+      "publicationVenue": null,
+      "url": "https://www.semanticscholar.org/paper/70588d5549b4d48b181cf66da74296564878ae10",
+      "title": "Modularity clustering is force-directed layout",
+      "venue": "Physical review. E, Statistical, nonlinear, and soft matter physics",
+      "year": 2008,
+      "referenceCount": 54,
+      "citationCount": 263,
+      "influentialCitationCount": 19,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://arxiv.org/pdf/0807.4052",
+        "status": "GREEN",
+        "license": null,
+        "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/0807.4052, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Medicine",
+        "Computer Science",
+        "Mathematics",
+        "Physics"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Medicine",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Mathematics",
+          "source": "external"
+        },
+        {
+          "category": "Physics",
+          "source": "external"
+        },
+        {
+          "category": "Physics",
+          "source": "s2-fos-model"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle"
+      ],
+      "publicationDate": "2008-07-25",
+      "journal": {
+        "volume": "79 2 Pt 2",
+        "pages": "\n          026102\n        ",
+        "name": "Physical review. E, Statistical, nonlinear, and soft matter physics"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Noack2008ModularityCI,\n author = {A. Noack},\n booktitle = {Physical review. E, Statistical, nonlinear, and soft matter physics},\n journal = {Physical review. E, Statistical, nonlinear, and soft matter physics},\n pages = {\n          026102\n        },\n title = {Modularity clustering is force-directed layout},\n volume = {79 2 Pt 2},\n year = {2008}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "1943843",
+          "name": "A. Noack"
+        }
+      ],
+      "abstract": "Two natural and widely used representations for the community structure of networks are clusterings, which partition the vertex set into disjoint subsets, and layouts, which assign the vertices to positions in a metric space. This paper unifies prominent characterizations of layout quality and clustering quality, by showing that energy models of pairwise attraction and repulsion subsume Newman and Girvan's modularity measure. Layouts with optimal energy are relaxations of, and are thus consistent with, clusterings with optimal modularity, which is of practical relevance because the two representations are complementary and often used together."
+    },
+    {
+      "paperId": "6460f3de32b55fa1b7258edfbee6994b6fa7b50e",
+      "externalIds": {
+        "MAG": "2113630591",
+        "DBLP": "conf/chi/Adar06",
+        "DOI": "10.1145/1124772.1124889",
+        "CorpusId": 1502003
+      },
+      "corpusId": 1502003,
+      "publicationVenue": {
+        "id": "b55b50b1-aae7-47a7-b042-8aecc930073d",
+        "name": "International Conference on Human Factors in Computing Systems",
+        "type": "conference",
+        "alternate_names": [
+          "CHI",
+          "Int Conf Hum Factor Comput Syst",
+          "Human Factors in Computing Systems",
+          "Conference on Human Interface",
+          "Conf Hum Interface",
+          "Hum Factor Comput Syst"
+        ],
+        "url": "http://www.acm.org/sigchi/"
+      },
+      "url": "https://www.semanticscholar.org/paper/6460f3de32b55fa1b7258edfbee6994b6fa7b50e",
+      "title": "GUESS: a language and interface for graph exploration",
+      "venue": "International Conference on Human Factors in Computing Systems",
+      "year": 2006,
+      "referenceCount": 29,
+      "citationCount": 256,
+      "influentialCitationCount": 25,
+      "isOpenAccess": false,
+      "openAccessPdf": {
+        "url": "",
+        "status": "CLOSED",
+        "license": null,
+        "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1145/1124772.1124889?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1145/1124772.1124889, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Computer Science"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle",
+        "Book",
+        "Conference",
+        "Review"
+      ],
+      "publicationDate": "2006-04-22",
+      "journal": {
+        "name": "Proceedings of the SIGCHI Conference on Human Factors in Computing Systems"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Adar2006GUESSAL,\n author = {Eytan Adar},\n booktitle = {International Conference on Human Factors in Computing Systems},\n journal = {Proceedings of the SIGCHI Conference on Human Factors in Computing Systems},\n title = {GUESS: a language and interface for graph exploration},\n year = {2006}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "2630700",
+          "name": "Eytan Adar"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "2a91c8ff11a828209f10714cfc46fd929a51e9dc",
+      "externalIds": {
+        "MAG": "2244663144",
+        "ArXiv": "physics/0602124",
+        "DOI": "10.1073/PNAS.0601602103",
+        "CorpusId": 2774707,
+        "PubMed": "16723398"
+      },
+      "corpusId": 2774707,
+      "publicationVenue": {
+        "id": "bb95bf2e-8383-4748-bf9d-d6906d091085",
+        "name": "Proceedings of the National Academy of Sciences of the United States of America",
+        "type": "journal",
+        "alternate_names": [
+          "PNAS",
+          "PNAS online",
+          "Proceedings of the National Academy of Sciences of the United States of America.",
+          "Proc National Acad Sci",
+          "Proceedings of the National Academy of Sciences",
+          "Proc National Acad Sci u s Am"
+        ],
+        "issn": "0027-8424",
+        "alternate_issns": [
+          "1091-6490"
+        ],
+        "url": "https://www.jstor.org/journal/procnatiacadscie",
+        "alternate_urls": [
+          "http://www.pnas.org/",
+          "https://www.pnas.org/",
+          "http://www.jstor.org/journals/00278424.html",
+          "www.pnas.org/"
+        ]
+      },
+      "url": "https://www.semanticscholar.org/paper/2a91c8ff11a828209f10714cfc46fd929a51e9dc",
+      "title": "Modularity and community structure in networks.",
+      "venue": "Proceedings of the National Academy of Sciences of the United States of America",
+      "year": 2006,
+      "referenceCount": 53,
+      "citationCount": 12285,
+      "influentialCitationCount": 1028,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://arxiv.org/pdf/physics/0602124",
+        "status": "GREEN",
+        "license": null,
+        "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/physics/0602124, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Computer Science",
+        "Physics",
+        "Medicine"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Physics",
+          "source": "external"
+        },
+        {
+          "category": "Medicine",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        },
+        {
+          "category": "Mathematics",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle"
+      ],
+      "publicationDate": "2006-02-17",
+      "journal": {
+        "volume": "103 23",
+        "pages": "\n          8577-82\n        ",
+        "name": "Proceedings of the National Academy of Sciences of the United States of America"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Newman2006ModularityAC,\n author = {M. Newman},\n booktitle = {Proceedings of the National Academy of Sciences of the United States of America},\n journal = {Proceedings of the National Academy of Sciences of the United States of America},\n pages = {\n          8577-82\n        },\n title = {Modularity and community structure in networks.},\n volume = {103 23},\n year = {2006}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "152618356",
+          "name": "M. Newman"
+        }
+      ],
+      "abstract": "Many networks of interest in the sciences, including social networks, computer networks, and metabolic and regulatory networks, are found to divide naturally into communities or modules. The problem of detecting and characterizing this community structure is one of the outstanding issues in the study of networked systems. One highly effective approach is the optimization of the quality function known as \"modularity\" over the possible divisions of a network. Here I show that the modularity can be expressed in terms of the eigenvectors of a characteristic matrix for the network, which I call the modularity matrix, and that this expression leads to a spectral algorithm for community detection that returns results of demonstrably higher quality than competing methods in shorter running times. I illustrate the method with applications to several published network data sets."
+    },
+    {
+      "paperId": "328a20bbd29cf42771125a21c6f66d093e5dd74e",
+      "externalIds": {
+        "ArXiv": "cond-mat/0407503",
+        "MAG": "1983345514",
+        "DOI": "10.1103/PhysRevE.70.056131",
+        "CorpusId": 1054844,
+        "PubMed": "15600716"
+      },
+      "corpusId": 1054844,
+      "publicationVenue": null,
+      "url": "https://www.semanticscholar.org/paper/328a20bbd29cf42771125a21c6f66d093e5dd74e",
+      "title": "Analysis of weighted networks.",
+      "venue": "Physical review. E, Statistical, nonlinear, and soft matter physics",
+      "year": 2004,
+      "referenceCount": 54,
+      "citationCount": 2480,
+      "influentialCitationCount": 214,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://arxiv.org/pdf/cond-mat/0407503",
+        "status": "GREEN",
+        "license": null,
+        "disclaimer": "Notice: Paper or abstract available at https://arxiv.org/abs/cond-mat/0407503, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Mathematics",
+        "Physics",
+        "Medicine"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Mathematics",
+          "source": "external"
+        },
+        {
+          "category": "Physics",
+          "source": "external"
+        },
+        {
+          "category": "Medicine",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        },
+        {
+          "category": "Mathematics",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle"
+      ],
+      "publicationDate": "2004-07-20",
+      "journal": {
+        "volume": "70 5 Pt 2",
+        "pages": "\n          056131\n        ",
+        "name": "Physical review. E, Statistical, nonlinear, and soft matter physics"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Newman2004AnalysisOW,\n author = {M. Newman},\n booktitle = {Physical review. E, Statistical, nonlinear, and soft matter physics},\n journal = {Physical review. E, Statistical, nonlinear, and soft matter physics},\n pages = {\n          056131\n        },\n title = {Analysis of weighted networks.},\n volume = {70 5 Pt 2},\n year = {2004}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "152618356",
+          "name": "M. Newman"
+        }
+      ],
+      "abstract": "The connections in many networks are not merely binary entities, either present or not, but have associated weights that record their strengths relative to one another. Recent studies of networks have, by and large, steered clear of such weighted networks, which are often perceived as being harder to analyze than their unweighted counterparts. Here we point out that weighted networks can in many cases be analyzed using a simple mapping from a weighted network to an unweighted multigraph, allowing us to apply standard techniques for unweighted graphs to weighted ones as well. We give a number of examples of the method, including an algorithm for detecting community structure in weighted networks and a simple proof of the maximum-flow-minimum-cut theorem."
+    },
+    {
+      "paperId": "be7e4c447ea27e0891397ae36d8957d3cbcea613",
+      "externalIds": {
+        "DBLP": "journals/vlc/Purchase02",
+        "MAG": "2049335983",
+        "DOI": "10.1006/jvlc.2002.0232",
+        "CorpusId": 5895591
+      },
+      "corpusId": 5895591,
+      "publicationVenue": {
+        "id": "d093f67a-2c74-4b19-b16c-049f802fbce1",
+        "name": "Journal of Visual Languages and Computing",
+        "type": "journal",
+        "alternate_names": [
+          "J Vis Lang Comput"
+        ],
+        "issn": "1045-926X",
+        "alternate_issns": [
+          "1095-8533"
+        ],
+        "url": "http://www.elsevier.com/wps/find/journaldescription.cws_home/622907/description#description",
+        "alternate_urls": [
+          "http://www.sciencedirect.com/science/journal/1045926X",
+          "https://www.journals.elsevier.com/journal-of-visual-languages-and-computing"
+        ]
+      },
+      "url": "https://www.semanticscholar.org/paper/be7e4c447ea27e0891397ae36d8957d3cbcea613",
+      "title": "Metrics for Graph Drawing Aesthetics",
+      "venue": "Journal of Visual Languages and Computing",
+      "year": 2002,
+      "referenceCount": 14,
+      "citationCount": 342,
+      "influentialCitationCount": 29,
+      "isOpenAccess": false,
+      "openAccessPdf": {
+        "url": "",
+        "status": "CLOSED",
+        "license": null,
+        "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1006/jvlc.2002.0232?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1006/jvlc.2002.0232, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Computer Science"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle"
+      ],
+      "publicationDate": "2002-10-01",
+      "journal": {
+        "volume": "13",
+        "pages": "501-516",
+        "name": "J. Vis. Lang. Comput."
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Purchase2002MetricsFG,\n author = {H. Purchase},\n booktitle = {Journal of Visual Languages and Computing},\n journal = {J. Vis. Lang. Comput.},\n pages = {501-516},\n title = {Metrics for Graph Drawing Aesthetics},\n volume = {13},\n year = {2002}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "32489306",
+          "name": "H. Purchase"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "c4206fc697a179c0e5a749195ca6c7a1106446bb",
+      "externalIds": {
+        "MAG": "2059985735",
+        "DBLP": "conf/gd/Walshaw00",
+        "DOI": "10.1007/3-540-44541-2_17",
+        "CorpusId": 13284350
+      },
+      "corpusId": 13284350,
+      "publicationVenue": {
+        "id": "9e547474-7cce-44ae-a90c-095a421ac30f",
+        "name": "International Symposium Graph Drawing and Network Visualization",
+        "type": "conference",
+        "alternate_names": [
+          "Graph Drawing",
+          "Int Symp Graph Draw Netw Vis",
+          "GD",
+          "Graph Draw"
+        ],
+        "url": "http://graphdrawing.org/index.html"
+      },
+      "url": "https://www.semanticscholar.org/paper/c4206fc697a179c0e5a749195ca6c7a1106446bb",
+      "title": "A Multilevel Algorithm for Force-Directed Graph Drawing",
+      "venue": "International Symposium Graph Drawing and Network Visualization",
+      "year": 2000,
+      "referenceCount": 21,
+      "citationCount": 396,
+      "influentialCitationCount": 34,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://link.springer.com/content/pdf/10.1007/3-540-44541-2_17.pdf",
+        "status": "BRONZE",
+        "license": null,
+        "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1007/3-540-44541-2_17?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1007/3-540-44541-2_17, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Computer Science"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle",
+        "Conference"
+      ],
+      "publicationDate": "2000-09-20",
+      "journal": {
+        "pages": "171-182"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Walshaw2000AMA,\n author = {C. Walshaw},\n booktitle = {International Symposium Graph Drawing and Network Visualization},\n pages = {171-182},\n title = {A Multilevel Algorithm for Force-Directed Graph Drawing},\n year = {2000}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "1798877",
+          "name": "C. Walshaw"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "f1962baa356e10c4fd936b9e9f910869a5864a75",
+      "externalIds": {
+        "MAG": "2138621811",
+        "DBLP": "journals/jacm/Kleinberg99",
+        "DOI": "10.1145/324133.324140",
+        "CorpusId": 216000619
+      },
+      "corpusId": 216000619,
+      "publicationVenue": {
+        "id": "5545566b-c0b8-418c-83a5-a986a4657572",
+        "name": "ACM-SIAM Symposium on Discrete Algorithms",
+        "type": "conference",
+        "alternate_names": [
+          "Symposium on Discrete Algorithms",
+          "ACM-SIAM Symp Discret Algorithm",
+          "Symp Discret Algorithm",
+          "SODA"
+        ],
+        "url": "https://en.wikipedia.org/wiki/Symposium_on_Discrete_Algorithms"
+      },
+      "url": "https://www.semanticscholar.org/paper/f1962baa356e10c4fd936b9e9f910869a5864a75",
+      "title": "Authoritative sources in a hyperlinked environment",
+      "venue": "ACM-SIAM Symposium on Discrete Algorithms",
+      "year": 1999,
+      "referenceCount": 89,
+      "citationCount": 11286,
+      "influentialCitationCount": 1139,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://dl.acm.org/doi/pdf/10.1145/324133.324140",
+        "status": "CLOSED",
+        "license": null,
+        "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1145/324133.324140?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1145/324133.324140, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Computer Science"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle"
+      ],
+      "publicationDate": "1999-09-01",
+      "journal": {
+        "pages": "668-677"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Kleinberg1999AuthoritativeSI,\n author = {J. Kleinberg},\n booktitle = {ACM-SIAM Symposium on Discrete Algorithms},\n pages = {668-677},\n title = {Authoritative sources in a hyperlinked environment},\n year = {1999}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "3371403",
+          "name": "J. Kleinberg"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "0e5d7003928e6f1876b51d66bbb3e6da99ae8172",
+      "externalIds": {
+        "DBLP": "journals/tog/DavidsonH96",
+        "MAG": "2021053884",
+        "DOI": "10.1145/234535.234538",
+        "CorpusId": 1492408
+      },
+      "corpusId": 1492408,
+      "publicationVenue": null,
+      "url": "https://www.semanticscholar.org/paper/0e5d7003928e6f1876b51d66bbb3e6da99ae8172",
+      "title": "Drawing graphs nicely using simulated annealing",
+      "venue": "TOGS",
+      "year": 1996,
+      "referenceCount": 31,
+      "citationCount": 574,
+      "influentialCitationCount": 50,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://dl.acm.org/doi/pdf/10.1145/234535.234538",
+        "status": "BRONZE",
+        "license": null,
+        "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1145/234535.234538?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1145/234535.234538, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Computer Science"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        },
+        {
+          "category": "Mathematics",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle"
+      ],
+      "publicationDate": "1996-10-01",
+      "journal": {
+        "volume": "15",
+        "pages": "301-331",
+        "name": "ACM Trans. Graph."
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Davidson1996DrawingGN,\n author = {Ron Davidson and D. Harel},\n booktitle = {TOGS},\n journal = {ACM Trans. Graph.},\n pages = {301-331},\n title = {Drawing graphs nicely using simulated annealing},\n volume = {15},\n year = {1996}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "47061028",
+          "name": "Ron Davidson"
+        },
+        {
+          "authorId": "145771081",
+          "name": "D. Harel"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "916879db7769e9978ad8628f17b05798a5d2bf82",
+      "externalIds": {
+        "MAG": "1020953626",
+        "DBLP": "conf/gd/FrickLM94",
+        "DOI": "10.1007/3-540-58950-3_393",
+        "CorpusId": 9463029
+      },
+      "corpusId": 9463029,
+      "publicationVenue": {
+        "id": "9e547474-7cce-44ae-a90c-095a421ac30f",
+        "name": "International Symposium Graph Drawing and Network Visualization",
+        "type": "conference",
+        "alternate_names": [
+          "Graph Drawing",
+          "Int Symp Graph Draw Netw Vis",
+          "GD",
+          "Graph Draw"
+        ],
+        "url": "http://graphdrawing.org/index.html"
+      },
+      "url": "https://www.semanticscholar.org/paper/916879db7769e9978ad8628f17b05798a5d2bf82",
+      "title": "A Fast Adaptive Layout Algorithm for Undirected Graphs",
+      "venue": "International Symposium Graph Drawing and Network Visualization",
+      "year": 1994,
+      "referenceCount": 15,
+      "citationCount": 385,
+      "influentialCitationCount": 32,
+      "isOpenAccess": true,
+      "openAccessPdf": {
+        "url": "https://link.springer.com/content/pdf/10.1007%2F3-540-58950-3_393.pdf",
+        "status": "BRONZE",
+        "license": null,
+        "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1007/3-540-58950-3_393?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1007/3-540-58950-3_393, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Computer Science"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        },
+        {
+          "category": "Mathematics",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle",
+        "Conference"
+      ],
+      "publicationDate": "1994-10-10",
+      "journal": {
+        "pages": "388-403"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Frick1994AFA,\n author = {A. Frick and Andreas H. Ludwig and Heiko Mehldau},\n booktitle = {International Symposium Graph Drawing and Network Visualization},\n pages = {388-403},\n title = {A Fast Adaptive Layout Algorithm for Undirected Graphs},\n year = {1994}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "39202444",
+          "name": "A. Frick"
+        },
+        {
+          "authorId": "2064034732",
+          "name": "Andreas H. Ludwig"
+        },
+        {
+          "authorId": "67135965",
+          "name": "Heiko Mehldau"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "eea094ba215c5a6b1b178fd3190f4e10b5d5ca98",
+      "externalIds": {
+        "MAG": "2167482691",
+        "DBLP": "journals/spe/FruchtermanR91",
+        "DOI": "10.1002/spe.4380211102",
+        "CorpusId": 31468174
+      },
+      "corpusId": 31468174,
+      "publicationVenue": {
+        "id": "3da56ce6-4a70-402c-a8b0-7dd39a3273d3",
+        "name": "Software, Practice & Experience",
+        "type": "journal",
+        "alternate_names": [
+          "Softw  Pract Exp",
+          "Softw Pract  Exp",
+          "Software - Practice and Experience"
+        ],
+        "issn": "0038-0644",
+        "url": "http://www3.interscience.wiley.com/cgi-bin/jhome/1752",
+        "alternate_urls": [
+          "http://www.interscience.wiley.com/jpages/0038-0644/",
+          "https://onlinelibrary.wiley.com/journal/1097024X"
+        ]
+      },
+      "url": "https://www.semanticscholar.org/paper/eea094ba215c5a6b1b178fd3190f4e10b5d5ca98",
+      "title": "Graph drawing by force‐directed placement",
+      "venue": "Software, Practice & Experience",
+      "year": 1991,
+      "referenceCount": 23,
+      "citationCount": 6776,
+      "influentialCitationCount": 336,
+      "isOpenAccess": false,
+      "openAccessPdf": {
+        "url": "",
+        "status": "CLOSED",
+        "license": null,
+        "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1002/spe.4380211102?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1002/spe.4380211102, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Computer Science"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        },
+        {
+          "category": "Mathematics",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle"
+      ],
+      "publicationDate": "1991-11-01",
+      "journal": {
+        "volume": "21",
+        "name": "Software: Practice and Experience"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Fruchterman1991GraphDB,\n author = {Thomas M. J. Fruchterman and E. Reingold},\n booktitle = {Software, Practice & Experience},\n journal = {Software: Practice and Experience},\n title = {Graph drawing by force‐directed placement},\n volume = {21},\n year = {1991}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "38255588",
+          "name": "Thomas M. J. Fruchterman"
+        },
+        {
+          "authorId": "1743464",
+          "name": "E. Reingold"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "8e17c434bc40ce5c41701ab638e8d9344e733565",
+      "externalIds": {
+        "DBLP": "journals/ipl/KamadaK89",
+        "MAG": "2075220720",
+        "DOI": "10.1016/0020-0190(89)90102-6",
+        "CorpusId": 26372900
+      },
+      "corpusId": 26372900,
+      "publicationVenue": {
+        "id": "44ecc2bb-f8fd-4c6d-bd54-30ca098be91d",
+        "name": "Information Processing Letters",
+        "type": "journal",
+        "alternate_names": [
+          "Inf Process Lett"
+        ],
+        "issn": "0020-0190",
+        "url": "http://www.elsevier.com/locate/ipl",
+        "alternate_urls": [
+          "http://www.elsevier.com/wps/find/journaldescription.cws_home/505612/description#description",
+          "http://www.sciencedirect.com/science/journal/00200190"
+        ]
+      },
+      "url": "https://www.semanticscholar.org/paper/8e17c434bc40ce5c41701ab638e8d9344e733565",
+      "title": "An Algorithm for Drawing General Undirected Graphs",
+      "venue": "Information Processing Letters",
+      "year": 1989,
+      "referenceCount": 16,
+      "citationCount": 3014,
+      "influentialCitationCount": 196,
+      "isOpenAccess": false,
+      "openAccessPdf": {
+        "url": "",
+        "status": "CLOSED",
+        "license": null,
+        "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1016/0020-0190(89)90102-6?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1016/0020-0190(89)90102-6, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Computer Science",
+        "Mathematics"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Mathematics",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        },
+        {
+          "category": "Mathematics",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": [
+        "JournalArticle"
+      ],
+      "publicationDate": "1989-04-12",
+      "journal": {
+        "volume": "31",
+        "pages": "7-15",
+        "name": "Inf. Process. Lett."
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Kamada1989AnAF,\n author = {Tomihisa Kamada and S. Kawai},\n booktitle = {Information Processing Letters},\n journal = {Inf. Process. Lett.},\n pages = {7-15},\n title = {An Algorithm for Drawing General Undirected Graphs},\n volume = {31},\n year = {1989}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "3237240",
+          "name": "Tomihisa Kamada"
+        },
+        {
+          "authorId": "144721913",
+          "name": "S. Kawai"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "fce7fd98928ab9bf3e4e919e108c48fc1040f569",
+      "externalIds": {
+        "MAG": "2068306188",
+        "DOI": "10.1038/324446A0",
+        "CorpusId": 4267861
+      },
+      "corpusId": 4267861,
+      "publicationVenue": {
+        "id": "6c24a0a0-b07d-4d7b-a19b-fd09a3ed453a",
+        "name": "Nature",
+        "type": "journal",
+        "issn": "0028-0836",
+        "url": "https://www.nature.com/",
+        "alternate_urls": [
+          "http://www.nature.com/nature/",
+          "https://www.nature.com/nature/",
+          "http://www.nature.com/nature/archive/index.html"
+        ]
+      },
+      "url": "https://www.semanticscholar.org/paper/fce7fd98928ab9bf3e4e919e108c48fc1040f569",
+      "title": "A hierarchical O(N log N) force-calculation algorithm",
+      "venue": "Nature",
+      "year": 1986,
+      "referenceCount": 4,
+      "citationCount": 3793,
+      "influentialCitationCount": 229,
+      "isOpenAccess": false,
+      "openAccessPdf": {
+        "url": "",
+        "status": "CLOSED",
+        "license": null,
+        "disclaimer": "Notice: The following paper fields have been elided by the publisher: {'abstract'}. Paper or abstract available at https://api.unpaywall.org/v2/10.1038/324446A0?email=<INSERT_YOUR_EMAIL> or https://doi.org/10.1038/324446A0, which is subject to the license by the author or copyright owner provided with this content. Please go to the source to verify the license and copyright information for your use."
+      },
+      "fieldsOfStudy": [
+        "Computer Science"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Physics",
+          "source": "s2-fos-model"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": null,
+      "publicationDate": "1986-04-14",
+      "journal": {
+        "volume": "324",
+        "pages": "446-449",
+        "name": "Nature"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Barnes1986AHO,\n author = {J. Barnes and P. Hut},\n booktitle = {Nature},\n journal = {Nature},\n pages = {446-449},\n title = {A hierarchical O(N log N) force-calculation algorithm},\n volume = {324},\n year = {1986}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "2055880544",
+          "name": "J. Barnes"
+        },
+        {
+          "authorId": "144459202",
+          "name": "P. Hut"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "b7d35bc87f101453437a72210d62fc25caa49634",
+      "externalIds": {
+        "MAG": "2782823992",
+        "CorpusId": 63623391
+      },
+      "corpusId": 63623391,
+      "publicationVenue": null,
+      "url": "https://www.semanticscholar.org/paper/b7d35bc87f101453437a72210d62fc25caa49634",
+      "title": "Association for the Advancement of Artificial Intelligence",
+      "venue": "",
+      "year": 2010,
+      "referenceCount": 0,
+      "citationCount": 940,
+      "influentialCitationCount": 32,
+      "isOpenAccess": false,
+      "openAccessPdf": {
+        "url": "",
+        "status": null,
+        "license": null
+      },
+      "fieldsOfStudy": [
+        "Computer Science"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": null,
+      "publicationDate": null,
+      "journal": {
+        "volume": "",
+        "name": ""
+      },
+      "citationStyles": {
+        "bibtex": "@Inproceedings{Crosby2010AssociationFT,\n author = {Matthew Crosby and Ronald P. A. Petrick},\n title = {Association for the Advancement of Artificial Intelligence},\n year = {2010}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "143966629",
+          "name": "Matthew Crosby"
+        },
+        {
+          "authorId": "35407423",
+          "name": "Ronald P. A. Petrick"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "411f24dd9cc2569b27b4af3a409f85325c10d5ab",
+      "externalIds": {
+        "DBLP": "phd/de/Noack2007",
+        "MAG": "2397851279",
+        "CorpusId": 45555851
+      },
+      "corpusId": 45555851,
+      "publicationVenue": null,
+      "url": "https://www.semanticscholar.org/paper/411f24dd9cc2569b27b4af3a409f85325c10d5ab",
+      "title": "Unified quality measures for clusterings, layouts, and orderings of graphs, and their application as software design criteria",
+      "venue": "",
+      "year": 2007,
+      "referenceCount": 0,
+      "citationCount": 44,
+      "influentialCitationCount": 5,
+      "isOpenAccess": false,
+      "openAccessPdf": {
+        "url": "",
+        "status": null,
+        "license": null
+      },
+      "fieldsOfStudy": [
+        "Computer Science"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        },
+        {
+          "category": "Engineering",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": null,
+      "publicationDate": null,
+      "journal": {
+        "pages": "1-289"
+      },
+      "citationStyles": {
+        "bibtex": "@Inproceedings{Noack2007UnifiedQM,\n author = {A. Noack},\n pages = {1-289},\n title = {Unified quality measures for clusterings, layouts, and orderings of graphs, and their application as software design criteria},\n year = {2007}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "1943843",
+          "name": "A. Noack"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "be33ebd01f336c04a1db20830576612ab45b1b9b",
+      "externalIds": {
+        "MAG": "38619841",
+        "CorpusId": 14599587
+      },
+      "corpusId": 14599587,
+      "publicationVenue": null,
+      "url": "https://www.semanticscholar.org/paper/be33ebd01f336c04a1db20830576612ab45b1b9b",
+      "title": "Efficient, High-Quality Force-Directed Graph Drawing",
+      "venue": "",
+      "year": 2006,
+      "referenceCount": 30,
+      "citationCount": 773,
+      "influentialCitationCount": 54,
+      "isOpenAccess": false,
+      "openAccessPdf": {
+        "url": "",
+        "status": null,
+        "license": null
+      },
+      "fieldsOfStudy": [
+        "Computer Science"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": null,
+      "publicationDate": null,
+      "journal": {
+        "volume": "10",
+        "pages": "37-71",
+        "name": "The Mathematica journal"
+      },
+      "citationStyles": {
+        "bibtex": "@Article{Hu2006EfficientHF,\n author = {Yifan Hu},\n journal = {The Mathematica journal},\n pages = {37-71},\n title = {Efficient, High-Quality Force-Directed Graph Drawing},\n volume = {10},\n year = {2006}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "50819900",
+          "name": "Yifan Hu"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "af24e927c8939fcb34d3608b97166c467b317846",
+      "externalIds": {
+        "MAG": "2109278577",
+        "CorpusId": 1534658
+      },
+      "corpusId": 1534658,
+      "publicationVenue": null,
+      "url": "https://www.semanticscholar.org/paper/af24e927c8939fcb34d3608b97166c467b317846",
+      "title": "Pajek - Program for Large Network Analysis",
+      "venue": "",
+      "year": 1999,
+      "referenceCount": 30,
+      "citationCount": 1677,
+      "influentialCitationCount": 130,
+      "isOpenAccess": false,
+      "openAccessPdf": {
+        "url": "",
+        "status": null,
+        "license": null
+      },
+      "fieldsOfStudy": [
+        "Computer Science"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        },
+        {
+          "category": "Mathematics",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": null,
+      "publicationDate": null,
+      "journal": {
+        "volume": "",
+        "name": ""
+      },
+      "citationStyles": {
+        "bibtex": "@Inproceedings{Batagelj1999PajekP,\n author = {V. Batagelj and Andrej Mrvar},\n title = {Pajek - Program for Large Network Analysis},\n year = {1999}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "1753785",
+          "name": "V. Batagelj"
+        },
+        {
+          "authorId": "2373242",
+          "name": "Andrej Mrvar"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "db3a261581521f007af8d6aa267b5dfcf73591e2",
+      "externalIds": {
+        "MAG": "2471073818",
+        "CorpusId": 63936426
+      },
+      "corpusId": 63936426,
+      "publicationVenue": null,
+      "url": "https://www.semanticscholar.org/paper/db3a261581521f007af8d6aa267b5dfcf73591e2",
+      "title": "A Heuristic for Graph Drawing",
+      "venue": "",
+      "year": 1984,
+      "referenceCount": 0,
+      "citationCount": 1527,
+      "influentialCitationCount": 118,
+      "isOpenAccess": false,
+      "openAccessPdf": {
+        "url": "",
+        "status": null,
+        "license": null
+      },
+      "fieldsOfStudy": [
+        "Computer Science"
+      ],
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "external"
+        },
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        },
+        {
+          "category": "Mathematics",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": null,
+      "publicationDate": null,
+      "journal": {
+        "volume": "42",
+        "pages": "149-160",
+        "name": ""
+      },
+      "citationStyles": {
+        "bibtex": "@Inproceedings{Eades1984AHF,\n author = {P. Eades},\n pages = {149-160},\n title = {A Heuristic for Graph Drawing},\n volume = {42},\n year = {1984}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "1815562",
+          "name": "P. Eades"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": "d25baf2f365277110ed0134cd1692915611bb82f",
+      "externalIds": {
+        "CorpusId": 15582683
+      },
+      "corpusId": 15582683,
+      "publicationVenue": null,
+      "url": "https://www.semanticscholar.org/paper/d25baf2f365277110ed0134cd1692915611bb82f",
+      "title": "Journal of Graph Algorithms and Applications Energy Models for Graph Clustering",
+      "venue": "",
+      "year": null,
+      "referenceCount": 51,
+      "citationCount": 265,
+      "influentialCitationCount": 25,
+      "isOpenAccess": false,
+      "openAccessPdf": {
+        "url": "",
+        "status": null,
+        "license": null
+      },
+      "fieldsOfStudy": null,
+      "s2FieldsOfStudy": [
+        {
+          "category": "Computer Science",
+          "source": "s2-fos-model"
+        },
+        {
+          "category": "Mathematics",
+          "source": "s2-fos-model"
+        }
+      ],
+      "publicationTypes": null,
+      "publicationDate": null,
+      "journal": null,
+      "citationStyles": {
+        "bibtex": "@Misc{None,\n author = {A. Noack},\n title = {Journal of Graph Algorithms and Applications Energy Models for Graph Clustering}\n}\n"
+      },
+      "authors": [
+        {
+          "authorId": "1943843",
+          "name": "A. Noack"
+        }
+      ],
+      "abstract": null
+    },
+    {
+      "paperId": null,
+      "externalIds": null,
+      "corpusId": null,
+      "publicationVenue": null,
+      "url": null,
+      "title": "Network Layout Algorithm for Gephi PLOS ONE | www.plosone",
+      "venue": "Network Layout Algorithm for Gephi PLOS ONE | www.plosone",
+      "year": null,
+      "referenceCount": null,
+      "citationCount": null,
+      "influentialCitationCount": null,
+      "isOpenAccess": null,
+      "openAccessPdf": null,
+      "fieldsOfStudy": null,
+      "s2FieldsOfStudy": null,
+      "publicationTypes": null,
+      "publicationDate": null,
+      "journal": null,
+      "citationStyles": null,
+      "authors": [],
+      "abstract": null
+    },
+    {
+      "paperId": null,
+      "externalIds": null,
+      "corpusId": null,
+      "publicationVenue": null,
+      "url": null,
+      "title": "ForceAtlas2, Network Layout Algorithm for Gephi",
+      "venue": "",
+      "year": null,
+      "referenceCount": null,
+      "citationCount": null,
+      "influentialCitationCount": null,
+      "isOpenAccess": null,
+      "openAccessPdf": null,
+      "fieldsOfStudy": null,
+      "s2FieldsOfStudy": null,
+      "publicationTypes": null,
+      "publicationDate": null,
+      "journal": null,
+      "citationStyles": null,
+      "authors": [],
+      "abstract": null
+    },
+    {
+      "paperId": null,
+      "externalIds": null,
+      "corpusId": null,
+      "publicationVenue": null,
+      "url": null,
+      "title": "June 2014 | Volume 9 | Issue 6 | e98679",
+      "venue": "",
+      "year": null,
+      "referenceCount": null,
+      "citationCount": null,
+      "influentialCitationCount": null,
+      "isOpenAccess": null,
+      "openAccessPdf": null,
+      "fieldsOfStudy": null,
+      "s2FieldsOfStudy": null,
+      "publicationTypes": null,
+      "publicationDate": null,
+      "journal": null,
+      "citationStyles": null,
+      "authors": [],
+      "abstract": null
+    }
+  ]
+}

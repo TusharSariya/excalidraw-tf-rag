@@ -1,9 +1,9 @@
 # harvest — Bruno collection
 
 A [Bruno](https://github.com/usebruno/bruno) collection that reproduces the upstream HTTP
-requests the `harvest` CLI makes. `harvest` has no API of its own — it's a client of arXiv,
-Semantic Scholar, and Supabase — so these requests let you inspect the raw responses by hand
-while building out the pipeline.
+requests the harvest workers make. Harvest has no API of its own — it's a client of arXiv,
+Semantic Scholar, OpenAlex, and Supabase — so these requests let you inspect the raw
+responses by hand while building out the pipeline.
 
 ## Layout
 
