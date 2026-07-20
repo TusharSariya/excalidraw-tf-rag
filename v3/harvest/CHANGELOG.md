@@ -4,6 +4,32 @@ Notable changes to the `harvest` package. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions match `pyproject.toml`
 (the image tag the `build-push` CI guard checks against prod ECR).
 
+## [0.7.0]
+
+### Added
+- Semantic Scholar persistence (`harvest.persistence`): a `PaperRecord` maps to
+  an FK-ordered multi-table upsert over the new `s2_*` graph tables
+  (paper/author/authorship/reference/citation/embedding) plus the per-seed
+  `source_semantic_scholar` outcome row, written together per fetched paper.
+  Migration `20260718212350_s2_graph_tables.sql`.
+
+### Fixed
+- `SemanticScholarSource.get_paper` sends S2-namespaced ids (`ARXIV:`/`DOI:`)
+  to the Graph API verbatim instead of calling a nonexistent `_schpaper_id`
+  helper (which would have raised on first use). It now swallows only a genuine
+  not-found to `None`; transient errors (rate limit, network) propagate so the
+  worker leaves the message for pgmq redelivery rather than mislabelling the
+  seed not-found.
+- `harvest-work` tries each candidate id in order (for s2: arXiv, then DOI),
+  stopping at the first that resolves; `mark_not_found` fires only when every
+  candidate is genuinely absent.
+
+### Removed
+- Legacy one-shot `harvest` CLI (`harvest:main` / PDF text extraction via
+  pdfplumber). The image and console entrypoint are now `harvest-work` only
+  (`ENTRYPOINT ["harvest-work"]`; pass `--source`). Dropped the unused
+  `pdfplumber` dependency.
+
 ## [0.6.0]
 
 ### Added

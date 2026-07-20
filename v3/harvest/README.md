@@ -91,7 +91,8 @@ uv run harvest-work --source arxiv        # drains harvest_arxiv, then exits
 ```
 
 In Kubernetes each source is one KEDA `ScaledJob` running the same command with a
-different `--source`; in Docker, one container per queue.
+different `--source`; in Docker, one container per queue
+(`ENTRYPOINT ["harvest-work"]`, pass `--source <…>`).
 
 ### Prerequisites
 

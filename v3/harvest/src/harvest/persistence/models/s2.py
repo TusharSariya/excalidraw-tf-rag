@@ -1,0 +1,425 @@
+"""Table-shaped DTOs for public.s2_* + PaperRecord → S2GraphWrite mapper."""
+
+from __future__ import annotations
+
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
+
+from harvest.persistence.base import TableRow, Write
+from harvest.sources.models.s2 import (
+    Author,
+    Embedding,
+    PaperRecord,
+    RelatedPaper,
+)
+from pydantic import Field
+
+#: specter_v1 width; must match extensions.vector(768) on s2_embedding.
+SPECTER_V1_DIM = 768
+
+
+class S2PaperRow(TableRow):
+    """Insert/upsert shape for public.s2_paper."""
+
+    __table__ = "s2_paper"
+    __conflict__ = ("paper_id",)
+
+    paper_id: str
+    corpus_id: int | None = None
+    title: str | None = None
+    abstract: str | None = None
+    venue: str | None = None
+    year: int | None = None
+    url: str | None = None
+    reference_count: int | None = None
+    citation_count: int | None = None
+    influential_citation_count: int | None = None
+    is_open_access: bool | None = None
+    publication_date: str | None = None
+    publication_types: list[str] | None = None
+    fields_of_study: list[str] | None = None
+    external_ids: dict[str, Any] | None = None
+    citation_styles: dict[str, str] | None = None
+    journal_name: str | None = None
+    journal_volume: str | None = None
+    journal_pages: str | None = None
+    oa_url: str | None = None
+    oa_status: str | None = None
+    oa_license: str | None = None
+    oa_disclaimer: str | None = None
+    venue_id: str | None = None
+    venue_name: str | None = None
+    venue_type: str | None = None
+    venue_issn: str | None = None
+    venue_url: str | None = None
+    venue_alternate_names: list[str] | None = None
+    venue_alternate_urls: list[str] | None = None
+    tldr_model: str | None = None
+    tldr_text: str | None = None
+    s2_fields_of_study: list[dict[str, str | None]] | None = None
+    fetched_at: datetime | None = None
+
+
+class S2AuthorRow(TableRow):
+    """Insert/upsert shape for public.s2_author."""
+
+    __table__ = "s2_author"
+    __conflict__ = ("author_id",)
+
+    author_id: str
+    name: str | None = None
+    url: str | None = None
+    affiliations: list[str] | None = None
+    homepage: str | None = None
+    paper_count: int | None = None
+    citation_count: int | None = None
+    h_index: int | None = None
+    external_ids: dict[str, Any] | None = None
+
+
+class S2PaperAuthorRow(TableRow):
+    """Insert/upsert shape for public.s2_paper_author."""
+
+    __table__ = "s2_paper_author"
+    __conflict__ = ("paper_id", "author_id")
+
+    paper_id: str
+    author_id: str
+    position: int = Field(ge=0)
+
+
+class S2ReferenceRow(TableRow):
+    """Insert/upsert shape for public.s2_reference."""
+
+    __table__ = "s2_reference"
+    __conflict__ = ("paper_id", "referenced_paper_id")
+
+    paper_id: str
+    referenced_paper_id: str
+
+
+class S2CitationRow(TableRow):
+    """Insert/upsert shape for public.s2_citation."""
+
+    __table__ = "s2_citation"
+    __conflict__ = ("paper_id", "citing_paper_id")
+
+    paper_id: str
+    citing_paper_id: str
+
+
+class S2EmbeddingRow(TableRow):
+    """Insert/upsert shape for public.s2_embedding (vector(768))."""
+
+    __table__ = "s2_embedding"
+    __conflict__ = ("paper_id",)
+
+    paper_id: str
+    model: str
+    embedding: list[float]
+    fetched_at: datetime | None = None
+
+
+class SourceSemanticScholarRow(TableRow):
+    """Insert/upsert shape for public.source_semantic_scholar (per-seed outcome).
+
+    Keyed by the seed's bigint ``paper_id`` — a different namespace from the
+    ``s2_*`` graph tables, whose ``paper_id`` is S2's own text id (kept here as
+    ``s2_paper_id``). One row per seed records whether the S2 fetch succeeded.
+    """
+
+    __table__ = "source_semantic_scholar"
+    __conflict__ = ("paper_id",)
+
+    paper_id: int
+    status: str = "succeeded"
+    s2_paper_id: str | None = None
+    corpus_id: int | None = None
+    title: str | None = None
+    external_ids: dict[str, Any] | None = None
+    open_access_pdf_url: str | None = None
+    reference_count: int | None = None
+    citation_count: int | None = None
+    fields_of_study: list[str] | None = None
+    raw: dict[str, Any] | None = None
+    error: str | None = None
+    fetched_at: datetime | None = None
+
+
+@dataclass(frozen=True)
+class S2GraphWrite:
+    """Multi-table upsert payload derived from one PaperRecord."""
+
+    papers: list[S2PaperRow]
+    authors: list[S2AuthorRow]
+    paper_authors: list[S2PaperAuthorRow]
+    references: list[S2ReferenceRow]
+    citations: list[S2CitationRow]
+    embedding: S2EmbeddingRow | None
+
+    def to_write(self) -> Write:
+        """Flatten into FK-ordered row-groups for a generic backend.
+
+        s2_paper (subject + every reference/citation stub) and s2_author come
+        first, so the paper_author / reference / citation / embedding rows that
+        FK into them never precede their parents. Empty groups are dropped so no
+        empty upsert is issued.
+        """
+        groups: list[Sequence[TableRow]] = [
+            self.papers,
+            self.authors,
+            self.paper_authors,
+            self.references,
+            self.citations,
+        ]
+        if self.embedding is not None:
+            groups.append([self.embedding])
+        return Write(groups=[g for g in groups if g])
+
+
+def _fos_json(
+    fields: list[Any] | None,
+) -> list[dict[str, str | None]] | None:
+    if fields is None:
+        return None
+    return [{"category": f.category, "source": f.source} for f in fields]
+
+
+def paper_row_from(
+    paper: PaperRecord | RelatedPaper,
+    *,
+    fetched_at: datetime | None = None,
+    include_tldr: bool = False,
+) -> S2PaperRow | None:
+    """Flatten a typed paper into an s2_paper row. None if paper_id missing."""
+    if not paper.paper_id:
+        return None
+
+    journal = paper.journal
+    oa = paper.open_access_pdf
+    venue = paper.publication_venue
+    tldr_model = tldr_text = None
+    if include_tldr and isinstance(paper, PaperRecord) and paper.tldr is not None:
+        tldr_model = paper.tldr.model
+        tldr_text = paper.tldr.text
+
+    return S2PaperRow(
+        paper_id=paper.paper_id,
+        corpus_id=paper.corpus_id,
+        title=paper.title,
+        abstract=paper.abstract,
+        venue=paper.venue,
+        year=paper.year,
+        url=paper.url,
+        reference_count=paper.reference_count,
+        citation_count=paper.citation_count,
+        influential_citation_count=paper.influential_citation_count,
+        is_open_access=paper.is_open_access,
+        publication_date=paper.publication_date,
+        publication_types=paper.publication_types,
+        fields_of_study=paper.fields_of_study,
+        external_ids=paper.external_ids,
+        citation_styles=paper.citation_styles,
+        journal_name=journal.name if journal else None,
+        journal_volume=journal.volume if journal else None,
+        journal_pages=journal.pages if journal else None,
+        oa_url=oa.url if oa else None,
+        oa_status=oa.status if oa else None,
+        oa_license=oa.license if oa else None,
+        oa_disclaimer=oa.disclaimer if oa else None,
+        venue_id=venue.id if venue else None,
+        venue_name=venue.name if venue else None,
+        venue_type=venue.type if venue else None,
+        venue_issn=venue.issn if venue else None,
+        venue_url=venue.url if venue else None,
+        venue_alternate_names=venue.alternate_names if venue else None,
+        venue_alternate_urls=venue.alternate_urls if venue else None,
+        tldr_model=tldr_model,
+        tldr_text=tldr_text,
+        s2_fields_of_study=_fos_json(paper.s2_fields_of_study),
+        fetched_at=fetched_at,
+    )
+
+
+def author_row_from(author: Author) -> S2AuthorRow | None:
+    if not author.author_id:
+        return None
+    return S2AuthorRow(
+        author_id=author.author_id,
+        name=author.name,
+        url=author.url,
+        affiliations=author.affiliations,
+        homepage=author.homepage,
+        paper_count=author.paper_count,
+        citation_count=author.citation_count,
+        h_index=author.h_index,
+        external_ids=author.external_ids,
+    )
+
+
+def embedding_row_from(
+    paper_id: str,
+    embedding: Embedding | None,
+    *,
+    fetched_at: datetime | None = None,
+) -> S2EmbeddingRow | None:
+    if embedding is None or embedding.model is None or embedding.vector is None:
+        return None
+    dim = len(embedding.vector)
+    if dim != SPECTER_V1_DIM:
+        raise ValueError(
+            f"s2_embedding expects vector({SPECTER_V1_DIM}), got dim={dim} "
+            f"(model={embedding.model!r})"
+        )
+    return S2EmbeddingRow(
+        paper_id=paper_id,
+        model=embedding.model,
+        embedding=list(embedding.vector),
+        fetched_at=fetched_at,
+    )
+
+
+def _absorb_authors(
+    *,
+    paper_id: str,
+    authors: list[Author] | None,
+    author_rows: dict[str, S2AuthorRow],
+    paper_authors: dict[tuple[str, str], S2PaperAuthorRow],
+) -> None:
+    if not authors:
+        return
+    for position, author in enumerate(authors):
+        row = author_row_from(author)
+        if row is None:
+            continue
+        author_rows.setdefault(row.author_id, row)
+        key = (paper_id, row.author_id)
+        paper_authors.setdefault(
+            key,
+            S2PaperAuthorRow(paper_id=paper_id, author_id=row.author_id, position=position),
+        )
+
+
+def from_paper_record(
+    record: PaperRecord,
+    *,
+    fetched_at: datetime | None = None,
+) -> S2GraphWrite:
+    """Pure mapper: one API PaperRecord → multi-table upsert payload.
+
+    Subject paper wins on id collisions with citation/reference stubs.
+    Authors and edges are deduped by natural key. Papers without paper_id
+    are dropped. Embedding is included only when present and dim == 768.
+    """
+    if not record.paper_id:
+        raise ValueError("PaperRecord.paper_id is required for S2GraphWrite")
+
+    now = fetched_at if fetched_at is not None else datetime.now(UTC)
+    papers: dict[str, S2PaperRow] = {}
+    authors: dict[str, S2AuthorRow] = {}
+    paper_authors: dict[tuple[str, str], S2PaperAuthorRow] = {}
+    references: dict[tuple[str, str], S2ReferenceRow] = {}
+    citations: dict[tuple[str, str], S2CitationRow] = {}
+
+    subject = paper_row_from(record, fetched_at=now, include_tldr=True)
+    assert subject is not None  # paper_id checked above
+    papers[subject.paper_id] = subject
+    _absorb_authors(
+        paper_id=subject.paper_id,
+        authors=record.authors,
+        author_rows=authors,
+        paper_authors=paper_authors,
+    )
+
+    for related in record.references or ():
+        if not related.paper_id or related.paper_id == subject.paper_id:
+            continue
+        stub = paper_row_from(related)
+        if stub is None:
+            continue
+        papers.setdefault(stub.paper_id, stub)
+        _absorb_authors(
+            paper_id=stub.paper_id,
+            authors=related.authors,
+            author_rows=authors,
+            paper_authors=paper_authors,
+        )
+        references[(subject.paper_id, stub.paper_id)] = S2ReferenceRow(
+            paper_id=subject.paper_id,
+            referenced_paper_id=stub.paper_id,
+        )
+
+    for related in record.citations or ():
+        if not related.paper_id or related.paper_id == subject.paper_id:
+            continue
+        stub = paper_row_from(related)
+        if stub is None:
+            continue
+        papers.setdefault(stub.paper_id, stub)
+        _absorb_authors(
+            paper_id=stub.paper_id,
+            authors=related.authors,
+            author_rows=authors,
+            paper_authors=paper_authors,
+        )
+        citations[(subject.paper_id, stub.paper_id)] = S2CitationRow(
+            paper_id=subject.paper_id,
+            citing_paper_id=stub.paper_id,
+        )
+
+    return S2GraphWrite(
+        papers=list(papers.values()),
+        authors=list(authors.values()),
+        paper_authors=list(paper_authors.values()),
+        references=list(references.values()),
+        citations=list(citations.values()),
+        embedding=embedding_row_from(subject.paper_id, record.embedding, fetched_at=now),
+    )
+
+
+def outcome_row_from(
+    seed_paper_id: int,
+    record: PaperRecord,
+    *,
+    fetched_at: datetime | None = None,
+) -> SourceSemanticScholarRow:
+    """Build the ``source_semantic_scholar`` success row for one fetched record.
+
+    Keyed by the seed's bigint id; S2's own id lands in ``s2_paper_id``. ``raw``
+    stays None — PaperRecord does not retain the API payload (unlike the arxiv /
+    openalex adapters), so there is nothing faithful to store there yet.
+    """
+    oa = record.open_access_pdf
+    return SourceSemanticScholarRow(
+        paper_id=seed_paper_id,
+        status="succeeded",
+        s2_paper_id=record.paper_id,
+        corpus_id=record.corpus_id,
+        title=record.title,
+        external_ids=dict(record.external_ids) if record.external_ids else None,
+        open_access_pdf_url=oa.url if oa else None,
+        reference_count=record.reference_count,
+        citation_count=record.citation_count,
+        fields_of_study=record.fields_of_study,
+        fetched_at=fetched_at,
+    )
+
+
+def s2_write(
+    seed_paper_id: int,
+    record: PaperRecord,
+    *,
+    fetched_at: datetime | None = None,
+) -> Write:
+    """Full S2 persistence payload for one fetched paper.
+
+    The ``s2_*`` graph rows (FK-ordered) followed by the per-seed
+    ``source_semantic_scholar`` outcome row, as one ``Write``. The outcome row
+    FKs only into ``seeds`` (already present), so it can trail the graph groups.
+    """
+    now = fetched_at if fetched_at is not None else datetime.now(UTC)
+    graph = from_paper_record(record, fetched_at=now).to_write()
+    outcome = outcome_row_from(seed_paper_id, record, fetched_at=now)
+    return Write(groups=[*graph.groups, [outcome]])
