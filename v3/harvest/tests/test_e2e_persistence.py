@@ -1,6 +1,6 @@
 """End-to-end: a mock S2 API response all the way to the DB write calls.
 
-Path exercised: raw API JSON -> PaperRecord.from_dict -> from_paper_record ->
+Path exercised: raw API JSON -> S2Record.from_dict -> from_paper_record ->
 S2GraphWrite.to_write -> SupabasePersistence.write -> PostgREST upserts.
 
 The DB is a fake that records every ``table(...).upsert(...).execute()`` so the
@@ -16,7 +16,7 @@ from typing import Any
 
 from harvest.persistence.models.s2 import SPECTER_V1_DIM, from_paper_record, s2_write
 from harvest.persistence.supabase import SupabasePersistence
-from harvest.sources.models.s2 import Embedding, PaperRecord
+from harvest.sources.models.s2 import Embedding, S2Record
 
 
 class _FakeTable:
@@ -50,7 +50,7 @@ class FakeSupabase:
 def test_e2e_s2_response_to_persistence(s2_paper_forceatlas2: dict) -> None:
     # 1. Mock API response -> typed record. Fixture vector is truncated, so drop
     #    the embedding (the 768-d guard is covered separately below).
-    rec = replace(PaperRecord.from_dict(s2_paper_forceatlas2), embedding=None)
+    rec = replace(S2Record.from_dict(s2_paper_forceatlas2), embedding=None)
 
     # 2. record -> mapper -> FK-ordered write payload.
     write = from_paper_record(rec).to_write()
@@ -111,7 +111,7 @@ def test_e2e_worker_payload_writes_graph_and_outcome(s2_paper_forceatlas2: dict)
     # This is exactly what the worker persists per message: s2_write(seed_id, record)
     # -> the s2_* graph rows PLUS the source_semantic_scholar outcome row.
     seed_paper_id = 42  # the seed's bigint id (distinct from S2's text paper id)
-    rec = replace(PaperRecord.from_dict(s2_paper_forceatlas2), embedding=None)
+    rec = replace(S2Record.from_dict(s2_paper_forceatlas2), embedding=None)
 
     client = FakeSupabase()
     SupabasePersistence(client).write(s2_write(seed_paper_id, rec))
@@ -134,7 +134,7 @@ def test_e2e_worker_payload_writes_graph_and_outcome(s2_paper_forceatlas2: dict)
 
 def test_e2e_includes_embedding_when_present(s2_paper_forceatlas2: dict) -> None:
     rec = replace(
-        PaperRecord.from_dict(s2_paper_forceatlas2),
+        S2Record.from_dict(s2_paper_forceatlas2),
         embedding=Embedding(model="specter_v1", vector=[0.0] * SPECTER_V1_DIM),
     )
     write = from_paper_record(rec).to_write()

@@ -1,3 +1,4 @@
+from .arxiv import SourceArxivRow, arxiv_write
 from .s2 import (
     SPECTER_V1_DIM,
     S2AuthorRow,
@@ -19,6 +20,8 @@ from .seed import Seed
 
 __all__ = [
     "SPECTER_V1_DIM",
+    "SourceArxivRow",
+    "arxiv_write",
     "S2AuthorRow",
     "S2CitationRow",
     "S2EmbeddingRow",

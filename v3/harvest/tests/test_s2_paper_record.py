@@ -1,9 +1,9 @@
-"""Fixture-driven mapping tests for models.s2.PaperRecord."""
+"""Fixture-driven mapping tests for models.s2.S2Record."""
 
 from __future__ import annotations
 
 import pytest
-from harvest.sources.models.s2 import TOP_LEVEL_KEYS, PaperRecord, RelatedPaper
+from harvest.sources.models.s2 import TOP_LEVEL_KEYS, RelatedPaper, S2Record
 
 
 def test_fixture_has_all_top_level_keys(s2_paper_forceatlas2: dict) -> None:
@@ -11,7 +11,7 @@ def test_fixture_has_all_top_level_keys(s2_paper_forceatlas2: dict) -> None:
 
 
 def test_paper_record_maps_all_top_level_keys(s2_paper_forceatlas2: dict) -> None:
-    rec = PaperRecord.from_dict(s2_paper_forceatlas2)
+    rec = S2Record.from_dict(s2_paper_forceatlas2)
 
     assert rec.paper_id == s2_paper_forceatlas2["paperId"]
     assert rec.title == s2_paper_forceatlas2["title"]
@@ -75,7 +75,7 @@ def test_paper_record_maps_all_top_level_keys(s2_paper_forceatlas2: dict) -> Non
 def test_from_dict_rejects_unknown_top_level_key(s2_paper_forceatlas2: dict) -> None:
     bad = {**s2_paper_forceatlas2, "notARealField": 1}
     with pytest.raises(ValueError, match="unknown top-level field"):
-        PaperRecord.from_dict(bad)
+        S2Record.from_dict(bad)
 
 
 def test_related_paper_rejects_nested_citations() -> None:

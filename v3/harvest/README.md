@@ -114,12 +114,14 @@ uv run harvest-work --source arxiv 2>&1 | grep harvest.worker
 ## Status / history
 
 - **Built:** the producer fan-out (`seeds` → `publish_seed` → 3 queues), the
-  versioned + DB-enforced message contract, per-entrypoint settings, and the
-  `harvest-work` drain loop — proven end-to-end against staging (seed a message,
-  read → parse → archive → drain to 0).
-- **Next:** the per-source **handler** (fetch via `sources/` + upsert `source_X`
-  with `status`, plus the `read_ct` poison cap); the **seeder** CLI
-  (`harvest-seed`); KEDA/compose packaging. All three **source clients** now exist
-  (`ArxivSource`, `OpenAlexSource`, `SemanticScholarSource`).
+  versioned + DB-enforced message contract, per-entrypoint settings, the
+  `harvest-work` drain loop with the `read_ct` poison cap, and the per-source
+  **persist handlers** for `s2` (0.7.0, the `s2_*` graph + outcome row) and
+  `arxiv` (0.8.0, `source_arxiv`) — fetch via `sources/` and upsert `source_X`
+  with `status`. Proven end-to-end against staging.
+- **Next:** wire the `openalex` handler — it still points at `s2_write` and will
+  raise on the first resolved paper; it needs its own `SourceOpenAlexRow` +
+  `openalex_write` (`source_openalex` is already lossless, so no migration).
+  Then KEDA/compose packaging polish.
 - **Deferred:** shared `rate_budget` token bucket (needed once a source scales past
   one pod), least-privilege DB roles, text extraction.

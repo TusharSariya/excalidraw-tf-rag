@@ -4,7 +4,7 @@ from semanticscholar import SemanticScholar
 from semanticscholar.SemanticScholarException import ObjectNotFoundException
 
 from .base import Paper, PaperSource
-from .models.s2 import PaperRecord
+from .models.s2 import S2Record
 
 logger = logging.getLogger("harvest.semantic_scholar")
 
@@ -35,4 +35,4 @@ class SemanticScholarSource(PaperSource):
             logger.warning("no result for %s (not found)", identifier)
             return None
 
-        return PaperRecord.from_sdk(paper)
+        return S2Record.from_sdk(paper)

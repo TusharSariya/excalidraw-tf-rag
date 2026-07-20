@@ -1,6 +1,6 @@
 from .arxiv import ArxivSource
 from .base import Author, Paper, PaperSource
-from .models.s2 import PaperRecord
+from .models.s2 import S2Record
 from .openalex import OpenAlexSource
 from .semantic_scholar import SemanticScholarSource
 
@@ -11,5 +11,5 @@ __all__ = [
     "ArxivSource",
     "OpenAlexSource",
     "SemanticScholarSource",
-    "PaperRecord",
+    "S2Record",
 ]
