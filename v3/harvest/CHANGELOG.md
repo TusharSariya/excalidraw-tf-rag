@@ -4,6 +4,32 @@ Notable changes to the `harvest` package. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions match `pyproject.toml`
 (the image tag the `build-push` CI guard checks against prod ECR).
 
+## [0.9.0]
+
+### Added
+- OpenAlex persistence: `harvest.persistence.models.openalex` maps a fetched
+  `OpenAlexWork` to a `source_openalex` upsert (`SourceOpenAlexRow` +
+  `openalex_write`), wired into `harvest-work` as the openalex source's
+  `build_write`. The queryable subset is promoted to typed columns; the full Work
+  is kept on `raw`, with `authorships` broken out to jsonb. Single row group — the
+  citation graph (`referenced_works`) stays in `raw`, unlike `s2_write`'s fan-out.
+- `sources.models.openalex.OpenAlexWork`: a typed, tolerant reader over the
+  schemaless pyalex `Work` dict, with `abstract` de-inversion and a guarded
+  `best_oa_pdf_url`.
+- OpenAlex worker wiring resolves `openalex_id` first, then `doi`; `_works_key`
+  normalises a bare `10.x` DOI to its `https://doi.org/…` URL form (a bare DOI
+  404s on `/works/`) and namespaces ROR ids (inert — ROR is institution-scoped).
+- Migration `20260720120000_source_openalex_enrich.sql` promotes
+  `publication_year`, `language`, `is_oa`, `oa_status`, `referenced_works_count`,
+  and `is_retracted` to typed `source_openalex` columns. **Must be applied to
+  staging before the first openalex write.**
+
+### Changed
+- `sources.base` reduced to a generic `PaperSource` Protocol; each source returns
+  its own rich record (`arxiv.Result` / `S2Record` / `OpenAlexWork`) rather than a
+  shared `Paper`/`Author` dataclass. `SemanticScholarSource.get_paper` now returns
+  `S2Record`.
+
 ## [0.8.0]
 
 ### Added

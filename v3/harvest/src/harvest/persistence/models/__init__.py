@@ -1,4 +1,5 @@
 from .arxiv import SourceArxivRow, arxiv_write
+from .openalex import SourceOpenAlexRow, openalex_write
 from .s2 import (
     SPECTER_V1_DIM,
     S2AuthorRow,
@@ -22,6 +23,8 @@ __all__ = [
     "SPECTER_V1_DIM",
     "SourceArxivRow",
     "arxiv_write",
+    "SourceOpenAlexRow",
+    "openalex_write",
     "S2AuthorRow",
     "S2CitationRow",
     "S2EmbeddingRow",
