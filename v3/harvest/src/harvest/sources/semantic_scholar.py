@@ -3,7 +3,7 @@ import logging
 from semanticscholar import SemanticScholar
 from semanticscholar.SemanticScholarException import ObjectNotFoundException
 
-from .base import Paper, PaperSource
+from .base import PaperSource
 from .models.s2 import S2Record
 
 logger = logging.getLogger("harvest.semantic_scholar")
@@ -20,7 +20,7 @@ class SemanticScholarSource(PaperSource):
     def __init__(self) -> None:
         self._client = SemanticScholar()
 
-    def get_paper(self, identifier: str) -> Paper | None:
+    def get_paper(self, identifier: str) -> S2Record | None:
         """Fetch one paper, or None if S2 genuinely has no record for it.
 
         Only a not-found is swallowed to None (a terminal, don't-retry outcome).

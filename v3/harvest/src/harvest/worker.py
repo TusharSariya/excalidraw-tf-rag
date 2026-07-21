@@ -20,7 +20,7 @@ from typing import Any
 
 from . import contracts
 from .persistence.base import Write
-from .persistence.models import Seed, arxiv_write, s2_write
+from .persistence.models import Seed, arxiv_write, openalex_write, s2_write
 from .persistence.supabase import SupabasePersistence
 from .settings import HarvestSettings, SupabaseSettings, WorkerSettings
 from .sources.arxiv import ArxivSource
@@ -55,9 +55,11 @@ SOURCES: dict[str, Source] = {
     ),
     "openalex": Source(
         "harvest_openalex",
-        lambda _: OpenAlexSource(),
-        identify=[lambda seed: seed.openalex_id],
-        build_write=s2_write,
+        lambda s: OpenAlexSource(s.openalex_api_key),
+        # OpenAlex resolves a DOI or an OpenAlex id — never an arXiv id. Try the
+        # openalex_id first, then the DOI (most seeds carry only a DOI).
+        identify=[lambda seed: seed.openalex_id, lambda seed: seed.doi],
+        build_write=openalex_write,
     ),
     "s2": Source(
         "harvest_s2",

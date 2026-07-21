@@ -111,17 +111,44 @@ Logs stream to stdout (`PYTHONUNBUFFERED=1`). Loggers are namespaced under
 uv run harvest-work --source arxiv 2>&1 | grep harvest.worker
 ```
 
+### Monitoring on the cluster
+
+The KEDA ScaledJobs run in the `harvester` namespace. Workers are `drain-then-exit`,
+so pods live only a few seconds — start a stream *before* seeding, or read from Job
+history afterwards.
+
+```bash
+# live overview: ScaledJobs (ACTIVE flips when the queue has messages) + Jobs + Pods
+watch -n2 kubectl get scaledjobs,jobs,pods -n harvester
+
+# live logs across every harvester pod, incl. ones created after you attach
+stern -n harvester harvester
+
+# after the fact (pods are gone; reads the Job's log file directly, no -f)
+kubectl get jobs -n harvester --sort-by=.metadata.creationTimestamp | tail
+kubectl logs -n harvester job/<job-name>
+```
+
+Notes:
+- `kubectl get ... -w` accepts only one resource type; `watch` re-running a plain
+  `get` is the way to see all three at once.
+- If `stern`/`-f` errors with `too many open files`, that's the node's inotify limit
+  (`fs.inotify.max_user_instances`), not the worker — non-follow `kubectl logs` still
+  works. The ScaledJob/image is defined in `aws-account-infra` (the `cluster_harvester`
+  Ansible role), not here.
+
 ## Status / history
 
 - **Built:** the producer fan-out (`seeds` → `publish_seed` → 3 queues), the
   versioned + DB-enforced message contract, per-entrypoint settings, the
   `harvest-work` drain loop with the `read_ct` poison cap, and the per-source
-  **persist handlers** for `s2` (0.7.0, the `s2_*` graph + outcome row) and
-  `arxiv` (0.8.0, `source_arxiv`) — fetch via `sources/` and upsert `source_X`
-  with `status`. Proven end-to-end against staging.
-- **Next:** wire the `openalex` handler — it still points at `s2_write` and will
-  raise on the first resolved paper; it needs its own `SourceOpenAlexRow` +
-  `openalex_write` (`source_openalex` is already lossless, so no migration).
-  Then KEDA/compose packaging polish.
+  **persist handlers** for `s2` (0.7.0, the `s2_*` graph + outcome row),
+  `arxiv` (0.8.0, `source_arxiv`), and `openalex` (0.9.0, `source_openalex`) —
+  fetch via `sources/` and upsert `source_X` with `status`. The `s2`/`arxiv`
+  handlers are proven end-to-end against staging.
+- **Next:** run `openalex` end-to-end. The handler is wired (`SourceOpenAlexRow` +
+  `openalex_write`, resolving `openalex_id` then `doi`), but its enrich migration
+  (`20260720120000`, promoting `is_oa`/`oa_status`/`publication_year`/…) must be
+  applied to staging before the first write. Then KEDA/compose packaging polish.
 - **Deferred:** shared `rate_budget` token bucket (needed once a source scales past
   one pod), least-privilege DB roles, text extraction.
