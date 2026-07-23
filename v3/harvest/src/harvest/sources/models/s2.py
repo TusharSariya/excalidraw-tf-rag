@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from semanticscholar import Paper as SemanticScholarPaper
+from semanticscholar.Paper import Paper as SemanticScholarPaper
 
 #: Top-level keys on a full paper response (Graph API / SDK ``Paper.FIELDS`` shape).
 TOP_LEVEL_KEYS: frozenset[str] = frozenset(

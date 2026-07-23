@@ -1,8 +1,8 @@
-"""openalex mapping: OpenAlexWork -> source_openalex row, and _works_key normalisation."""
+"""openalex mapping: OpenAlexWork -> source_openalex row, and key normalisation."""
 
 from harvest.persistence.models import openalex_write
 from harvest.sources.models.openalex import OpenAlexWork
-from harvest.sources.openalex import _works_key
+from harvest.sources.openalex import _normalize_key
 
 FIXTURE = {
     "id": "https://openalex.org/W123",
@@ -59,14 +59,16 @@ def test_openalex_write_tolerates_a_sparse_work():
     assert d["title"] == "T"
 
 
-def test_works_key_normalises_identifiers():
-    assert _works_key("10.1109/TVCG.2021.3114756") == "https://doi.org/10.1109/TVCG.2021.3114756"
-    assert _works_key("W2741809807") == "W2741809807"
-    assert _works_key("https://openalex.org/W1") == "https://openalex.org/W1"
-    assert _works_key("pmid:12345") == "pmid:12345"  # namespaced ids pass through
+def test_normalize_key_normalises_identifiers():
+    assert (
+        _normalize_key("10.1109/TVCG.2021.3114756") == "https://doi.org/10.1109/TVCG.2021.3114756"
+    )
+    assert _normalize_key("W2741809807") == "W2741809807"
+    assert _normalize_key("https://openalex.org/W1") == "https://openalex.org/W1"
+    assert _normalize_key("pmid:12345") == "pmid:12345"  # namespaced ids pass through
 
 
-def test_works_key_normalises_ror_even_though_inert():
+def test_normalize_key_normalises_ror_even_though_inert():
     # ROR is institution-scoped and 404s for works, but is normalised to the namespace.
-    assert _works_key("https://ror.org/0abc12345") == "ror:0abc12345"
-    assert _works_key("ror:0abc12345") == "ror:0abc12345"
+    assert _normalize_key("https://ror.org/0abc12345") == "ror:0abc12345"
+    assert _normalize_key("ror:0abc12345") == "ror:0abc12345"

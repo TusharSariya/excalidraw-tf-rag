@@ -4,6 +4,22 @@ Notable changes to the `harvest` package. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions match `pyproject.toml`
 (the image tag the `build-push` CI guard checks against prod ECR).
 
+## [0.10.0]
+
+### Fixed
+- Batch worker loop: keep per-message `paper_id` ↔ `msg_id` mapping; poison-pill,
+  not-found, write, and archive are all per-seed again. Each seed contributes a
+  single fetch id — the first present identifier in `identify` order (e.g. arXiv
+  before DOI) — so the deduped batch can never exceed a source's per-request id
+  cap (S2 rejects batches over 500).
+- `SupabasePersistence.read_batch` reads via `pgmq_public` with a real visibility
+  timeout (replacing the broken `batch_load_seeds` that coerced pgmq rows into
+  `Seed`). `load_seeds` returns `dict[int, Seed]` keyed by `paper_id`.
+- `ArxivSource` / `OpenAlexSource` / `SemanticScholarSource.get_papers` key results
+  by the requested identifier (and do not mutate the input list). OpenAlex batches
+  W… ids; DOIs are resolved one-at-a-time because `Works()[list]` only filters by
+  openalex id.
+
 ## [0.9.0]
 
 ### Added
