@@ -4,6 +4,22 @@ Notable changes to the `harvest` package. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions match `pyproject.toml`
 (the image tag the `build-push` CI guard checks against prod ECR).
 
+## [0.11.0]
+
+### Fixed
+- `ArxivSource`: configure `arxiv.Client(delay_seconds=3, num_retries=5)` for ToU
+  pacing. Live `0.10.0` workers were failing entire batches on `HTTP 429` from
+  `export.arxiv.org` with nothing written to `source_arxiv`. Sustained 429s are
+  left to pgmq redelivery rather than an in-process backoff: redelivery already
+  spaces attempts by `VT_SECONDS` (120s), and sleeping in-process risked
+  overrunning the visibility timeout, letting a second worker pick up the same
+  batch mid-retry and inflating `read_ct` toward the `MAX_READ_CT` poison-pill
+  cap on timing alone. A fetch now blocks for at most ~18s.
+- `SupabasePersistence.read_batch`: stop waiting after **10s of continuous
+  `visible_length == 0`** (drain-then-exit instead of hammering PostgREST for the
+  full `WAIT_SECONDS`). Poll pacing is **0.1s for the first 1s**, then **1s**
+  thereafter (empty and partial waits).
+
 ## [0.10.0]
 
 ### Fixed
