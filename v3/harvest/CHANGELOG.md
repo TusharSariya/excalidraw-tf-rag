@@ -4,6 +4,16 @@ Notable changes to the `harvest` package. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions match `pyproject.toml`
 (the image tag the `build-push` CI guard checks against prod ECR).
 
+## [0.17.0]
+
+### Fixed
+- Bypass the S2 SDK paginator for `/citations` and `/references`: HTTP 200 with
+  ``data: null`` is either **publisher elision** (e.g. Wiley
+  `DOI:10.1111/cgf.12791` — treat as empty refs) or a transient flake (retry).
+  The SDK always raised TypeError and aborted before writing references.
+- Stream chunk size 1000→250; S2 visibility timeout 120s→900s so mega-cite
+  papers can finish without mid-graph redelivery.
+
 ## [0.16.0]
 
 ### Fixed
