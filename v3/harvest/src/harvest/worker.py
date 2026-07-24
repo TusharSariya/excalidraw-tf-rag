@@ -214,7 +214,9 @@ SOURCES: dict[str, Source] = {
 
 # Visibility timeout: how long a read message stays hidden while we work on it.
 # If we don't archive within this window, pgmq redelivers it (at-least-once).
+# S2 paginates mega-cite graphs (10k+) with streamed upserts — needs a long VT.
 VT_SECONDS = 120
+S2_VT_SECONDS = 900
 
 # How long to wait for a full batch to accumulate before reading whatever is there.
 WAIT_SECONDS = 120.0
@@ -259,7 +261,7 @@ def main() -> None:
         rows = store.read_batch(
             queue,
             n=source.batch_size,
-            vt_seconds=VT_SECONDS,
+            vt_seconds=S2_VT_SECONDS if source_key == "s2" else VT_SECONDS,
             wait_seconds=WAIT_SECONDS,
             empty_exit_seconds=EMPTY_EXIT_SECONDS,
             poll_fast_seconds=POLL_FAST_SECONDS,

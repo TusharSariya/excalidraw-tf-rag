@@ -1,16 +1,16 @@
 # Graph Report - excalidraw-tf-rag  (2026-07-24)
 
 ## Corpus Check
-- 783 files · ~1,290,566 words
+- 783 files · ~1,290,916 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 9184 nodes · 15428 edges · 705 communities (561 shown, 144 thin omitted)
+- 9185 nodes · 15430 edges · 691 communities (562 shown, 129 thin omitted)
 - Extraction: 92% EXTRACTED · 8% INFERRED · 0% AMBIGUOUS · INFERRED: 1160 edges (avg confidence: 0.71)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `3bf9315a`
+- Built from commit: `e040e149`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -624,6 +624,7 @@
 - [[_COMMUNITY_Community 657|Community 657]]
 - [[_COMMUNITY_Community 658|Community 658]]
 - [[_COMMUNITY_Community 659|Community 659]]
+- [[_COMMUNITY_Community 661|Community 661]]
 - [[_COMMUNITY_Community 662|Community 662]]
 - [[_COMMUNITY_Community 663|Community 663]]
 - [[_COMMUNITY_Community 664|Community 664]]
@@ -644,27 +645,12 @@
 - [[_COMMUNITY_Community 679|Community 679]]
 - [[_COMMUNITY_Community 680|Community 680]]
 - [[_COMMUNITY_Community 681|Community 681]]
-- [[_COMMUNITY_Community 682|Community 682]]
 - [[_COMMUNITY_Community 683|Community 683]]
 - [[_COMMUNITY_Community 684|Community 684]]
-- [[_COMMUNITY_Community 685|Community 685]]
 - [[_COMMUNITY_Community 686|Community 686]]
 - [[_COMMUNITY_Community 687|Community 687]]
-- [[_COMMUNITY_Community 689|Community 689]]
-- [[_COMMUNITY_Community 690|Community 690]]
 - [[_COMMUNITY_Community 691|Community 691]]
 - [[_COMMUNITY_Community 692|Community 692]]
-- [[_COMMUNITY_Community 693|Community 693]]
-- [[_COMMUNITY_Community 694|Community 694]]
-- [[_COMMUNITY_Community 695|Community 695]]
-- [[_COMMUNITY_Community 696|Community 696]]
-- [[_COMMUNITY_Community 697|Community 697]]
-- [[_COMMUNITY_Community 698|Community 698]]
-- [[_COMMUNITY_Community 699|Community 699]]
-- [[_COMMUNITY_Community 700|Community 700]]
-- [[_COMMUNITY_Community 701|Community 701]]
-- [[_COMMUNITY_Community 702|Community 702]]
-- [[_COMMUNITY_Community 703|Community 703]]
 - [[_COMMUNITY_Community 704|Community 704]]
 
 ## God Nodes (most connected - your core abstractions)
@@ -705,7 +691,7 @@
 - **GPU Gateway service deployments** — gpu_gateway_config_serve_config_gatewayhttp, gpu_gateway_config_serve_config_denseembed4b, gpu_gateway_config_serve_config_denseembed06b, gpu_gateway_config_serve_config_rerankerdeployment, gpu_gateway_config_serve_config_lmdeployment [EXTRACTED 0.95]
 - **uv-managed RAG packages** — contributing_rag_common, contributing_repo_rag, contributing_graph_layout_rag, contributing_rag_literature_rag, contributing_gpu_gateway [EXTRACTED 0.95]
 
-## Communities (705 total, 144 thin omitted)
+## Communities (691 total, 129 thin omitted)
 
 ### Community 0 - "Benchmark Re-Judging & Env"
 Cohesion: 0.17
@@ -756,7 +742,7 @@ Cohesion: 0.27
 Nodes (13): _conn(), current_run_id(), init_db(), log_attempt(), _now_iso(), Any, query_attempts(), SQLite ledger for per-URL harvest download attempts. (+5 more)
 
 ### Community 12 - "Manifest Harvest CLI"
-Cohesion: 0.11
+Cohesion: 0.16
 Nodes (17): book_metadata_stubs(), ManifestItem, _is_title_collision(), load_manifest(), Manifest, manifest_by_id(), merge_items(), _normalize_title() (+9 more)
 
 ### Community 13 - "Synthetic Query Generation"
@@ -820,8 +806,8 @@ Cohesion: 0.11
 Nodes (9): Enqueue a job and await its result. Starts the dispatcher lazily., Pick the next model to serve: fairness → resident-with-work → deepest queue., A non-recently-served queue whose head has waited past STARVE_MS, once the, Pull head-of-line jobs for `model`. Coalescable (embed) models drain up to, Free the minimum VRAM so `needed` fits, evicting cheapest-to-lose first., Victim ranking: idle before busy → least-recently-used → shallower queue., After a failure, drop the model from tracking and resync to real VRAM., Purge jobs whose caller disconnected so dead work never triggers a load. (+1 more)
 
 ### Community 28 - "Retrieval Engine"
-Cohesion: 0.23
-Nodes (20): _evidence(), _expand_candidates(), _flag_seminal(), format_results(), _manifest_by_doc(), Any, RetrieveFilters, Mark the single most in-corpus-cited result as a ``seminal`` entry point.      R (+12 more)
+Cohesion: 0.26
+Nodes (18): _evidence(), _expand_candidates(), format_results(), _manifest_by_doc(), Any, RetrieveFilters, HyDE: embed a hypothetical passage, retrieve with hybrid BM25+dense fusion., Run HyDE expansion and re-retrieve.      Returns fused candidates, or None if th (+10 more)
 
 ### Community 29 - "Ingestion Run & Extraction"
 Cohesion: 0.09
@@ -904,8 +890,8 @@ Cohesion: 0.08
 Nodes (24): 0. The constraint that reframes everything, 1. What we already have vs. what's actually used, 2. External sources (all free, keyless-capable, high CS coverage), 3. Does each signal actually help retrieval? (evidence), 4. Prioritized recommendations (highest ROI first), 5. The bigger lever (caveat to the whole question), 6. Fields to add for the _research-tool_ job (not ranking), arXiv (`export.arxiv.org/api/query`) — for the arXiv slice (274+ docs, near-100% clean) (+16 more)
 
 ### Community 51 - "Experimental Index Build"
-Cohesion: 0.06
-Nodes (59): _atomic_write_json(), _batches(), _cuda_available(), _fastembed_arm(), main(), _mps_available(), _now_id(), Any (+51 more)
+Cohesion: 0.16
+Nodes (25): build_experimental_index(), build_retrieval_index_cmd(), _clean_payload(), _colbert_encoder(), _colbert_encoder_cached(), _connect(), _corpus_fingerprint(), _fastembed_supports_colbert() (+17 more)
 
 ### Community 52 - "Judge Audit Tests"
 Cohesion: 0.31
@@ -932,8 +918,8 @@ Cohesion: 0.09
 Nodes (23): Baseline Results, Catalog, Catalog, Catalog, Gemma4 Article Summary Chunks, Gemma4 Contextual Chunking, Interpretation, Late Chunking Feasibility (+15 more)
 
 ### Community 58 - "Index Re-embedding"
-Cohesion: 0.04
-Nodes (66): P, Per-source academic-paper harvester (seed → queue → worker)., ArxivSource, PaperSource implementation backed by the arxiv.org API., PaperSource, CoreApiKeyMissing, CoreSource, _match_doi() (+58 more)
+Cohesion: 0.05
+Nodes (44): P, Per-source academic-paper harvester (seed → queue → worker)., ArxivSource, PaperSource implementation backed by the arxiv.org API., PaperSource, CoreApiKeyMissing, CoreSource, _match_doi() (+36 more)
 
 ### Community 59 - "Evaluation Diagnostics"
 Cohesion: 0.21
@@ -960,8 +946,8 @@ Cohesion: 0.09
 Nodes (36): _apply_deep_harvest_defaults(), _apply_pipeline_harvest_defaults(), _counts(), _execute_harvest(), _existing_ids(), harvest_add_local_cmd(), harvest_enrich_cmd(), harvest_enrich_metadata_cmd() (+28 more)
 
 ### Community 65 - "Scraping & Harvest Verification"
-Cohesion: 0.13
-Nodes (22): BaseModel, book_metadata_stubs(), ManifestItem, harvest_trusted_venues(), ManifestItem, Trusted NLP/IR venue harvest via OpenAlex source filters., _is_title_collision(), load_manifest() (+14 more)
+Cohesion: 0.14
+Nodes (21): book_metadata_stubs(), ManifestItem, _is_title_collision(), load_manifest(), Manifest, manifest_by_id(), ManifestItem, merge_items() (+13 more)
 
 ### Community 66 - "Evaluation Gate Reporting"
 Cohesion: 0.17
@@ -1016,8 +1002,8 @@ Cohesion: 0.12
 Nodes (30): _backend_order(), build_judge_prompt(), _deepseek_key(), _http_chat_grade(), _http_judge_backend(), judge_agreement(), judge_model(), _judge_one() (+22 more)
 
 ### Community 79 - "Text Chunking"
-Cohesion: 0.05
-Nodes (35): Paper, Map a fetched record back to one of the DOIs we asked for.      DataCite normali, Resolve by DOI; missing DOIs map to None (terminal, don't retry).          DataC, requested_id_for(), Creator, DataCiteRecord, DateInfo, Description (+27 more)
+Cohesion: 0.04
+Nodes (39): The persistence contract shared by every backend.  A source-mapper turns one API, datacite_write(), datetime, Table-shaped DTO for public.source_datacite + DataCiteRecord -> Write mapper.  M, Insert/upsert shape for public.source_datacite (per-seed outcome).      Keyed by, Build the ``source_datacite`` success ``Write`` for one fetched ``DataCiteRecord, SourceDataCiteRow, Insert shape for public.seeds — paper_id is DB-generated. (+31 more)
 
 ### Community 80 - "Ingestion Testing"
 Cohesion: 0.10
@@ -1040,8 +1026,8 @@ Cohesion: 0.16
 Nodes (5): _qrels(), Unit tests for multi-system pooling, LLM judging, and bias diagnostics., test_graded_labels_extracts_grades(), test_overlay_leaves_unjudged_case_untouched(), test_overlay_unions_and_never_drops()
 
 ### Community 85 - "Citation CLI Commands"
-Cohesion: 0.15
-Nodes (12): cite_enrich_cmd(), cite_group(), cite_stats_cmd(), embed_indexes_cmd(), eval_related_cmd(), main(), Citation graph: enrich from OpenAlex/Semantic Scholar, find related papers., Build/refresh data/citations.sqlite from the manifest.      Each item is resolve (+4 more)
+Cohesion: 0.05
+Nodes (37): catalog_cmd(), cite_bibtex_cmd(), cite_coverage_cmd(), cite_embed_related_cmd(), cite_enrich_cmd(), cite_group(), cite_neighbors_cmd(), cite_related_cmd() (+29 more)
 
 ### Community 86 - "Contextual Index Profile"
 Cohesion: 0.19
@@ -1084,8 +1070,8 @@ Cohesion: 0.22
 Nodes (20): _cache_has_verdict(), collect_unjudged_pool(), count_judge_cache_misses(), _diagnostics_summary(), _enrich_from_row(), format_backfill_report(), _lookup_manifest_doc(), merge_qrels() (+12 more)
 
 ### Community 96 - "ArXiv Bulk Harvesting"
-Cohesion: 0.19
-Nodes (14): _arxiv_id_from_entry(), _download_arxiv_item(), harvest_arxiv(), _paper_to_item(), Element, ManifestItem, Harvest RAG papers from arXiv API., _search_arxiv() (+6 more)
+Cohesion: 0.39
+Nodes (8): _arxiv_id_from_entry(), _download_arxiv_item(), harvest_arxiv(), _paper_to_item(), Element, ManifestItem, Harvest RAG papers from arXiv API., _search_arxiv()
 
 ### Community 97 - "Forward Citation Expansion"
 Cohesion: 0.39
@@ -1112,8 +1098,8 @@ Cohesion: 0.29
 Nodes (9): Path, 2026-07-04 pass-4 hang regression: an hours-long Retry-After must not     park a, test_download_accepts_valid_pdf(), test_download_caps_huge_retry_after_sleep(), test_download_handles_http_error(), test_download_rejects_non_pdf(), test_download_respects_retry_after(), test_download_retries_on_429() (+1 more)
 
 ### Community 103 - "Ingest Pipeline"
-Cohesion: 0.13
-Nodes (23): _cache_key(), _cache_path(), cache_stats(), get(), put(), Path, TextChunk, Disk cache for PDF extraction results.  Key: (pdf_sha256, backend, chunking_fing (+15 more)
+Cohesion: 0.29
+Nodes (12): format_duration(), ingest_status_cmd(), load_status(), new_run_status(), now_iso(), progress(), Any, ProfileIndexPaths (+4 more)
 
 ### Community 104 - "Gemini Auth & Environment"
 Cohesion: 0.10
@@ -1148,8 +1134,8 @@ Cohesion: 0.16
 Nodes (11): _hg7_decide(), HG7 PASS iff rho>=0.70 AND kappa>=0.70 AND bias<0.25., _doc(), _FakeAudit, T8 — judge transport routed through ``rag_common.local_llm`` + HG7 gate.  Covers, End-to-end HG7 with judge + audit mocked → PASS., test_hg7_decide_fail_each_axis(), test_hg7_decide_pass() (+3 more)
 
 ### Community 112 - "Citation Neighbors Navigation"
-Cohesion: 0.16
-Nodes (19): cite_neighbors_cmd(), Walk the in-corpus citation neighborhood of a document.      A research-tool nav, in_corpus_neighbors(), In-corpus citation neighborhood for a doc, split by direction.      Returns ``{", Return ``entries`` re-ordered by an explicit sort key.      ``relevance`` (or ``, sort_results(), _entries(), _graph() (+11 more)
+Cohesion: 0.17
+Nodes (19): in_corpus_neighbors(), In-corpus citation neighborhood for a doc, split by direction.      Returns ``{", _flag_seminal(), Mark the single most in-corpus-cited result as a ``seminal`` entry point.      R, Return ``entries`` re-ordered by an explicit sort key.      ``relevance`` (or ``, sort_results(), _entries(), _graph() (+11 more)
 
 ### Community 113 - "Ranking Evaluation Tests"
 Cohesion: 0.20
@@ -1320,16 +1306,16 @@ Cohesion: 0.48
 Nodes (6): _item(), ManifestItem, test_chunk_pages_no_runt_tail_chunks(), test_chunk_pages_skips_empty_pages(), test_chunk_pages_tracks_page_spans_across_split(), test_embed_body_omits_title_but_keeps_topics_tags()
 
 ### Community 156 - "Gateway Client"
-Cohesion: 0.10
-Nodes (13): GatewayClient, gw(), pytest_collection_modifyitems(), Pytest wiring for the two test tiers.  Tier 0 (test_scheduler.py) is pure logic, Auto-skip integration tests unless a gateway URL was supplied, so the     defaul, Thin stdlib HTTP client for the gateway's observable surface., main(), Proof script: compute single-chunk rate directly from the LanceDB index.  corpus (+5 more)
+Cohesion: 0.17
+Nodes (6): GatewayClient, gw(), pytest_collection_modifyitems(), Pytest wiring for the two test tiers.  Tier 0 (test_scheduler.py) is pure logic, Auto-skip integration tests unless a gateway URL was supplied, so the     defaul, Thin stdlib HTTP client for the gateway's observable surface.
 
 ### Community 157 - "OpenAlex Provider Tests"
 Cohesion: 0.18
 Nodes (12): FakeClock, _key_recording_policy(), 2026-07-04 pass-4 hang regression: a long/re-opening cooldown circuit     must n, OpenAlexPolicy whose .request() records the api_key and returns a     canned out, test_openalex_no_keys_passes_through(), test_openalex_returns_last_outcome_when_all_keys_depleted(), test_openalex_rotates_to_next_key_on_budget_429(), test_openalex_round_robins_across_healthy_keys() (+4 more)
 
 ### Community 158 - "Markdown Block Parsing"
-Cohesion: 0.08
-Nodes (20): PostgresWorkStateRepository, Work-state ledger: one row per (doc_id, corpus, stage), the sole record of wheth, Record the outcome of one attempt at ``stage`` for ``doc_id``.          Idempote, Rows with state in ('degraded', 'failed'), optionally filtered., Rows with state='ok' — the only rows ever safe to index. See module docstring., Exclusively claim up to ``limit`` dead-letter rows for reprocessing.          On, Production backend, backed by the ``work_state`` table in schema.sql., Raised for constraint violations — invalid state, bad row shape, etc.      Raise (+12 more)
+Cohesion: 0.07
+Nodes (22): InMemoryWorkStateRepository, PostgresWorkStateRepository, Work-state ledger: one row per (doc_id, corpus, stage), the sole record of wheth, Record the outcome of one attempt at ``stage`` for ``doc_id``.          Idempote, Rows with state in ('degraded', 'failed'), optionally filtered., Rows with state='ok' — the only rows ever safe to index. See module docstring., Exclusively claim up to ``limit`` dead-letter rows for reprocessing.          On, Pure-Python backend for offline unit tests and local dry-runs.      Enforces the (+14 more)
 
 ### Community 159 - "Citation Incoming Tests"
 Cohesion: 0.17
@@ -1388,8 +1374,8 @@ Cohesion: 0.23
 Nodes (8): _item(), ManifestItem, Path, test_backend_routes_to_docling(), test_backend_routes_to_pymupdf(), test_docling_missing_dep_degrades(), test_docling_missing_file(), test_unknown_backend_raises()
 
 ### Community 174 - "E2E Tiny Corpus Test"
-Cohesion: 0.50
-Nodes (7): attach_lora(), load_triples(), main(), Path, Contrastive LoRA fine-tune of a released SPLADE checkpoint (no teacher).  Object, transformer_module(), weight_signature()
+Cohesion: 0.24
+Nodes (12): _make_triples(), Path, [->E2E] Tiny-corpus smoke test (plan-required).  ~20 synthetic chunks -> build c, Extractive triples: query = first clause of each chunk; positive = its text;, test_tiny_e2e_train_merge_serve(), attach_lora(), load_triples(), main() (+4 more)
 
 ### Community 175 - "S3 Backup Scripts"
 Cohesion: 0.27
@@ -1400,8 +1386,8 @@ Cohesion: 0.22
 Nodes (13): cmd_content_sig(), cmd_extract_latest(), cmd_finalize(), cmd_make_record(), cmd_sqlite_sig(), cmd_to_item(), main(), Read `aws dynamodb query ... --scan-index-forward false --limit 1` output     an (+5 more)
 
 ### Community 177 - "Document Embedding Vectors"
-Cohesion: 0.12
-Nodes (26): embed_stage_config(), extract_stage_config(), indexer_stage_config(), make_indexer_handler(), Generic per-stage consumer loop, plus the three thin stage configs.  Loop shape, Build the indexer handler: structural gate first, then the index-write body., Extract stage: text-extract + chunk a PDF, write a chunks artifact.      Default, Embed stage: call the gpu-gateway ``/v1/embeddings``, write an embeddings artifa (+18 more)
+Cohesion: 0.11
+Nodes (36): Handler, embed_stage_config(), extract_stage_config(), indexer_stage_config(), make_indexer_handler(), Generic per-stage consumer loop, plus the three thin stage configs.  Loop shape, Build the indexer handler: structural gate first, then the index-write body., Extract stage: text-extract + chunk a PDF, write a chunks artifact.      Default (+28 more)
 
 ### Community 178 - "Qrels Handling"
 Cohesion: 0.26
@@ -1556,8 +1542,8 @@ Cohesion: 0.29
 Nodes (9): _item(), ManifestItem, Path, test_classify_image_or_corrupt_when_local_backends_empty(), test_enrich_rows_classifies_existing_missing_and_metadata(), test_extract_cache_invalidate_removes_page_and_chunk_entries(), test_ranked_fallback_docs_merges_qrel_weights(), test_reproduce_extractors_classifies_empty_pages() (+1 more)
 
 ### Community 218 - "SQLite Cache Connection"
-Cohesion: 0.36
-Nodes (3): Connection, entries: [(key, model_id, vector), ...], SQLiteCache
+Cohesion: 0.22
+Nodes (6): embed_cache_key(), Connection, SQLiteCache — Ray actor holding the aiosqlite embed/rerank cache.  aiosqlite is, entries: [(key, model_id, vector), ...], rerank_cache_key(), SQLiteCache
 
 ### Community 219 - "Paper Metadata Caching"
 Cohesion: 0.10
@@ -1580,8 +1566,8 @@ Cohesion: 0.33
 Nodes (7): _graph(), CitationGraph, format_results metadata join: positive surfacing + graceful-degrade.  These neve, _row(), test_cited_by_falls_back_to_papers_meta_when_graph_lacks_doc(), test_graceful_degrade_when_all_sources_empty(), test_join_surfaces_meta_citation_and_bibtex()
 
 ### Community 224 - "SPLADE API Smoke Test"
-Cohesion: 0.36
-Nodes (8): _imports(), _load_base(), main(), CRITICAL pre-build API validation for the contrastive SPLADE training stack.  Co, Return the module that owns ``.auto_model`` (the HF MLM transformer).      The o, _transformer_module(), _weight_signature(), Tensor
+Cohesion: 0.10
+Nodes (20): datetime, Table-shaped DTO for public.source_zenodo + ZenodoRecord -> Write mapper.  Mirro, Insert/upsert shape for public.source_zenodo (per-seed outcome).      Keyed by t, Build the ``source_zenodo`` success ``Write`` for one fetched ``ZenodoRecord``., SourceZenodoRow, zenodo_write(), Creator, _list() (+12 more)
 
 ### Community 225 - "Backup Verification Script"
 Cohesion: 0.33
@@ -1620,8 +1606,8 @@ Cohesion: 0.39
 Nodes (7): CitationGraph, Directional PPR (node-split) and leave-one-out edge surgery on a toy graph., test_backward_ppr_follows_citers_only(), test_forward_ppr_follows_references_only(), test_remove_and_restore_edge(), test_undirected_reaches_both_sides(), _toy()
 
 ### Community 234 - "Related Eval LOO Tests"
-Cohesion: 0.08
-Nodes (38): AblationArm, bootstrap_ci(), build_fused_edges(), build_partition(), evaluate_promotion_gate(), GateResult, paired_comparison(), PairedComparison (+30 more)
+Cohesion: 0.09
+Nodes (36): AblationArm, bootstrap_ci(), build_fused_edges(), build_partition(), evaluate_promotion_gate(), GateResult, paired_comparison(), PairedComparison (+28 more)
 
 ### Community 236 - "Gate3 Driver Script"
 Cohesion: 0.25
@@ -1644,8 +1630,8 @@ Cohesion: 0.39
 Nodes (5): _db(), test_aliases_and_citation_provenance(), test_authorship_and_counts(), test_cites_and_influential_merge(), test_upsert_paper_idempotent_and_preserves()
 
 ### Community 241 - "Doc Summary Tests"
-Cohesion: 0.06
-Nodes (68): An upsert payload: homogeneous row-groups, parents before children.      Each gr, Write, osf_write(), datetime, Table-shaped DTO for public.source_osf + OsfPreprint -> Write mapper.  Mirrors `, Insert/upsert shape for public.source_osf (per-seed outcome).      Keyed by the, Build the ``source_osf`` success ``Write`` for one fetched ``OsfPreprint``., SourceOsfRow (+60 more)
+Cohesion: 0.07
+Nodes (63): SemanticScholarPaper, An upsert payload: homogeneous row-groups, parents before children.      Each gr, Write, dblp_write(), datetime, Table-shaped DTO for public.source_dblp + DblpRecord -> Write mapper.  Mirrors `, Insert/upsert shape for public.source_dblp (per-seed outcome).      Keyed by the, Build the ``source_dblp`` success ``Write`` for one fetched ``DblpRecord``. (+55 more)
 
 ### Community 242 - "Provider Rate Limiting Tests"
 Cohesion: 0.18
@@ -1664,15 +1650,15 @@ Cohesion: 0.48
 Nodes (5): _api_key(), _gateway_url(), _get(), _post(), FastMCP server for the GPU Gateway — runs on Mac, stdio transport.  Wraps /v1/re
 
 ### Community 246 - "Corpus Health Tests"
-Cohesion: 0.15
-Nodes (3): Dual-backend HTTP judge (opencode-go + DeepSeek) with credit-failover.  Pure-uni, GRAPH_RAG_JUDGE_BACKEND unset -> the direct-HTTP dual backend, not local_llm., test_judge_one_routes_to_http_by_default()
+Cohesion: 0.06
+Nodes (20): eval command/module, compute_coverage(), coverage_cmd(), _indexed_doc_ids(), Any, Recall-ceiling / corpus-coverage decomposition for the gold set.  A low recall@k, Decompose the gold-set recall ceiling by corpus coverage (no retrieval)., _stratum() (+12 more)
 
 ### Community 247 - "GPU Embedding Bakeoff Script"
 Cohesion: 0.33
 Nodes (6): PYTORCH_CUDA_ALLOC_CONF, RAG_GPU_TOOL, RAG_LLM_BACKEND, RAG_LOCAL_EMBED_DEVICE, run_reembed(), gpu_embedding_bakeoff.sh script
 
 ### Community 248 - "Environment Loader (Repo-RAG)"
-Cohesion: 0.38
+Cohesion: 0.20
 Nodes (4): load_env_file(), _load_env_path(), Path, Load KEY=VALUE pairs from .env, then .env.example.
 
 ### Community 249 - "Forward Citation Harvest"
@@ -1780,8 +1766,8 @@ Cohesion: 0.43
 Nodes (7): lock-check job, test job, gpu-gateway, graph-layout-rag, rag-common, rag-literature-rag, repo-rag
 
 ### Community 287 - "SPLADE Base Probe"
-Cohesion: 0.17
-Nodes (6): main(), Probe which SPLADE bases actually load as a SparseEncoder in this env, and wheth, Pluggable learned-sparse encoder.      ``model_id`` / ``version`` identify the c, Encode a batch of documents to ``{token_id: weight}`` bags (one per text)., Encode a single query to a ``{token_id: weight}`` bag., SparseEncoder
+Cohesion: 0.12
+Nodes (14): _imports(), _load_base(), main(), CRITICAL pre-build API validation for the contrastive SPLADE training stack.  Co, Return the module that owns ``.auto_model`` (the HF MLM transformer).      The o, _transformer_module(), _weight_signature(), main() (+6 more)
 
 ### Community 294 - "GPU Dense Reembed Script"
 Cohesion: 0.25
@@ -1872,24 +1858,24 @@ Cohesion: 0.50
 Nodes (3): For --cluster-only, For --update (incremental re-extraction), graphify reference: incremental update and cluster-only
 
 ### Community 356 - "Manifest"
-Cohesion: 0.10
-Nodes (29): judge_calibrate_cmd(), Judge calibration harness (D7/decisions-log item 19): hand-label cluster-label, AgreementResult, build_labeling_sheet(), cohen_kappa(), decide(), parse_labeling_sheet(), Any (+21 more)
+Cohesion: 0.08
+Nodes (34): judge_calibrate_cmd(), map_gate_cmd(), Path, `eval map-gate` + `eval judge-calibrate` — E1 map-quality gate CLI (C2).  Thin w, Judge calibration harness (D7/decisions-log item 19): hand-label cluster-label, E1 promotion gate: hybrid vs text-only vs citation-only clustering, scored by, _run_dir(), AgreementResult (+26 more)
 
 ### Community 380 - "Community 380"
 Cohesion: 0.18
 Nodes (15): BaseSettings, HarvestSettings, Settings for the harvest entrypoints.  A shared base (`HarvestSettings`) resolve, Shared config: how to reach Postgres + any source API keys., Settings for the Supabase client.      Loads `.env` like `HarvestSettings`, but, `harvest-work`: drain ONE source's queue.      `source` selects both the queue (, SupabaseSettings, WorkerSettings (+7 more)
 
 ### Community 381 - "Community 381"
-Cohesion: 0.12
-Nodes (14): _arm(), _grid_doc_vectors(), _pc(), `n_clusters` well-separated 2D blobs (one-hot-ish), `per_cluster` docs each — a, _report(), test_gate_blocks_when_an_arm_is_missing_entirely(), test_gate_blocks_when_hybrid_loses_to_one_arm(), test_gate_blocks_when_hybrid_missing() (+6 more)
+Cohesion: 0.10
+Nodes (19): cluster_coverage(), Fraction of ``doc_ids`` (the full corpus, not just gold refs) that land in a, _arm(), _grid_doc_vectors(), _pc(), `n_clusters` well-separated 2D blobs (one-hot-ish), `per_cluster` docs each — a, _report(), test_cluster_coverage_all_singletons_is_zero_coverage() (+11 more)
 
 ### Community 382 - "Community 382"
-Cohesion: 0.10
-Nodes (24): bib_coupling_all(), bib_coupling_neighbors(), cosine_knn(), cosine_knn_all(), fuse_neighbors(), Per-signal top-k neighbor lists, fused by rank — not raw score.  Two signals fee, Cosine top-k for every doc against every other doc, via one matmul instead of on, `bib_coupling_neighbors` for every doc, restricted to docs the citation graph ca (+16 more)
+Cohesion: 0.08
+Nodes (32): _cluster_label_cases(), _judge_yes_no(), Any, Build one judge case per cluster from `map clusters` (default alpha/seed — fixed, neighborhood_graph(), Top-`top_n` docs by weighted-blended coupling+co-citation similarity to the seed, bib_coupling_all(), bib_coupling_neighbors() (+24 more)
 
 ### Community 383 - "Community 383"
 Cohesion: 0.05
-Nodes (41): [0.10.0], [0.11.0], [0.12.0], [0.13.0], [0.14.0], [0.15.0], [0.16.0], [0.3.0] (+33 more)
+Nodes (43): [0.10.0], [0.11.0], [0.12.0], [0.13.0], [0.14.0], [0.15.0], [0.16.0], [0.17.0] (+35 more)
 
 ### Community 384 - "Community 384"
 Cohesion: 0.07
@@ -1900,12 +1886,12 @@ Cohesion: 0.10
 Nodes (30): ArtifactStore, Content-addressed put/get for stage artifacts., Write ``content``, keyed by ``key_parts`` + its own sha256. Returns a URI., Read back the bytes previously written at ``uri``., HandlerResult, What a stage handler reports back to the consumer loop., _augment_contextual(), _embed_one() (+22 more)
 
 ### Community 386 - "Community 386"
-Cohesion: 0.11
-Nodes (23): map_clusters_cmd(), map_group(), map_lineage_cmd(), map_seminal_cmd(), map_similar_cmd(), Any, `map` CLI group — the knowledge-map layer (E1) over this corpus.  Thin click wir, Trace the main intellectual lineage (SPC main path) of a topic or paper. (+15 more)
+Cohesion: 0.14
+Nodes (19): map_clusters_cmd(), map_group(), map_lineage_cmd(), map_seminal_cmd(), map_similar_cmd(), Any, `map` CLI group — the knowledge-map layer (E1) over this corpus.  Thin click wir, Trace the main intellectual lineage (SPC main path) of a topic or paper. (+11 more)
 
 ### Community 387 - "Community 387"
-Cohesion: 0.11
-Nodes (23): cluster_coverage(), CoverageStats, herfindahl(), _null_stats(), NullStats, Any, Random, Reference-concentration metric for clustering quality (D10/D13 — labels-free eva (+15 more)
+Cohesion: 0.13
+Nodes (20): concentration_report(), CoverageStats, herfindahl(), _null_stats(), NullStats, Any, Random, Reference-concentration metric for clustering quality (D10/D13 — labels-free eva (+12 more)
 
 ### Community 388 - "Community 388"
 Cohesion: 0.18
@@ -1924,12 +1910,12 @@ Cohesion: 0.12
 Nodes (20): citation_adjacency(), citation_graph(), doc_meta_map(), _index_fingerprint(), litmap_dir(), load_or_build_doc_vectors(), load_years(), Any (+12 more)
 
 ### Community 393 - "Community 393"
-Cohesion: 0.13
-Nodes (33): IndexWriter, _bm25_add(), bm25_doc_ids(), _build_bm25_schema(), _chunk_row(), _default_indexes_root(), _index_one(), _is_bm25_corruption() (+25 more)
+Cohesion: 0.07
+Nodes (51): IndexWriter, _default_local_root(), LocalArtifactStore, Path, Content-addressed artifact store abstraction.  Stage handlers (extract/embed/ind, Keep artifact keys filesystem-safe without hiding the original value entirely., Local-filesystem backend. Default for now; root configurable via env.      Layou, _safe_segment() (+43 more)
 
 ### Community 395 - "Community 395"
-Cohesion: 0.12
-Nodes (18): embed_cache_key(), SQLiteCache — Ray actor holding the aiosqlite embed/rerank cache.  aiosqlite is, rerank_cache_key(), _is_embed_oom(), _model_handle_name(), BaseException, GatewayHTTP — Ray Serve router with a single in-process VRAM dispatcher.  This m, True if `exc` is (or wraps) an `EmbedOOMError` raised by a dense-embed handler. (+10 more)
+Cohesion: 0.15
+Nodes (15): _is_embed_oom(), _model_handle_name(), BaseException, GatewayHTTP — Ray Serve router with a single in-process VRAM dispatcher.  This m, True if `exc` is (or wraps) an `EmbedOOMError` raised by a dense-embed handler., Canonical model name for tracking (normalises unknown 0.6B profiles)., Scheduler — the single in-process VRAM dispatcher for GatewayHTTP.  This module, Unit tests for gpu_gateway.main._is_embed_oom — the HTTP-layer detector that tur (+7 more)
 
 ### Community 396 - "Community 396"
 Cohesion: 0.13
@@ -1937,7 +1923,7 @@ Nodes (21): corpus_health_cmd(), diagnostics_cmd(), _experimental_indexes(), gat
 
 ### Community 397 - "Community 397"
 Cohesion: 0.13
-Nodes (16): _embeddings_artifact(), _index_doc(), Tests for the `pipeline-v2 verify` invariant oracle (rearchitecture T0d).  The n, Same bug class, state='failed' instead of 'degraded'., No docs at all for this corpus yet -- must not spuriously fail., No failed rows for this corpus -> PASS, even with kafka reachable., Write a real Lance/tantivy index entry for doc_id via the production write path., A work_state row marked 'degraded' but present in the Lance index -> FAIL. (+8 more)
+Nodes (14): _embeddings_artifact(), Tests for the `pipeline-v2 verify` invariant oracle (rearchitecture T0d).  The n, Same bug class, state='failed' instead of 'degraded'., No docs at all for this corpus yet -- must not spuriously fail., No failed rows for this corpus -> PASS, even with kafka reachable., A work_state row marked 'degraded' but present in the Lance index -> FAIL., _seed_work_state(), test_degraded_row_indexed_is_caught() (+6 more)
 
 ### Community 398 - "Community 398"
 Cohesion: 0.13
@@ -1952,7 +1938,7 @@ Cohesion: 0.23
 Nodes (21): ask_codex(), ask_opencode(), ask_voter(), calib_dir(), cmd_debate(), cmd_fill(), cmd_tally(), cmd_vote() (+13 more)
 
 ### Community 401 - "Community 401"
-Cohesion: 0.09
+Cohesion: 0.14
 Nodes (14): load_chunks_by_doc(), main(), check_pdfs_cmd(), Scan manifest PDFs for MuPDF extraction issues., Scan ok manifest PDFs for MuPDF font warnings and empty text extraction., indexes_root(), list_profile_indexes(), profile_index_paths() (+6 more)
 
 ### Community 402 - "Community 402"
@@ -2000,8 +1986,8 @@ Cohesion: 0.24
 Nodes (16): compute_gaps(), Rank external (not-in-corpus) works by distinct in-corpus citer count.      ``mi, _fixture_db(), Connection, Offline unit tests for rag_common.citation_gaps against a hand-built fixture DB., test_compute_gaps_degrades_gracefully_without_title(), test_compute_gaps_empty_db_is_safe(), test_compute_gaps_min_citations_default_excludes_singletons() (+8 more)
 
 ### Community 413 - "Community 413"
-Cohesion: 0.14
-Nodes (11): CoreAuthor, CoreDataProvider, CoreLanguage, CoreLink, _list(), Any, One entry of a work's ``authors`` array., The work's ``language`` block. (+3 more)
+Cohesion: 0.10
+Nodes (21): core_write(), datetime, Table-shaped DTO for public.source_core + CoreWork -> Write mapper.  Mirrors ``p, Insert/upsert shape for public.source_core (per-seed outcome).      Keyed by the, Build the ``source_core`` success ``Write`` for one fetched ``CoreWork``.      A, SourceCoreRow, CoreAuthor, CoreDataProvider (+13 more)
 
 ### Community 414 - "Community 414"
 Cohesion: 0.18
@@ -2036,8 +2022,8 @@ Cohesion: 0.17
 Nodes (15): break_cycles(), build_main_path(), drop_temporal_violations(), extract_main_path(), _find_cycle(), Main-path analysis over a citation DAG (Hummon & Doreian, 1989) — the standard m, Repeatedly find one cycle and drop its lowest-weight edge until the graph is, Kahn's algorithm. Raises if a cycle remains — callers must run `break_cycles` fi (+7 more)
 
 ### Community 423 - "Community 423"
-Cohesion: 0.36
-Nodes (5): _FakeResult, Unit tests for arXiv request-id remapping (no network)., test_requested_id_for_matches_exact_short_id(), test_requested_id_for_matches_versioned_result_to_bare_request(), test_requested_id_for_returns_none_when_unmatched()
+Cohesion: 0.31
+Nodes (6): _FakeResult, Unit tests for arXiv request-id remapping (no network)., test_bare_id_strips_version(), test_requested_id_for_matches_exact_short_id(), test_requested_id_for_matches_versioned_result_to_bare_request(), test_requested_id_for_returns_none_when_unmatched()
 
 ### Community 424 - "Community 424"
 Cohesion: 0.20
@@ -2052,8 +2038,8 @@ Cohesion: 0.29
 Nodes (11): _build(), CountingFakeEncoder, mk_chunk(), SimpleNamespace, Offline tests for the learned-sparse index + cache + retrieval fusion.  No model, test_build_save_load_roundtrip(), test_cache_incrementality(), test_learned_leg_fuses_like_tantivy() (+3 more)
 
 ### Community 427 - "Community 427"
-Cohesion: 0.09
-Nodes (40): Handler, _default_local_root(), LocalArtifactStore, Path, Content-addressed artifact store abstraction.  Stage handlers (extract/embed/ind, Keep artifact keys filesystem-safe without hiding the original value entirely., Local-filesystem backend. Default for now; root configurable via env.      Layou, _safe_segment() (+32 more)
+Cohesion: 0.31
+Nodes (12): make_embed_handler(), Build the embed stage handler. ``store``/``client`` are injectable for tests., _chunks_artifact(), _message(), A tiny stdlib HTTP server standing in for gpu-gateway's /v1/embeddings.      ``s, stub_gateway(), _StubGatewayServer, test_embed_503_exhausts_retries_is_failed_retryable() (+4 more)
 
 ### Community 428 - "Community 428"
 Cohesion: 0.19
@@ -2076,8 +2062,8 @@ Cohesion: 0.29
 Nodes (11): _build(), CountingFakeEncoder, mk_chunk(), SimpleNamespace, Offline tests for the learned-sparse index + cache + retrieval fusion.  No model, test_build_save_load_roundtrip(), test_cache_incrementality(), test_learned_leg_fuses_like_tantivy() (+3 more)
 
 ### Community 433 - "Community 433"
-Cohesion: 0.14
-Nodes (19): arxiv_write(), _authors(), _links(), Any, datetime, Table-shaped DTO for public.source_arxiv + arxiv.Result -> Write mapper.  Unlike, Insert/upsert shape for public.source_arxiv (per-seed outcome).      Keyed by th, ``result.authors`` -> ``[{name, affiliation}]``, affiliation kept (not dropped). (+11 more)
+Cohesion: 0.12
+Nodes (19): osf_write(), datetime, Table-shaped DTO for public.source_osf + OsfPreprint -> Write mapper.  Mirrors `, Insert/upsert shape for public.source_osf (per-seed outcome).      Keyed by the, Build the ``source_osf`` success ``Write`` for one fetched ``OsfPreprint``., SourceOsfRow, OsfLicenseRecord, OsfPreprint (+11 more)
 
 ### Community 434 - "Community 434"
 Cohesion: 0.14
@@ -2108,8 +2094,8 @@ Cohesion: 0.38
 Nodes (6): Path, Tests for judge_audit using mocked pool + qrels JSON files., Dense and BM25 docs have similar judge scores → PASS., Judge disagrees with curated truth by provenance → WARN.          NOTE (correcte, Judge scores disagree with curated grades on seed cases → FAIL., TestJudgeAudit
 
 ### Community 442 - "Community 442"
-Cohesion: 0.08
-Nodes (36): BadQueryParametersException, SemanticScholarPaper, Citation/reference paper — SEARCH_FIELDS shape (no nested citations/references)., RelatedPaper, _is_all_ids_invalid(), _is_null_page_error(), _paper_dict_from_edge(), Any (+28 more)
+Cohesion: 0.09
+Nodes (32): BadQueryParametersException, Citation/reference paper — SEARCH_FIELDS shape (no nested citations/references)., RelatedPaper, _is_all_ids_invalid(), _paper_dict_from_edge(), _publisher_elided(), Any, Extract the nested paper payload from a Citation/Reference item or dict. (+24 more)
 
 ### Community 443 - "Community 443"
 Cohesion: 0.21
@@ -2204,8 +2190,8 @@ Cohesion: 0.24
 Nodes (10): classify_query_mode(), classify_query_regime(), is_relational(), Mode, Regime, Query-style routing: keyword vs natural-language.  The graph-layout corpus is se, True when ``text`` carries a clear relational / multi-hop cue.      Conservative, Three-way regime: ``"relational"`` when a relational cue is present, else     th (+2 more)
 
 ### Community 467 - "Community 467"
-Cohesion: 0.11
-Nodes (31): db_reset(), drain_source(), evaluate_source(), _guard_disposable(), _guard_seeder_loopback(), _local_stack_env(), main(), _missing_env() (+23 more)
+Cohesion: 0.06
+Nodes (49): arxiv_write(), _authors(), _links(), Any, datetime, Table-shaped DTO for public.source_arxiv + arxiv.Result -> Write mapper.  Unlike, Insert/upsert shape for public.source_arxiv (per-seed outcome).      Keyed by th, ``result.authors`` -> ``[{name, affiliation}]``, affiliation kept (not dropped). (+41 more)
 
 ### Community 468 - "Community 468"
 Cohesion: 0.24
@@ -2248,8 +2234,8 @@ Cohesion: 0.09
 Nodes (18): datetime, Table-shaped DTO for public.source_unpaywall + UnpaywallRecord -> Write mapper., Insert/upsert shape for public.source_unpaywall (per-seed outcome).      Keyed b, Build the ``source_unpaywall`` success ``Write`` for one fetched ``UnpaywallReco, SourceUnpaywallRow, unpaywall_write(), _list(), OaLocation (+10 more)
 
 ### Community 481 - "Community 481"
-Cohesion: 0.05
-Nodes (47): The persistence contract shared by every backend.  A source-mapper turns one API, One upsertable row. Subclasses set the table name and conflict key.      ``__tab, TableRow, core_write(), datetime, Table-shaped DTO for public.source_core + CoreWork -> Write mapper.  Mirrors ``p, Insert/upsert shape for public.source_core (per-seed outcome).      Keyed by the, Build the ``source_core`` success ``Write`` for one fetched ``CoreWork``.      A (+39 more)
+Cohesion: 0.07
+Nodes (31): One upsertable row. Subclasses set the table name and conflict key.      ``__tab, TableRow, opencitations_write(), OpenCitationsEdgeRow, datetime, Table-shaped DTOs for public.opencitations_edge + source_opencitations.  Mirrors, Insert/upsert shape for public.opencitations_edge (one DOI->DOI citation)., Insert/upsert shape for public.source_opencitations (per-seed outcome).      Key (+23 more)
 
 ### Community 482 - "Community 482"
 Cohesion: 0.29
@@ -2276,8 +2262,8 @@ Cohesion: 0.22
 Nodes (5): public.queue_subscriptions, public.seeds_identity_monotonic(), seeds_identity_changed, seeds_identity_inserted, seeds_identity_monotonic
 
 ### Community 489 - "Community 489"
-Cohesion: 0.29
-Nodes (6): parse(), Any, The seed -> message contract, shared by the harvest clients.  `seed_message.v1.j, Validate a raw pgmq message body against the v1 contract and return it typed., The envelope public.publish_seed enqueues onto every active harvest_* queue. Thi, SeedMessage
+Cohesion: 0.25
+Nodes (7): BaseModel, parse(), Any, The seed -> message contract, shared by the harvest clients.  `seed_message.v1.j, Validate a raw pgmq message body against the v1 contract and return it typed., The envelope public.publish_seed enqueues onto every active harvest_* queue. Thi, SeedMessage
 
 ### Community 490 - "Community 490"
 Cohesion: 0.22
@@ -2476,8 +2462,8 @@ Cohesion: 0.53
 Nodes (5): _chunk(), Path, TextChunk, test_bm25_replacement_removes_stale_tail(), test_lancedb_replacement_removes_stale_tail()
 
 ### Community 544 - "Community 544"
-Cohesion: 0.47
-Nodes (5): _make_triples(), Path, [->E2E] Tiny-corpus smoke test (plan-required).  ~20 synthetic chunks -> build c, Extractive triples: query = first clause of each chunk; positive = its text;, test_tiny_e2e_train_merge_serve()
+Cohesion: 0.17
+Nodes (11): _sparse_backend(), _is_local_splade_checkpoint(), is_pytorch_sparse_model(), A locally-trained SPLADE checkpoint dir (e.g. the merged LoRA fine-tune from, PyTorch SPLADE-v3 encoder (sentence-transformers SparseEncoder)., _sparse_from_tensor(), SparseEmbedding, SpladeV3Encoder (+3 more)
 
 ### Community 545 - "Community 545"
 Cohesion: 0.33
@@ -2632,8 +2618,8 @@ Cohesion: 0.83
 Nodes (3): _item(), test_all_aliases_checkpointed_after_outcome(), test_projection_selects_trusted_rich_canonical_and_merges_aliases()
 
 ### Community 599 - "Community 599"
-Cohesion: 0.83
-Nodes (3): _item(), test_concurrent_discovery_merges_all_sources(), test_one_source_failure_does_not_abort_pass()
+Cohesion: 0.26
+Nodes (16): _atomic_write_json(), _batches(), _cuda_available(), _fastembed_arm(), main(), _mps_available(), _now_id(), Any (+8 more)
 
 ### Community 601 - "Community 601"
 Cohesion: 0.50
@@ -2648,8 +2634,8 @@ Cohesion: 0.18
 Nodes (4): docs_enriched_topic(), MonkeyPatch, Tests for `pipeline-v2 enqueue` (T0c).  Offline tests exercise the manifest/glob, test_enqueue_cli_round_trips_n_well_formed_messages()
 
 ### Community 647 - "Community 647"
-Cohesion: 0.13
-Nodes (15): dblp_write(), datetime, Table-shaped DTO for public.source_dblp + DblpRecord -> Write mapper.  Mirrors `, Insert/upsert shape for public.source_dblp (per-seed outcome).      Keyed by the, Build the ``source_dblp`` success ``Write`` for one fetched ``DblpRecord``., SourceDblpRow, DblpAuthor, DblpRecord (+7 more)
+Cohesion: 0.24
+Nodes (11): _cache_key(), _cache_path(), cache_stats(), get(), put(), Path, TextChunk, Disk cache for PDF extraction results.  Key: (pdf_sha256, backend, chunking_fing (+3 more)
 
 ### Community 648 - "Community 648"
 Cohesion: 0.18
@@ -2664,8 +2650,8 @@ Cohesion: 0.29
 Nodes (4): _DenseEmbedBase, Shared implementation; subclassed for 4B and 0.6B deployments., The underlying HF tokenizer if the model is loaded, else None (falls         bac, Encode one sub-batch. On CUDA OOM: empty the allocator cache and retry         w
 
 ### Community 651 - "Community 651"
-Cohesion: 0.24
-Nodes (9): _cluster_label_cases(), _judge_yes_no(), map_gate_cmd(), Any, Path, `eval map-gate` + `eval judge-calibrate` — E1 map-quality gate CLI (C2).  Thin w, Build one judge case per cluster from `map clusters` (default alpha/seed — fixed, E1 promotion gate: hybrid vs text-only vs citation-only clustering, scored by (+1 more)
+Cohesion: 0.31
+Nodes (7): _cuda_provider_available(), fastembed_kwargs(), Any, EncodeDevice, Pick CPU or CUDA for fastembed / PyTorch sparse encoders., Keyword args for fastembed SparseTextEmbedding / LateInteractionTextEmbedding., resolve_encode_device()
 
 ### Community 652 - "Community 652"
 Cohesion: 0.25
@@ -2695,13 +2681,17 @@ Nodes (22): internet_archive_write(), datetime, Table-shaped DTO for public.sour
 Cohesion: 0.60
 Nodes (3): _item(), test_harvest_strict_filters_and_dedups(), test_seed_dois_picks_high_signal_with_doi()
 
+### Community 661 - "Community 661"
+Cohesion: 0.10
+Nodes (7): main(), Proof script: compute single-chunk rate directly from the LanceDB index.  corpus, append_synth_cases(), Additively append ``new_cases`` to cases.json — never regenerates existing., test_size_matched_random_partition_preserves_size_distribution(), append_synth_cases(), Additively append ``new_cases`` to cases.json — never regenerates existing.
+
 ### Community 663 - "Community 663"
-Cohesion: 0.67
-Nodes (3): main(), _ok(), Overnight bounded scrape of legal OA full-text from the working new sources.  Ca
+Cohesion: 0.29
+Nodes (6): main(), _ok(), Overnight bounded scrape of legal OA full-text from the working new sources.  Ca, main(), _ok(), Top-up scrape: broaden the topic-query set to add more net-new OA full-text.  Th
 
 ### Community 664 - "Community 664"
-Cohesion: 0.67
-Nodes (3): main(), _ok(), Top-up scrape: broaden the topic-query set to add more net-new OA full-text.  Th
+Cohesion: 0.31
+Nodes (8): Paper, Map a batch Paper back to one of the ids we asked for.      ``POST /paper/batch`, requested_id_for(), Unit tests for Semantic Scholar request-id remapping (no network)., test_requested_id_for_matches_arxiv_namespace(), test_requested_id_for_matches_bare_paper_id(), test_requested_id_for_matches_doi_namespace(), test_requested_id_for_returns_none_when_unmatched()
 
 ### Community 665 - "Community 665"
 Cohesion: 0.33
@@ -2716,38 +2706,38 @@ Cohesion: 0.25
 Nodes (9): _iter_manifest_enqueue_items(), Extract (doc_id, pdf_path, sha256, title, source_url) tuples from a v1 manifest, export_to_json_file(), load_v1_manifest_json(), Path, Parse a v1 manifest.json file into a plain dict (no v1 model import)., test_iter_manifest_enqueue_items_hashes_file_when_sha256_missing(), test_iter_manifest_enqueue_items_skips_items_without_local_path() (+1 more)
 
 ### Community 681 - "Community 681"
-Cohesion: 0.29
-Nodes (4): _CudaOOM, FakeModel, Stand-in for torch.cuda.OutOfMemoryError — matched by token_batch.is_cuda_oom, Records every encode() call; `oom_if` decides per-call whether to raise.
-
-### Community 682 - "Community 682"
-Cohesion: 0.39
-Nodes (7): compute_coverage(), coverage_cmd(), _indexed_doc_ids(), Any, Recall-ceiling / corpus-coverage decomposition for the gold set.  A low recall@k, Decompose the gold-set recall ceiling by corpus coverage (no retrieval)., _stratum()
+Cohesion: 0.20
+Nodes (6): _CudaOOM, _FakeHandler, FakeModel, Stand-in for torch.cuda.OutOfMemoryError — matched by token_batch.is_cuda_oom, Records every encode() call; `oom_if` decides per-call whether to raise., Directly instantiable stand-in — skips reconfigure()/Ray/serve.deployment.
 
 ### Community 683 - "Community 683"
-Cohesion: 0.39
-Nodes (7): CitationGraph, Leave-one-out eval: fold construction, variant scoring, payload assembly (toy gr, test_build_loo_cases_holds_out_corpus_ref(), test_loo_edge_is_restored_after_scoring(), test_run_related_eval_skips_embed_variants_without_vectors(), test_run_variant_returns_metric_row(), _toy()
+Cohesion: 0.38
+Nodes (6): _raising_source(), Unit tests for ArxivSource error propagation.  429s are deliberately *not* retri, One request per call — no in-process backoff that could outrun the VT., test_get_papers_does_not_retry_429(), test_get_papers_empty_identifiers_makes_no_request(), test_get_papers_propagates_http_errors()
 
 ### Community 686 - "Community 686"
 Cohesion: 0.29
 Nodes (7): _iter_glob_enqueue_items(), Stream-hash a file in ``block_size`` (default 1 MiB) chunks.      ``Path.read_by, Build enqueue items directly from PDFs on disk, doc_id = filename stem.      ``l, _sha256_file(), test_iter_glob_enqueue_items_hashes_real_files(), test_iter_glob_skips_oversized(), test_sha256_file_matches_whole_file_hash()
+
+### Community 687 - "Community 687"
+Cohesion: 0.50
+Nodes (3): harvest_trusted_venues(), ManifestItem, Trusted NLP/IR venue harvest via OpenAlex source filters.
 
 ### Community 691 - "Community 691"
 Cohesion: 0.67
 Nodes (3): category_for(), ManifestItem, Derive a curated-vocabulary category from the doc's tags/title.
 
 ## Knowledge Gaps
-- **941 isolated node(s):** `meta`, `SOURCES`, `PROBE_SCHEMA`, `IMPL_SCHEMA`, `VERIFY_SCHEMA` (+936 more)
+- **942 isolated node(s):** `meta`, `SOURCES`, `PROBE_SCHEMA`, `IMPL_SCHEMA`, `VERIFY_SCHEMA` (+937 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **144 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **129 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `ManifestItem` connect `Canonical Ingestion Merge` to `Synthetic Query Generation`, `Pipeline Layout Classification`, `Corpus Health Auditing`, `Corpus Pruning`, `Manifest Harvest CLI`, `Synthetic Query Generation`, `Document Ingestion Pipeline`, `LanceDB Dense Search Filters`, `Chunk Page Span Tests`, `Metadata Enrichment (ArXiv/S2)`, `Community 665`, `Ingestion Run & Extraction`, `Canonical Ingest Projection`, `Index Profile Management`, `Community 443`, `Extraction Cache`, `AB Hotpath Scorecard`, `Scraping & Harvest Verification`, `PDF Page Extraction Cache`, `Community 463`, `PDF Text Extraction`, `Corpus Pruning`, `Gemini Vision Tests`?**
-  _High betweenness centrality (0.081) - this node is a cross-community bridge._
-- **Why does `StageMessage` connect `Bakeoff Analysis & Bias` to `DOI Canonicalization`, `Community 385`, `Scraping & Harvest Verification`, `Community 393`, `Community 427`, `Community 397`, `Document Embedding Vectors`, `Community 668`?**
+- **Why does `ManifestItem` connect `Canonical Ingestion Merge` to `Synthetic Query Generation`, `Pipeline Layout Classification`, `Corpus Health Auditing`, `Corpus Pruning`, `Manifest Harvest CLI`, `Synthetic Query Generation`, `Document Ingestion Pipeline`, `LanceDB Dense Search Filters`, `Chunk Page Span Tests`, `Metadata Enrichment (ArXiv/S2)`, `Community 665`, `Ingestion Run & Extraction`, `Canonical Ingest Projection`, `Index Profile Management`, `Community 443`, `Extraction Cache`, `AB Hotpath Scorecard`, `PDF Page Extraction Cache`, `Community 463`, `PDF Text Extraction`, `Community 489`, `Corpus Pruning`, `Gemini Vision Tests`?**
+  _High betweenness centrality (0.080) - this node is a cross-community bridge._
+- **Why does `StageMessage` connect `Bakeoff Analysis & Bias` to `DOI Canonicalization`, `Community 385`, `Community 393`, `Community 489`, `Community 427`, `Document Embedding Vectors`, `Community 668`?**
   _High betweenness centrality (0.079) - this node is a cross-community bridge._
-- **Why does `TableRow` connect `Community 481` to `Community 480`, `Scraping & Harvest Verification`, `Community 515`, `Crossref Harvest`, `Community 647`, `PDF Extraction`, `SPLADE Training Tests`, `Community 433`, `Community 657`, `Doc Summary Tests`, `Relatedness Evaluation`?**
+- **Why does `TableRow` connect `Community 481` to `Community 480`, `SPLADE API Smoke Test`, `Community 515`, `Crossref Harvest`, `PDF Extraction`, `Community 489`, `SPLADE Training Tests`, `Text Chunking`, `Doc Summary Tests`, `Community 657`, `Community 467`, `Community 433`, `Relatedness Evaluation`, `Community 413`?**
   _High betweenness centrality (0.031) - this node is a cross-community bridge._
 - **Are the 24 inferred relationships involving `EmbedConfig` (e.g. with `test_upsert_chunks_uses_cache_on_second_pass()` and `_Paths`) actually correct?**
   _`EmbedConfig` has 24 INFERRED edges - model-reasoned connections that need verification._

@@ -3,6 +3,7 @@ import time
 from collections.abc import Iterator
 from typing import Any, Literal
 
+import httpx
 from semanticscholar import SemanticScholar
 from semanticscholar.Paper import Paper
 from semanticscholar.SemanticScholarException import (
@@ -14,6 +15,8 @@ from .base import PaperSource
 from .models.s2 import RELATED_PAPER_KEYS, RelatedPaper, S2Record
 
 logger = logging.getLogger("harvest.semantic_scholar")
+
+GRAPH_API = "https://api.semanticscholar.org/graph/v1"
 
 # externalIds keys → the namespace prefix the worker puts on seed ids (ARXIV:/DOI:).
 _EXT_TO_NS = {
@@ -52,7 +55,7 @@ RELATED_FIELDS: list[str] = [
 #: S2 Graph API max page size for citation/reference listings.
 RELATED_PAGE_LIMIT = 1000
 
-#: Retries when the SDK raises TypeError on ``data: null`` (rate-limit flake).
+#: Retries for transient null pages / 429s on related endpoints.
 RELATED_FETCH_RETRIES = 4
 RELATED_FETCH_RETRY_SLEEP_S = 2.0
 
@@ -94,7 +97,10 @@ def _is_all_ids_invalid(exc: BadQueryParametersException) -> bool:
 
 
 def _paper_dict_from_edge(item: Any) -> dict[str, Any] | None:
-    """Extract the nested paper payload from a Citation/Reference SDK object."""
+    """Extract the nested paper payload from a Citation/Reference item or dict."""
+    if isinstance(item, dict):
+        nested = item.get("citingPaper") or item.get("citedPaper")
+        return nested if isinstance(nested, dict) else None
     paper = getattr(item, "paper", None)
     if paper is not None:
         raw = getattr(paper, "raw_data", None)
@@ -108,7 +114,7 @@ def _paper_dict_from_edge(item: Any) -> dict[str, Any] | None:
 
 
 def related_paper_from_edge(item: Any) -> RelatedPaper | None:
-    """Map an SDK Citation/Reference item to a RelatedPaper stub."""
+    """Map an SDK Citation/Reference item (or raw edge dict) to a RelatedPaper."""
     nested = _paper_dict_from_edge(item)
     if nested is None:
         return None
@@ -116,9 +122,19 @@ def related_paper_from_edge(item: Any) -> RelatedPaper | None:
     return RelatedPaper.from_dict(filtered)
 
 
-def _is_null_page_error(exc: BaseException) -> bool:
-    """SDK PaginatedResults blows up when S2 returns ``data: null``."""
-    return isinstance(exc, TypeError) and "NoneType" in str(exc)
+def _publisher_elided(body: dict[str, Any], kind: Literal["citations", "references"]) -> bool:
+    """True when S2 returns ``data: null`` because the publisher blocked the field.
+
+    Seen on ``/references`` for Wiley papers (e.g. DOI:10.1111/cgf.12791): HTTP 200
+    with ``citingPaperInfo.openAccessPdf.disclaimer`` mentioning elided
+    ``{'references'}``.
+    """
+    info = body.get("citingPaperInfo") or body.get("citedPaperInfo") or {}
+    oa = info.get("openAccessPdf") or {}
+    disclaimer = str(oa.get("disclaimer") or "").lower()
+    if "elided" not in disclaimer:
+        return False
+    return kind.rstrip("s") in disclaimer or kind in disclaimer
 
 
 class SemanticScholarSource(PaperSource):
@@ -131,6 +147,7 @@ class SemanticScholarSource(PaperSource):
 
     def __init__(self) -> None:
         self._client = SemanticScholar()
+        self._http = httpx.Client(timeout=60.0)
 
     def get_papers(self, identifiers: list[str]) -> dict[str, S2Record | None]:
         """Fetch subject metadata only (tldr + embedding + SEARCH fields).
@@ -222,35 +239,33 @@ class SemanticScholarSource(PaperSource):
             yield chunk
         logger.info("streamed %s for %s: %s items", kind, paper_id, total)
 
-    def _open_related_pages(
+    def _get_related_page(
         self,
         kind: Literal["citations", "references"],
         paper_id: str,
-    ) -> Any | None:
-        """Open a PaginatedResults, retrying SDK TypeError on ``data: null``."""
-        fetch = (
-            self._client.get_paper_citations
-            if kind == "citations"
-            else self._client.get_paper_references
-        )
+        offset: int,
+    ) -> dict[str, Any]:
+        """GET one page of ``/citations`` or ``/references`` (bypass SDK paginator).
+
+        The SDK raises TypeError when S2 returns ``data: null`` (publisher elision
+        or rate-limit flake). Raw HTTP lets us distinguish those cases.
+        """
+        url = f"{GRAPH_API}/paper/{paper_id}/{kind}"
+        params = {
+            "fields": ",".join(RELATED_FIELDS),
+            "offset": offset,
+            "limit": RELATED_PAGE_LIMIT,
+        }
         last_exc: BaseException | None = None
         for attempt in range(1, RELATED_FETCH_RETRIES + 1):
             try:
-                return fetch(
-                    paper_id,
-                    fields=RELATED_FIELDS,
-                    limit=RELATED_PAGE_LIMIT,
-                )
-            except ObjectNotFoundException:
-                logger.warning("%s endpoint 404 for %s — empty %s", kind, paper_id, kind)
-                return None
-            except TypeError as exc:
-                if not _is_null_page_error(exc):
-                    raise
+                resp = self._http.get(url, params=params)
+            except httpx.HTTPError as exc:
                 last_exc = exc
                 logger.warning(
-                    "null %s page opening %s (attempt %s/%s): %s",
+                    "%s page offset=%s for %s transport error (attempt %s/%s): %s",
                     kind,
+                    offset,
                     paper_id,
                     attempt,
                     RELATED_FETCH_RETRIES,
@@ -258,6 +273,48 @@ class SemanticScholarSource(PaperSource):
                 )
                 if attempt < RELATED_FETCH_RETRIES:
                     time.sleep(RELATED_FETCH_RETRY_SLEEP_S * attempt)
+                continue
+
+            if resp.status_code == 404:
+                logger.warning("%s endpoint 404 for %s — empty %s", kind, paper_id, kind)
+                return {"data": []}
+            if resp.status_code == 429 or resp.status_code >= 500:
+                last_exc = httpx.HTTPStatusError(
+                    f"S2 {kind} HTTP {resp.status_code}",
+                    request=resp.request,
+                    response=resp,
+                )
+                logger.warning(
+                    "%s page offset=%s for %s HTTP %s (attempt %s/%s)",
+                    kind,
+                    offset,
+                    paper_id,
+                    resp.status_code,
+                    attempt,
+                    RELATED_FETCH_RETRIES,
+                )
+                if attempt < RELATED_FETCH_RETRIES:
+                    time.sleep(RELATED_FETCH_RETRY_SLEEP_S * attempt)
+                continue
+            resp.raise_for_status()
+            body = resp.json()
+            if not isinstance(body, dict):
+                raise TypeError(f"unexpected {kind} body type {type(body)}")
+            if body.get("data") is None and not _publisher_elided(body, kind):
+                last_exc = TypeError("'NoneType' object is not iterable")
+                logger.warning(
+                    "null %s page offset=%s for %s (attempt %s/%s)",
+                    kind,
+                    offset,
+                    paper_id,
+                    attempt,
+                    RELATED_FETCH_RETRIES,
+                )
+                if attempt < RELATED_FETCH_RETRIES:
+                    time.sleep(RELATED_FETCH_RETRY_SLEEP_S * attempt)
+                continue
+            return body
+
         assert last_exc is not None
         raise last_exc
 
@@ -268,30 +325,41 @@ class SemanticScholarSource(PaperSource):
     ) -> Iterator[RelatedPaper]:
         """Yield RelatedPaper stubs from paginated citation/reference endpoints."""
         logger.info("paginating %s for %s (limit=%s)", kind, paper_id, RELATED_PAGE_LIMIT)
-        pages = self._open_related_pages(kind, paper_id)
-        if pages is None:
-            return
-
+        offset = 0
         count = 0
-        try:
-            for item in pages:
+        while True:
+            body = self._get_related_page(kind, paper_id, offset)
+            data = body.get("data")
+            if data is None:
+                if _publisher_elided(body, kind):
+                    logger.warning(
+                        "publisher elided %s for %s — treating as empty",
+                        kind,
+                        paper_id,
+                    )
+                else:
+                    logger.error(
+                        "null %s page for %s at offset=%s after retries — aborting",
+                        kind,
+                        paper_id,
+                        offset,
+                    )
+                    raise TypeError(f"null {kind} data for {paper_id} at offset={offset}")
+                break
+
+            if not isinstance(data, list):
+                raise TypeError(f"{kind} data must be a list, got {type(data)}")
+
+            for item in data:
                 related = related_paper_from_edge(item)
                 if related is None or not related.paper_id:
                     continue
                 count += 1
                 yield related
-        except TypeError as exc:
-            # Mid-stream null page: abort so the worker skips the outcome row
-            # and pgmq redelivers (partial edge upserts are idempotent).
-            if not _is_null_page_error(exc):
-                raise
-            logger.error(
-                "null/broken %s page for %s after %s items — aborting for redelivery (%s)",
-                kind,
-                paper_id,
-                count,
-                exc,
-            )
-            raise
+
+            nxt = body.get("next")
+            if nxt is None:
+                break
+            offset = int(nxt)
 
         logger.info("paginated %s for %s: %s items", kind, paper_id, count)

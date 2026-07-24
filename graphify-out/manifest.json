@@ -3175,8 +3175,8 @@
     "semantic_hash": ""
   },
   "v3/harvest/pyproject.toml": {
-    "mtime": 1784913478.3201334,
-    "ast_hash": "524417eef163b00db854c93c496317c1",
+    "mtime": 1784914089.1020374,
+    "ast_hash": "f7e4a3fc357bd6db7559bc5ff92f5ed8",
     "semantic_hash": ""
   },
   "v3/harvest/pyrightconfig.json": {
@@ -3230,8 +3230,8 @@
     "semantic_hash": ""
   },
   "v3/harvest/src/harvest/persistence/models/s2.py": {
-    "mtime": 1784913408.4351938,
-    "ast_hash": "a615ee1f9b646a81b392384e5859d1da",
+    "mtime": 1784914076.1864846,
+    "ast_hash": "8e265163b164667b09a28ad5b3a9049a",
     "semantic_hash": ""
   },
   "v3/harvest/src/harvest/persistence/models/seed.py": {
@@ -3285,13 +3285,13 @@
     "semantic_hash": ""
   },
   "v3/harvest/src/harvest/sources/semantic_scholar.py": {
-    "mtime": 1784913389.168642,
-    "ast_hash": "dadfb555b68a0765aeee943baabcac09",
+    "mtime": 1784914051.1845496,
+    "ast_hash": "ebea9e66fe265bda8c88575d73fc9939",
     "semantic_hash": ""
   },
   "v3/harvest/src/harvest/worker.py": {
-    "mtime": 1784913431.0937781,
-    "ast_hash": "e96711a48ac09a99b7b51d279616c964",
+    "mtime": 1784914079.6727645,
+    "ast_hash": "39c26bc986a2708bd7feb99a5db67147",
     "semantic_hash": ""
   },
   "v3/harvest/tests/conftest.py": {
@@ -3655,8 +3655,8 @@
     "semantic_hash": ""
   },
   "v3/harvest/CHANGELOG.md": {
-    "mtime": 1784913480.4564426,
-    "ast_hash": "ec8cf2913166ce569adf84791cd9d71f",
+    "mtime": 1784914089.7733386,
+    "ast_hash": "30e83feb50e6e9eef8419b7a828c7c88",
     "semantic_hash": ""
   },
   "v3/harvest/CLAUDE.md": {
@@ -3920,8 +3920,8 @@
     "semantic_hash": ""
   },
   "v3/harvest/tests/test_semantic_scholar_fields.py": {
-    "mtime": 1784913489.2956398,
-    "ast_hash": "c9f5bc6873e06651b07261eb9e23a7fd",
+    "mtime": 1784914074.9938176,
+    "ast_hash": "2fa64b200ad0652802fb7328ba95c254",
     "semantic_hash": ""
   },
   "v3/harvest/tests/test_worker_s2_writes.py": {

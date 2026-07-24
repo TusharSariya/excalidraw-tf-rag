@@ -21,7 +21,7 @@ SPECTER_V1_DIM = 768
 
 #: Max related papers (citations or references) per PostgREST upsert Write.
 #: Keeps statement size / worker RSS bounded for highly-cited subjects.
-S2_EDGE_UPSERT_CHUNK = 1000
+S2_EDGE_UPSERT_CHUNK = 250
 
 
 class S2PaperRow(TableRow):
