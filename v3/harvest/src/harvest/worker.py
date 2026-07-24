@@ -116,7 +116,10 @@ SOURCES: dict[str, Source] = {
             lambda seed: f"DOI:{seed.doi}" if seed.doi else None,
         ],
         build_write=s2_write,
-        batch_size=500,
+        # One id per request: multi-id batches with citations 400 or silently
+        # zero citation lists for highly-cited papers. get_papers also ladders
+        # rich→thin→meta fields per id when S2 says the response is too large.
+        batch_size=1,
     ),
     "unpaywall": Source(
         "harvest_unpaywall",

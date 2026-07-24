@@ -4,6 +4,22 @@ Notable changes to the `harvest` package. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions match `pyproject.toml`
 (the image tag the `build-push` CI guard checks against prod ECR).
 
+## [0.14.0]
+
+### Fixed
+- `SemanticScholarSource.get_papers`: stop requesting `Paper.FIELDS` on multi-id
+  `POST /paper/batch`. Full nested cite/ref payloads make S2 return HTTP 400
+  ("Response would exceed maximum size"); the SDK raises
+  `BadQueryParametersException`, and we were treating that as all-not-found —
+  so a 145-seed drain archived every row as `not_found` with empty `s2_*`
+  tables. Fetch **one id at a time** with a **rich → thin → meta** field ladder
+  (`RICH_FIELDS` ≈ RELATED_PAPER-shaped cites/refs + embedding/tldr; fall back
+  when a mega-cited paper like Attention still overflows; meta keeps subject +
+  embedding). Multi-id batches also silently zeroed `citations` for most papers
+  even on HTTP 200. `s2` `batch_size` 500→1. Only map
+  `BadQueryParametersException` to not-found for the genuine "no valid paper
+  ids" case.
+
 ## [0.13.0]
 
 ### Added
