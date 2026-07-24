@@ -62,9 +62,13 @@ class SemanticScholarSource(PaperSource):
     def get_papers(self, identifiers: list[str]) -> dict[str, S2Record | None]:
         """Batch-fetch papers; missing ids map to None (terminal, don't retry).
 
-        Uses ``POST /graph/v1/paper/batch`` via ``get_papers``. Only a genuine
-        not-found is recorded as None. Rate limits / 5xx propagate so the worker
-        leaves the message unarchived for pgmq redelivery.
+        Uses ``POST /graph/v1/paper/batch`` via ``get_papers``. Passes
+        ``Paper.FIELDS`` explicitly — the SDK's batch default is
+        ``Paper.SEARCH_FIELDS``, which omits ``citations`` / ``references`` /
+        ``embedding`` / ``tldr`` (needed for ``s2_citation``, ``s2_reference``,
+        ``s2_embedding``). Only a genuine not-found is recorded as None. Rate
+        limits / 5xx propagate so the worker leaves the message unarchived for
+        pgmq redelivery.
         """
         out: dict[str, S2Record | None] = {i: None for i in identifiers}
         if not identifiers:
@@ -76,6 +80,7 @@ class SemanticScholarSource(PaperSource):
         try:
             papers, missing = self._client.get_papers(
                 paper_ids=list(identifiers),
+                fields=Paper.FIELDS,
                 return_not_found=True,
             )
         except ObjectNotFoundException:
