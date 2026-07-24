@@ -11,6 +11,7 @@ from .opencitations import OpenCitationsEdgeRow, SourceOpenCitationsRow, opencit
 from .openreview import SourceOpenReviewRow, openreview_write
 from .osf import SourceOsfRow, osf_write
 from .s2 import (
+    S2_EDGE_UPSERT_CHUNK,
     SPECTER_V1_DIM,
     S2AuthorRow,
     S2CitationRow,
@@ -26,6 +27,7 @@ from .s2 import (
     outcome_row_from,
     paper_row_from,
     s2_write,
+    s2_writes,
 )
 from .seed import Seed
 from .unpaywall import SourceUnpaywallRow, unpaywall_write
@@ -33,6 +35,7 @@ from .zenodo import SourceZenodoRow, zenodo_write
 
 __all__ = [
     "SPECTER_V1_DIM",
+    "S2_EDGE_UPSERT_CHUNK",
     "SourceArxivRow",
     "arxiv_write",
     "SourceOpenAlexRow",
@@ -78,4 +81,5 @@ __all__ = [
     "outcome_row_from",
     "paper_row_from",
     "s2_write",
+    "s2_writes",
 ]

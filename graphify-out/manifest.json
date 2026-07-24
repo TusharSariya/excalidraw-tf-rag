@@ -3175,8 +3175,8 @@
     "semantic_hash": ""
   },
   "v3/harvest/pyproject.toml": {
-    "mtime": 1784860960.8355381,
-    "ast_hash": "4dac2c0545451951683ce1224489cdbb",
+    "mtime": 1784912693.867529,
+    "ast_hash": "e1ec4722247cb53f6a66788168ef40f0",
     "semantic_hash": ""
   },
   "v3/harvest/pyrightconfig.json": {
@@ -3215,8 +3215,8 @@
     "semantic_hash": ""
   },
   "v3/harvest/src/harvest/persistence/models/__init__.py": {
-    "mtime": 1784594538.3587005,
-    "ast_hash": "e9eb97059cf03557bc5718df19b6f668",
+    "mtime": 1784912615.5708258,
+    "ast_hash": "7e081d790e224bbc18f6f27f66dcdff6",
     "semantic_hash": ""
   },
   "v3/harvest/src/harvest/persistence/models/arxiv.py": {
@@ -3230,33 +3230,33 @@
     "semantic_hash": ""
   },
   "v3/harvest/src/harvest/persistence/models/s2.py": {
-    "mtime": 1784578846.6146488,
-    "ast_hash": "495ea0dd1f229573803a4c980cb6498d",
+    "mtime": 1784912600.8402984,
+    "ast_hash": "a4369d4f7d1040d62c52d65f8fc17e78",
     "semantic_hash": ""
   },
   "v3/harvest/src/harvest/persistence/models/seed.py": {
-    "mtime": 1784558025.539005,
-    "ast_hash": "1e4d63c85f2e820fe5ddce072360e724",
+    "mtime": 1784865675.4311292,
+    "ast_hash": "02d1078a99715c7247ffb1e01d3b8cf9",
     "semantic_hash": ""
   },
   "v3/harvest/src/harvest/persistence/supabase.py": {
-    "mtime": 1784860977.459025,
-    "ast_hash": "7ee148b565b79c19ab29dcad43ecc570",
+    "mtime": 1784865658.4540849,
+    "ast_hash": "8c45d80df3156dfaf5d43cd1268c4745",
     "semantic_hash": ""
   },
   "v3/harvest/src/harvest/settings.py": {
-    "mtime": 1784563010.5690758,
-    "ast_hash": "7ec72bb065259be42592a35ed6e4cdee",
+    "mtime": 1784866443.8912427,
+    "ast_hash": "fadda7137c0852eed1b83449459fbd14",
     "semantic_hash": ""
   },
   "v3/harvest/src/harvest/sources/__init__.py": {
-    "mtime": 1784593897.6156938,
-    "ast_hash": "45c1de5cfc70ca87348bc543e7efdb31",
+    "mtime": 1784866490.8389058,
+    "ast_hash": "7fc8208150ada5fff80be320a630e2c1",
     "semantic_hash": ""
   },
   "v3/harvest/src/harvest/sources/arxiv.py": {
-    "mtime": 1784860937.8138876,
-    "ast_hash": "1f789e3f2778d05dfba73027ded29809",
+    "mtime": 1784861858.5821884,
+    "ast_hash": "817636bf8fd6ca3d984e825a9f8b5c90",
     "semantic_hash": ""
   },
   "v3/harvest/src/harvest/sources/base.py": {
@@ -3285,13 +3285,13 @@
     "semantic_hash": ""
   },
   "v3/harvest/src/harvest/sources/semantic_scholar.py": {
-    "mtime": 1784859763.1102173,
-    "ast_hash": "359bcfedbffe619a68b486674762b586",
+    "mtime": 1784912560.363492,
+    "ast_hash": "2332cb84147b1fa822a975412e14b43e",
     "semantic_hash": ""
   },
   "v3/harvest/src/harvest/worker.py": {
-    "mtime": 1784860911.0325997,
-    "ast_hash": "8bda31508fe863e4f5118c2f23ff6f7a",
+    "mtime": 1784912613.321294,
+    "ast_hash": "a6fcec42ebbe462c8a21f3437c3ea65d",
     "semantic_hash": ""
   },
   "v3/harvest/tests/conftest.py": {
@@ -3302,11 +3302,6 @@
   "v3/harvest/tests/fixtures/s2_paper_forceatlas2.json": {
     "mtime": 1784408850.098608,
     "ast_hash": "c090720d85bd65f42c32010cce53bf72",
-    "semantic_hash": ""
-  },
-  "v3/harvest/tests/test_arxiv_429_retry.py": {
-    "mtime": 1784860977.4187074,
-    "ast_hash": "5f1e5a39c52992aee8ad46dfd07b2447",
     "semantic_hash": ""
   },
   "v3/harvest/tests/test_arxiv_id_map.py": {
@@ -3330,8 +3325,8 @@
     "semantic_hash": ""
   },
   "v3/harvest/tests/test_s2_graph_write.py": {
-    "mtime": 1784578828.921568,
-    "ast_hash": "b8fd0116d25151a369cff5b9e8e78d1a",
+    "mtime": 1784912685.7154863,
+    "ast_hash": "d410d0e0d2681a787c95df533f32ac97",
     "semantic_hash": ""
   },
   "v3/harvest/tests/test_s2_paper_record.py": {
@@ -3355,23 +3350,13 @@
     "semantic_hash": ""
   },
   "v3/seed/seed.py": {
-    "mtime": 1784860012.15763,
-    "ast_hash": "1a0c4b0360f4a10c4819838be3ee4fbc",
+    "mtime": 1784865684.577276,
+    "ast_hash": "e5ec54a18f8662e047b0e12c2c9ff6b4",
     "semantic_hash": ""
   },
   "v3/supabase/.temp/linked-project.json": {
     "mtime": 1783526766.7160647,
     "ast_hash": "8f55490dbb04e264ce0e49b59c305ce7",
-    "semantic_hash": ""
-  },
-  "v3/supabase/.temp/pgdelta/catalog-local-migrations-bb02d3d7b11375c459221e3251b00b5a7c81c7566c7ead72938eb53c768abedf-1784423873495.json": {
-    "mtime": 1784423873.4959779,
-    "ast_hash": "0f0206293d44a22f06da785add9f8314",
-    "semantic_hash": ""
-  },
-  "v3/supabase/.temp/pgdelta/catalog-local-migrations-c66706896bd4ecad1cf6192371ed11e65468996b84e59c547f50594f4968fcbd-1784424213812.json": {
-    "mtime": 1784424213.8131998,
-    "ast_hash": "9ce5c1fede046c8117b55d3709bfc117",
     "semantic_hash": ""
   },
   "v3/supabase/migrations/20260707202426_create_mock_table.sql": {
@@ -3670,8 +3655,8 @@
     "semantic_hash": ""
   },
   "v3/harvest/CHANGELOG.md": {
-    "mtime": 1784860963.6515436,
-    "ast_hash": "3800dc989151382d2eeb5448ca08bd85",
+    "mtime": 1784912695.467975,
+    "ast_hash": "ef68c2ee37a3d7f49f088467576f2bf6",
     "semantic_hash": ""
   },
   "v3/harvest/CLAUDE.md": {
@@ -3680,8 +3665,8 @@
     "semantic_hash": ""
   },
   "v3/harvest/README.md": {
-    "mtime": 1784860972.220744,
-    "ast_hash": "5e20bf49a98004f9ef108f639c00a6df",
+    "mtime": 1784912695.4246798,
+    "ast_hash": "cce6f6367e52528e8551aca4fe3976fc",
     "semantic_hash": ""
   },
   "v3/harvest/bruno/README.md": {
@@ -3702,6 +3687,336 @@
   "v3/supabase/tests/README.md": {
     "mtime": 1783790579.8259945,
     "ast_hash": "ec003b458097e979857a46f4486e8ed7",
+    "semantic_hash": ""
+  },
+  ".claude/workflows/harvest-sources.js": {
+    "mtime": 1784865622.1909575,
+    "ast_hash": "203b66fc05d98cafc4fdfffb341925dc",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/persistence/models/acl_anthology.py": {
+    "mtime": 1784866213.3140492,
+    "ast_hash": "2b4952fe5ba665f11aa26c70f8e8c27f",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/persistence/models/core.py": {
+    "mtime": 1784866036.7809753,
+    "ast_hash": "5e9abcabdf2e50f6f7ca4b8207611954",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/persistence/models/crossref.py": {
+    "mtime": 1784866103.189789,
+    "ast_hash": "05da1d1357e7532e170d9fbd4e7b8fd9",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/persistence/models/datacite.py": {
+    "mtime": 1784866129.6721978,
+    "ast_hash": "62f54ad9e8e5e8402995d128cc0b0779",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/persistence/models/dblp.py": {
+    "mtime": 1784866104.5871043,
+    "ast_hash": "63195d81aeb1047d4891cddec00d4d5a",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/persistence/models/figshare.py": {
+    "mtime": 1784866109.906453,
+    "ast_hash": "c54f86dc4acf47eacc3ba29f7da41dfe",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/persistence/models/internet_archive.py": {
+    "mtime": 1784866116.7047188,
+    "ast_hash": "c91813ad9f179f2e3c6e6bb2999e2cc7",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/persistence/models/opencitations.py": {
+    "mtime": 1784866295.665977,
+    "ast_hash": "37152914019adca75341394c92081f61",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/persistence/models/openreview.py": {
+    "mtime": 1784866193.687068,
+    "ast_hash": "ece1911bf2ee96f41d8b0b8bdf402684",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/persistence/models/osf.py": {
+    "mtime": 1784866153.7459416,
+    "ast_hash": "2da19e7708c79bd63f1740385e87dd6d",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/persistence/models/unpaywall.py": {
+    "mtime": 1784866019.1276276,
+    "ast_hash": "4310f23539ff34624f7f498d13213ca1",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/persistence/models/zenodo.py": {
+    "mtime": 1784866131.2935584,
+    "ast_hash": "dd8c5e855da1f831deb663a9bd39b122",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/acl_anthology.py": {
+    "mtime": 1784866200.7075095,
+    "ast_hash": "8215f7bed4d876f20a13ef7e29e41689",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/core.py": {
+    "mtime": 1784866051.5970616,
+    "ast_hash": "b45b700772fcdfda7c141289b72c653a",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/crossref.py": {
+    "mtime": 1784866124.5465918,
+    "ast_hash": "43c7c8cda1e6b539b294509950e115a5",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/datacite.py": {
+    "mtime": 1784893217.456699,
+    "ast_hash": "b5aed8064ed268b2291b74f7f908dde4",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/dblp.py": {
+    "mtime": 1784866092.3255591,
+    "ast_hash": "2497f70f04c5c5f4de2076c6169500f0",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/figshare.py": {
+    "mtime": 1784866122.3239636,
+    "ast_hash": "14944a1d2e485ea4e863897f2b3f1982",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/internet_archive.py": {
+    "mtime": 1784866102.234937,
+    "ast_hash": "a588f548e11f004d0e451777ff4a2440",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/models/acl_anthology.py": {
+    "mtime": 1784866162.1190467,
+    "ast_hash": "84c849f804a19dc3d6e0f7f6840c831c",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/models/core.py": {
+    "mtime": 1784865996.7693098,
+    "ast_hash": "b6e1eb2616743561ee572fb56acd36e3",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/models/crossref.py": {
+    "mtime": 1784866060.4012055,
+    "ast_hash": "78ef2615da3c74ba71d773449f6da318",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/models/datacite.py": {
+    "mtime": 1784866148.0101607,
+    "ast_hash": "0f700c9addbadd16dde13042cc18e338",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/models/dblp.py": {
+    "mtime": 1784866120.3747172,
+    "ast_hash": "1d524abf6c4a085d6ecd49430bb45f1f",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/models/figshare.py": {
+    "mtime": 1784866070.793991,
+    "ast_hash": "ebecc42763f0fb7d2f7855b49f8d2c34",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/models/internet_archive.py": {
+    "mtime": 1784866079.9007688,
+    "ast_hash": "9923146165ce27bb045ef715fbca98ea",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/models/opencitations.py": {
+    "mtime": 1784866248.4171274,
+    "ast_hash": "2d494667e5e51b88f0f914a657d3ce08",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/models/openreview.py": {
+    "mtime": 1784896429.9088564,
+    "ast_hash": "cfa3016a1ffa11aeabf65f1985dc67d5",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/models/osf.py": {
+    "mtime": 1784866096.526117,
+    "ast_hash": "f1fd2b437a780604029e40462eb72a44",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/models/unpaywall.py": {
+    "mtime": 1784865983.1184666,
+    "ast_hash": "1f39fefecd99ba89ba9ef49cc2580b9e",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/models/zenodo.py": {
+    "mtime": 1784866080.9169047,
+    "ast_hash": "1e7dacdceb76eea2a0fc4294f86047f8",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/opencitations.py": {
+    "mtime": 1784895463.1014743,
+    "ast_hash": "032ae7da048b8e1be6a611df3725047c",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/openreview.py": {
+    "mtime": 1784896397.5557055,
+    "ast_hash": "fc5ad0b7f4d5fbbc015ae18b4f511d71",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/osf.py": {
+    "mtime": 1784866123.8579106,
+    "ast_hash": "f09a6b59476809883d8d0eb116ac1236",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/unpaywall.py": {
+    "mtime": 1784866005.2771559,
+    "ast_hash": "49f2a01c1d1938a5a6d37918e6c58601",
+    "semantic_hash": ""
+  },
+  "v3/harvest/src/harvest/sources/zenodo.py": {
+    "mtime": 1784866117.9516702,
+    "ast_hash": "5163f0096baa5e823dc69001b25053b9",
+    "semantic_hash": ""
+  },
+  "v3/harvest/tests/fixtures/acl_anthology_sample.json": {
+    "mtime": 1784865952.2922487,
+    "ast_hash": "ea05433fc19a0065914fbb38b0fb1271",
+    "semantic_hash": ""
+  },
+  "v3/harvest/tests/fixtures/crossref_sample.json": {
+    "mtime": 1784896091.4401863,
+    "ast_hash": "b8e7ecb48d43ada849c4e287d98665ab",
+    "semantic_hash": ""
+  },
+  "v3/harvest/tests/fixtures/datacite_sample.json": {
+    "mtime": 1784896091.4402761,
+    "ast_hash": "5022cff2e33cdc057c5e0c225473c2c7",
+    "semantic_hash": ""
+  },
+  "v3/harvest/tests/fixtures/figshare_sample.json": {
+    "mtime": 1784896091.4403255,
+    "ast_hash": "ed477ae419a898499b595d606777bfb8",
+    "semantic_hash": ""
+  },
+  "v3/harvest/tests/fixtures/internet_archive_sample.json": {
+    "mtime": 1784896091.4403715,
+    "ast_hash": "0cd08e8a995ef03f77fca0d5761fad1e",
+    "semantic_hash": ""
+  },
+  "v3/harvest/tests/fixtures/opencitations_sample.json": {
+    "mtime": 1784896091.44042,
+    "ast_hash": "8d4e940a0f9f55e99f14347ea8336cbc",
+    "semantic_hash": ""
+  },
+  "v3/harvest/tests/fixtures/osf_sample.json": {
+    "mtime": 1784896091.4404652,
+    "ast_hash": "b37e6f32771f2f817a1d15449a72b030",
+    "semantic_hash": ""
+  },
+  "v3/harvest/tests/fixtures/zenodo_sample.json": {
+    "mtime": 1784896091.440507,
+    "ast_hash": "9ae616c8628714ded851cbac948d9c60",
+    "semantic_hash": ""
+  },
+  "v3/harvest/tests/test_arxiv_errors.py": {
+    "mtime": 1784861884.5114715,
+    "ast_hash": "fcee2c7ae48d5f933cc252e3cc787450",
+    "semantic_hash": ""
+  },
+  "v3/harvest/tests/test_semantic_scholar_fields.py": {
+    "mtime": 1784912638.830024,
+    "ast_hash": "c1c5f599a883ddaa8c5de5c5cd35dae6",
+    "semantic_hash": ""
+  },
+  "v3/harvest/tests/test_worker_s2_writes.py": {
+    "mtime": 1784912686.3246782,
+    "ast_hash": "03bebd5edf3e053735c8a34f293dea67",
+    "semantic_hash": ""
+  },
+  "v3/supabase/.temp/pgdelta/catalog-local-migrations-dd8a3625d8f21070a7104fce3f183515834568852a02cab8f0b36a2fcd794540-1784894641994.json": {
+    "mtime": 1784894641.9952488,
+    "ast_hash": "23767b868aaa5fad43f9cbb7ea60ee07",
+    "semantic_hash": ""
+  },
+  "v3/supabase/.temp/pgdelta/catalog-local-migrations-dd8a3625d8f21070a7104fce3f183515834568852a02cab8f0b36a2fcd794540-1784896955505.json": {
+    "mtime": 1784896955.5065968,
+    "ast_hash": "c40ceef2305cf82a2bd786c62179fa17",
+    "semantic_hash": ""
+  },
+  "v3/supabase/migrations/20260722100000_seed_identity_columns.sql": {
+    "mtime": 1784865652.3280299,
+    "ast_hash": "e10552d2d2d022c4c031d182b2072fd6",
+    "semantic_hash": ""
+  },
+  "v3/supabase/migrations/20260722200000_source_unpaywall.sql": {
+    "mtime": 1784866036.6713943,
+    "ast_hash": "536f54e8e36e23e39c9ac47e0e58977f",
+    "semantic_hash": ""
+  },
+  "v3/supabase/migrations/20260722201000_source_crossref.sql": {
+    "mtime": 1784866120.3740425,
+    "ast_hash": "87c47a604e5186a3392b8c98ad9357a1",
+    "semantic_hash": ""
+  },
+  "v3/supabase/migrations/20260722202000_source_dblp.sql": {
+    "mtime": 1784866115.8135908,
+    "ast_hash": "66c7abd4a974f9fce007b68e72a0cdc0",
+    "semantic_hash": ""
+  },
+  "v3/supabase/migrations/20260722203000_source_openreview.sql": {
+    "mtime": 1784866203.0236206,
+    "ast_hash": "cd2f4428540e5977b90e77d3a70f897c",
+    "semantic_hash": ""
+  },
+  "v3/supabase/migrations/20260722204000_source_acl_anthology.sql": {
+    "mtime": 1784866226.5539584,
+    "ast_hash": "e6ddc448d0205603f8adeff1fedbd25f",
+    "semantic_hash": ""
+  },
+  "v3/supabase/migrations/20260722205000_source_opencitations.sql": {
+    "mtime": 1784866313.5552878,
+    "ast_hash": "57c3bc0941739aa7d031ef0d3638b3c6",
+    "semantic_hash": ""
+  },
+  "v3/supabase/migrations/20260722206000_source_datacite.sql": {
+    "mtime": 1784866143.7902718,
+    "ast_hash": "3cb5028f02dd550a9d193d97692c3338",
+    "semantic_hash": ""
+  },
+  "v3/supabase/migrations/20260722207000_source_core.sql": {
+    "mtime": 1784866047.7165313,
+    "ast_hash": "feece9d6e0a9c98604b00c6f83967cab",
+    "semantic_hash": ""
+  },
+  "v3/supabase/migrations/20260722208000_source_internet_archive.sql": {
+    "mtime": 1784866127.5277135,
+    "ast_hash": "9085da6a9a8960d3a1e7ff5e9b9d4abf",
+    "semantic_hash": ""
+  },
+  "v3/supabase/migrations/20260722209000_source_zenodo.sql": {
+    "mtime": 1784866143.4873965,
+    "ast_hash": "ab388dbf25c234b930f658c5a39a51b9",
+    "semantic_hash": ""
+  },
+  "v3/supabase/migrations/20260722210000_source_figshare.sql": {
+    "mtime": 1784866118.9466844,
+    "ast_hash": "447a8d0d2bfd12fe0a147cd919223488",
+    "semantic_hash": ""
+  },
+  "v3/supabase/migrations/20260722211000_source_osf.sql": {
+    "mtime": 1784866168.0245948,
+    "ast_hash": "d639b83be09bfeff9210580da1a6f293",
+    "semantic_hash": ""
+  },
+  "v3/supabase/seed.sql": {
+    "mtime": 1784896877.6432562,
+    "ast_hash": "30f25ea4b642e6c52ba6c62b460dcdf9",
+    "semantic_hash": ""
+  },
+  "v3/supabase/tests/local_harvest_loop.py": {
+    "mtime": 1784896915.2917843,
+    "ast_hash": "d81e4ea5167fadc1110e19bc3b72fff5",
+    "semantic_hash": ""
+  },
+  "TODO.md": {
+    "mtime": 1784896015.3986604,
+    "ast_hash": "7d0d7e37f1c832d293a22f21d6c79f78",
     "semantic_hash": ""
   }
 }
