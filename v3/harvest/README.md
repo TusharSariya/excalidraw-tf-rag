@@ -21,7 +21,7 @@ each worker: read_batch(n, vt) ─▶ contracts.parse ─▶ batch-fetch source 
 ```
 
 Each drain reads a **batch** of up to `batch_size` messages (per source: arxiv
-100, openalex 100, s2 500), waiting up to `WAIT_SECONDS` for a full batch to
+100, openalex 10, s2 1, …), waiting up to `WAIT_SECONDS` for a full batch to
 accumulate, then batch-fetches them in one source call. Visible-length polling
 is **0.1s for the first 1s**, then **1s**; **10s of continuous empty** ends the
 wait early so the Job exits (KEDA re-spawns when the queue fills again). Each
