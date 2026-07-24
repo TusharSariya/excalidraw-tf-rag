@@ -148,10 +148,12 @@ Notes:
 
 ## Status / history
 
-- **Built:** … plus batched drain (0.10.0) and empty-queue exit / arXiv 429
-  outer backoff (0.11.0). OpenAlex/S2/arXiv persist handlers are wired; OpenAlex
+- **Built:** … plus batched drain (0.10.0) and empty-queue exit / arXiv Client
+  pacing (0.11.0). OpenAlex/S2/arXiv persist handlers are wired; OpenAlex
   + S2 proven on the cluster with `0.10.0`; arXiv was blocked by API 429 until
-  the 0.11.0 Client pacing fix.
+  the 0.11.0 Client pacing fix. Sustained 429s ride on pgmq redelivery (spaced by
+  `VT_SECONDS`) rather than an in-process backoff, so a fetch always returns well
+  inside the visibility timeout.
 - **Next:** re-verify arXiv end-to-end on the cluster after `0.11.0` lands in
   prod ECR; KEDA/compose packaging polish.
 - **Deferred:** shared `rate_budget` token bucket (needed once a source scales past

@@ -1,6 +1,5 @@
 import logging
 import re
-import time
 
 import arxiv
 
@@ -12,14 +11,11 @@ logger = logging.getLogger("harvest.arxiv")
 _VERSION_SUFFIX = re.compile(r"v\d+$", re.IGNORECASE)
 
 # Client-level pacing (arxiv API ToU: ~1 request / 3s). num_retries covers brief
-# blips; outer 429 loop below covers sustained rate limits.
+# blips; sustained rate limits are left to pgmq redelivery, which already spaces
+# attempts by worker.VT_SECONDS (120s) — a longer backoff than we could sleep
+# here without overrunning the visibility timeout and losing the batch.
 _CLIENT_DELAY_SECONDS = 3.0
 _CLIENT_NUM_RETRIES = 5
-
-# After the Client exhausts its own retries on HTTP 429, back off and try again
-# before propagating — same philosophy as OpenAlex's retry_http_codes.
-_OUTER_429_ATTEMPTS = 4
-_OUTER_429_BACKOFF_SECONDS = (15.0, 30.0, 60.0)
 
 
 def _bare_id(arxiv_id: str) -> str:
@@ -49,33 +45,16 @@ class ArxivSource(PaperSource):
     def get_papers(self, identifiers: list[str]) -> dict[str, arxiv.Result | None]:
         """Batch-fetch by arXiv id; missing ids map to None (terminal, don't retry).
 
-        Transient HTTP 429s are retried with a long outer backoff after the
-        Client's own retries are exhausted. Other errors (and 429s that still
-        fail) propagate so the worker leaves messages unarchived for redelivery.
+        Errors propagate — including HTTP 429s that outlive the Client's own
+        retries — so the worker leaves the messages unarchived and pgmq
+        redelivers them. Retrying in-process instead would risk blocking past
+        worker.VT_SECONDS, which lets pgmq hand the same batch to a second
+        worker while this one is still sleeping.
         """
         if not identifiers:
             return {}
 
         logger.info("fetching papers for %s", identifiers)
-        for attempt in range(_OUTER_429_ATTEMPTS):
-            try:
-                return self._fetch_once(identifiers)
-            except arxiv.HTTPError as err:
-                if err.status != 429 or attempt >= _OUTER_429_ATTEMPTS - 1:
-                    raise
-                delay = _OUTER_429_BACKOFF_SECONDS[
-                    min(attempt, len(_OUTER_429_BACKOFF_SECONDS) - 1)
-                ]
-                logger.warning(
-                    "arxiv HTTP 429 on attempt %d/%d — sleeping %.0fs before retry",
-                    attempt + 1,
-                    _OUTER_429_ATTEMPTS,
-                    delay,
-                )
-                time.sleep(delay)
-        return {i: None for i in identifiers}  # pragma: no cover — loop always returns/raises
-
-    def _fetch_once(self, identifiers: list[str]) -> dict[str, arxiv.Result | None]:
         out: dict[str, arxiv.Result | None] = {i: None for i in identifiers}
         remaining = set(identifiers)
         results = self._client.results(arxiv.Search(id_list=list(identifiers)))
