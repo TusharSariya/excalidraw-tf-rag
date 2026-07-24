@@ -3,14 +3,14 @@
 --
 -- Clears, in one transaction (RESTART IDENTITY so seeds.paper_id starts over):
 --   * seeds
---   * source_arxiv / source_openalex / source_semantic_scholar  (FK-cascade from seeds)
---   * harvest_dispatch                                          (FK-cascade from seeds)
---   * s2_paper / s2_author / s2_paper_author / s2_reference /
---     s2_citation / s2_embedding                                (graph; not seed-linked)
---   * every message in the harvest_* pgmq queues                (pgmq.purge_queue)
+--   * every source_* outcome table (FK-cascade from seeds)
+--   * harvest_dispatch (FK-cascade from seeds)
+--   * crossref_reference / opencitations_edge (edge fan-outs)
+--   * s2_* graph tables (not seed-linked)
+--   * every message in the harvest_* pgmq queues (pgmq.purge_queue)
 --
 -- Preserves the queue / fan-out control-plane — only the mailboxes are emptied:
---   * the pgmq queues themselves (harvest_arxiv / harvest_openalex / harvest_s2)
+--   * the pgmq queues themselves
 --   * queue_subscriptions (fan-out config)
 --   * harvest_generation (per-source dispatch epoch)
 -- ...and any migration / schema state.
@@ -26,6 +26,20 @@ truncate table
     public.source_arxiv,
     public.source_openalex,
     public.source_semantic_scholar,
+    public.source_unpaywall,
+    public.source_crossref,
+    public.source_dblp,
+    public.source_openreview,
+    public.source_acl_anthology,
+    public.source_opencitations,
+    public.source_datacite,
+    public.source_core,
+    public.source_internet_archive,
+    public.source_zenodo,
+    public.source_figshare,
+    public.source_osf,
+    public.crossref_reference,
+    public.opencitations_edge,
     public.harvest_dispatch,
     public.s2_paper,
     public.s2_author,
