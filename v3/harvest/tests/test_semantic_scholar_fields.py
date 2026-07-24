@@ -1,4 +1,4 @@
-"""S2 subject fetch is metadata-only; cites/refs come from paginated endpoints."""
+"""S2 subject fetch is metadata-only; cites/refs stream via paginated endpoints."""
 
 from unittest.mock import MagicMock
 
@@ -55,72 +55,83 @@ def test_related_paper_from_edge_maps_citing_paper() -> None:
     assert related.authors[0].author_id == "a-cite-1"
 
 
-def test_get_papers_uses_subject_fields_then_paginates() -> None:
+def test_get_papers_uses_subject_fields_only() -> None:
     source = SemanticScholarSource()
     source._client = MagicMock()
     paper = _subject_paper()
     source._client.get_papers.return_value = ([paper], [])
-    source._client.get_paper_citations.return_value = [_edge("c1"), _edge("c2")]
-    source._client.get_paper_references.return_value = [_edge("r1", citing=False)]
 
     out = source.get_papers(["DOI:10.1145/example"])
     rec = out["DOI:10.1145/example"]
     assert rec is not None
     assert rec.paper_id == "abc"
-    assert [c.paper_id for c in rec.citations or []] == ["c1", "c2"]
-    assert [r.paper_id for r in rec.references or []] == ["r1"]
+    assert rec.citations is None
+    assert rec.references is None
+    assert rec.citation_count == 2
+    assert rec.reference_count == 1
 
     kwargs = source._client.get_papers.call_args.kwargs
-    assert kwargs["paper_ids"] == ["DOI:10.1145/example"]
     assert kwargs["fields"] == SUBJECT_FIELDS
     assert not any(f.startswith("citations.") for f in kwargs["fields"])
     assert not any(f.startswith("references.") for f in kwargs["fields"])
-    assert "embedding" in kwargs["fields"]
-    assert "tldr" in kwargs["fields"]
+    source._client.get_paper_citations.assert_not_called()
+    source._client.get_paper_references.assert_not_called()
+
+
+def test_iter_related_chunks_paginates_and_chunks() -> None:
+    source = SemanticScholarSource()
+    source._client = MagicMock()
+    source._client.get_paper_citations.return_value = [
+        _edge("c1"),
+        _edge("c2"),
+        _edge("c3"),
+    ]
+
+    chunks = list(source.iter_related_chunks("citations", "abc", chunk_size=2))
+    assert [[r.paper_id for r in c] for c in chunks] == [["c1", "c2"], ["c3"]]
 
     cite_kw = source._client.get_paper_citations.call_args.kwargs
     assert cite_kw["fields"] == RELATED_FIELDS
     assert cite_kw["limit"] == RELATED_PAGE_LIMIT
-    # positional paper_id
     assert source._client.get_paper_citations.call_args.args[0] == "abc"
 
-    ref_kw = source._client.get_paper_references.call_args.kwargs
-    assert ref_kw["fields"] == RELATED_FIELDS
-    assert ref_kw["limit"] == RELATED_PAGE_LIMIT
 
-
-def test_get_papers_paginates_multi_page_iterators() -> None:
+def test_iter_related_chunks_references() -> None:
     source = SemanticScholarSource()
     source._client = MagicMock()
-    source._client.get_papers.return_value = ([_subject_paper()], [])
+    source._client.get_paper_references.return_value = [_edge("r1", citing=False)]
 
-    def _pages(ids: list[str], *, citing: bool):
-        return (_edge(i, citing=citing) for i in ids)
-
-    source._client.get_paper_citations.return_value = _pages(["c1", "c2", "c3"], citing=True)
-    source._client.get_paper_references.return_value = _pages(["r1"], citing=False)
-
-    rec = source.get_papers(["DOI:10.1145/example"])["DOI:10.1145/example"]
-    assert rec is not None
-    assert len(rec.citations or []) == 3
-    assert len(rec.references or []) == 1
+    chunks = list(source.iter_related_chunks("references", "abc", chunk_size=1000))
+    assert len(chunks) == 1
+    assert chunks[0][0].paper_id == "r1"
 
 
-def test_get_papers_treats_null_page_as_end() -> None:
+def test_open_related_retries_null_page_then_succeeds(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("harvest.sources.semantic_scholar.time.sleep", lambda _s: None)
     source = SemanticScholarSource()
     source._client = MagicMock()
-    source._client.get_papers.return_value = ([_subject_paper()], [])
+    source._client.get_paper_references.side_effect = [
+        TypeError("'NoneType' object is not iterable"),
+        [_edge("r1", citing=False)],
+    ]
+
+    chunks = list(source.iter_related_chunks("references", "abc"))
+    assert [r.paper_id for r in chunks[0]] == ["r1"]
+    assert source._client.get_paper_references.call_count == 2
+
+
+def test_mid_stream_null_page_raises_for_redelivery() -> None:
+    source = SemanticScholarSource()
+    source._client = MagicMock()
 
     def _broken():
         yield _edge("c1")
         raise TypeError("'NoneType' object is not iterable")
 
     source._client.get_paper_citations.return_value = _broken()
-    source._client.get_paper_references.return_value = []
 
-    rec = source.get_papers(["DOI:10.1145/example"])["DOI:10.1145/example"]
-    assert rec is not None
-    assert [c.paper_id for c in rec.citations or []] == ["c1"]
+    with pytest.raises(TypeError, match="NoneType"):
+        list(source.iter_related_chunks("citations", "abc"))
 
 
 def test_get_papers_treats_no_valid_ids_as_not_found() -> None:
@@ -151,8 +162,6 @@ def test_get_papers_fetches_serially() -> None:
         ([_subject_paper(external_ids={"DOI": "10.1/a"})], []),
         ([_subject_paper(paper_id="b", external_ids={"DOI": "10.1/b"})], []),
     ]
-    source._client.get_paper_citations.return_value = []
-    source._client.get_paper_references.return_value = []
 
     source.get_papers(["DOI:10.1/a", "DOI:10.1/b"])
     assert source._client.get_papers.call_count == 2

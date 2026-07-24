@@ -24,6 +24,7 @@ from .s2 import (
     author_row_from,
     embedding_row_from,
     from_paper_record,
+    iter_s2_writes,
     outcome_row_from,
     paper_row_from,
     s2_write,
@@ -82,4 +83,5 @@ __all__ = [
     "paper_row_from",
     "s2_write",
     "s2_writes",
+    "iter_s2_writes",
 ]
