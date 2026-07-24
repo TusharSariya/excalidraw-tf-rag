@@ -106,7 +106,9 @@ SOURCES: dict[str, Source] = {
         # first present of openalex_id, then DOI (most seeds carry only a DOI).
         identify=[lambda seed: seed.openalex_id, lambda seed: seed.doi],
         build_write=openalex_write,
-        batch_size=100,
+        # DOI path is one Works()[doi] call per id (W… ids batch). batch_size=100
+        # + VT=120 let a 100-DOI read overrun visibility → stampede redelivery.
+        batch_size=10,
     ),
     "s2": Source(
         "harvest_s2",
@@ -194,7 +196,9 @@ SOURCES: dict[str, Source] = {
         lambda _: ZenodoSource(),
         identify=[lambda seed: seed.doi],
         build_write=zenodo_write,
-        batch_size=50,
+        # Serial DOI lookups; a mid-batch 429 aborts the whole read. Keep small
+        # so one rate-limit doesn't strand dozens of already-resolved not_founds.
+        batch_size=10,
     ),
     "figshare": Source(
         "harvest_figshare",
@@ -215,8 +219,19 @@ SOURCES: dict[str, Source] = {
 # Visibility timeout: how long a read message stays hidden while we work on it.
 # If we don't archive within this window, pgmq redelivers it (at-least-once).
 # S2 paginates mega-cite graphs (10k+) with streamed upserts — needs a long VT.
+# OpenAlex DOI path is serial + retries; 10 ids comfortably fit under 600s.
 VT_SECONDS = 120
 S2_VT_SECONDS = 900
+OPENALEX_VT_SECONDS = 600
+
+
+def _vt_seconds(source_key: str) -> int:
+    if source_key == "s2":
+        return S2_VT_SECONDS
+    if source_key == "openalex":
+        return OPENALEX_VT_SECONDS
+    return VT_SECONDS
+
 
 # How long to wait for a full batch to accumulate before reading whatever is there.
 WAIT_SECONDS = 120.0
@@ -261,7 +276,7 @@ def main() -> None:
         rows = store.read_batch(
             queue,
             n=source.batch_size,
-            vt_seconds=S2_VT_SECONDS if source_key == "s2" else VT_SECONDS,
+            vt_seconds=_vt_seconds(source_key),
             wait_seconds=WAIT_SECONDS,
             empty_exit_seconds=EMPTY_EXIT_SECONDS,
             poll_fast_seconds=POLL_FAST_SECONDS,

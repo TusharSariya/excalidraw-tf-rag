@@ -4,6 +4,16 @@ Notable changes to the `harvest` package. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions match `pyproject.toml`
 (the image tag the `build-push` CI guard checks against prod ECR).
 
+## [0.18.0]
+
+### Fixed
+- OpenAlex DOI drain was stalling: `batch_size=100` serial `Works()[doi]` calls
+  overran the 120s visibility timeout, so pgmq redelivered while pods still
+  fetched and KEDA spawned more workers on the same backlog. Cap batch at 10
+  and use a 600s VT for openalex.
+- Zenodo `batch_size` 50→10 so a mid-batch HTTP 429 does not leave dozens of
+  messages unarchived after partial not_found resolution.
+
 ## [0.17.0]
 
 ### Fixed
