@@ -1,6 +1,6 @@
 import logging
+import time
 from collections.abc import Iterator
-from dataclasses import replace
 from typing import Any, Literal
 
 from semanticscholar import SemanticScholar
@@ -51,6 +51,10 @@ RELATED_FIELDS: list[str] = [
 
 #: S2 Graph API max page size for citation/reference listings.
 RELATED_PAGE_LIMIT = 1000
+
+#: Retries when the SDK raises TypeError on ``data: null`` (rate-limit flake).
+RELATED_FETCH_RETRIES = 4
+RELATED_FETCH_RETRY_SLEEP_S = 2.0
 
 # Back-compat aliases (pre-0.15 subject ladder names → subject-only fields).
 META_FIELDS = SUBJECT_FIELDS
@@ -112,6 +116,11 @@ def related_paper_from_edge(item: Any) -> RelatedPaper | None:
     return RelatedPaper.from_dict(filtered)
 
 
+def _is_null_page_error(exc: BaseException) -> bool:
+    """SDK PaginatedResults blows up when S2 returns ``data: null``."""
+    return isinstance(exc, TypeError) and "NoneType" in str(exc)
+
+
 class SemanticScholarSource(PaperSource):
     """PaperSource implementation backed by the Semantic Scholar Graph API.
 
@@ -124,12 +133,11 @@ class SemanticScholarSource(PaperSource):
         self._client = SemanticScholar()
 
     def get_papers(self, identifiers: list[str]) -> dict[str, S2Record | None]:
-        """Fetch subject metadata, then paginate citations and references.
+        """Fetch subject metadata only (tldr + embedding + SEARCH fields).
 
-        Subject fetch uses :data:`SUBJECT_FIELDS` only (no embedded cite/ref
-        lists — those arrays are unreliable on batch/paper payloads). Graph edges
-        come from ``get_paper_citations`` / ``get_paper_references`` at
-        ``limit=1000`` until exhausted.
+        Citation/reference graphs are streamed later via
+        :meth:`iter_related_chunks` so Attention-scale papers do not hold tens
+        of thousands of stubs in RSS before the first upsert.
 
         Missing ids map to None (terminal). Rate limits / 5xx propagate so the
         worker leaves messages unarchived for pgmq redelivery.
@@ -147,23 +155,17 @@ class SemanticScholarSource(PaperSource):
         subject = self._fetch_subject(identifier)
         if subject is None:
             return None
-
-        s2_id = subject.paper_id
-        if not s2_id:
+        if not subject.paper_id:
             logger.warning("subject for %s has no paper_id — treating as not found", identifier)
             return None
-
-        citations = list(self._iter_related("citations", s2_id))
-        references = list(self._iter_related("references", s2_id))
-        record = replace(subject, citations=citations, references=references)
         logger.info(
-            "fetched %s: cites=%s refs=%s emb=%s",
+            "fetched subject %s: cite_count=%s ref_count=%s emb=%s",
             identifier,
-            len(citations),
-            len(references),
-            record.embedding is not None,
+            subject.citation_count,
+            subject.reference_count,
+            subject.embedding is not None,
         )
-        return record
+        return subject
 
     def _fetch_subject(self, identifier: str) -> S2Record | None:
         try:
@@ -197,26 +199,77 @@ class SemanticScholarSource(PaperSource):
 
         return S2Record.from_sdk(paper)
 
+    def iter_related_chunks(
+        self,
+        kind: Literal["citations", "references"],
+        paper_id: str,
+        *,
+        chunk_size: int = RELATED_PAGE_LIMIT,
+    ) -> Iterator[list[RelatedPaper]]:
+        """Yield RelatedPaper stubs in chunks while paginating S2 endpoints."""
+        if chunk_size < 1:
+            raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
+        chunk: list[RelatedPaper] = []
+        total = 0
+        for related in self._iter_related(kind, paper_id):
+            chunk.append(related)
+            if len(chunk) >= chunk_size:
+                total += len(chunk)
+                yield chunk
+                chunk = []
+        if chunk:
+            total += len(chunk)
+            yield chunk
+        logger.info("streamed %s for %s: %s items", kind, paper_id, total)
+
+    def _open_related_pages(
+        self,
+        kind: Literal["citations", "references"],
+        paper_id: str,
+    ) -> Any | None:
+        """Open a PaginatedResults, retrying SDK TypeError on ``data: null``."""
+        fetch = (
+            self._client.get_paper_citations
+            if kind == "citations"
+            else self._client.get_paper_references
+        )
+        last_exc: BaseException | None = None
+        for attempt in range(1, RELATED_FETCH_RETRIES + 1):
+            try:
+                return fetch(
+                    paper_id,
+                    fields=RELATED_FIELDS,
+                    limit=RELATED_PAGE_LIMIT,
+                )
+            except ObjectNotFoundException:
+                logger.warning("%s endpoint 404 for %s — empty %s", kind, paper_id, kind)
+                return None
+            except TypeError as exc:
+                if not _is_null_page_error(exc):
+                    raise
+                last_exc = exc
+                logger.warning(
+                    "null %s page opening %s (attempt %s/%s): %s",
+                    kind,
+                    paper_id,
+                    attempt,
+                    RELATED_FETCH_RETRIES,
+                    exc,
+                )
+                if attempt < RELATED_FETCH_RETRIES:
+                    time.sleep(RELATED_FETCH_RETRY_SLEEP_S * attempt)
+        assert last_exc is not None
+        raise last_exc
+
     def _iter_related(
         self,
         kind: Literal["citations", "references"],
         paper_id: str,
     ) -> Iterator[RelatedPaper]:
         """Yield RelatedPaper stubs from paginated citation/reference endpoints."""
-        if kind == "citations":
-            fetch = self._client.get_paper_citations
-        else:
-            fetch = self._client.get_paper_references
-
         logger.info("paginating %s for %s (limit=%s)", kind, paper_id, RELATED_PAGE_LIMIT)
-        try:
-            pages = fetch(
-                paper_id,
-                fields=RELATED_FIELDS,
-                limit=RELATED_PAGE_LIMIT,
-            )
-        except ObjectNotFoundException:
-            logger.warning("%s endpoint 404 for %s — empty %s", kind, paper_id, kind)
+        pages = self._open_related_pages(kind, paper_id)
+        if pages is None:
             return
 
         count = 0
@@ -228,16 +281,17 @@ class SemanticScholarSource(PaperSource):
                 count += 1
                 yield related
         except TypeError as exc:
-            # Under rate-limit / flaky responses the SDK can see ``data: null``
-            # and blow up on ``for item in results['data']``. Treat as end of
-            # stream so a partial graph can still persist; redelivery retries.
-            logger.warning(
-                "null/broken %s page for %s after %s items (%s) — stopping pagination",
+            # Mid-stream null page: abort so the worker skips the outcome row
+            # and pgmq redelivers (partial edge upserts are idempotent).
+            if not _is_null_page_error(exc):
+                raise
+            logger.error(
+                "null/broken %s page for %s after %s items — aborting for redelivery (%s)",
                 kind,
                 paper_id,
                 count,
                 exc,
             )
-            return
+            raise
 
         logger.info("paginated %s for %s: %s items", kind, paper_id, count)

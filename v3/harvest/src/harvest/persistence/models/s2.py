@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -493,17 +493,20 @@ def outcome_row_from(
     )
 
 
-def s2_writes(
+def iter_s2_writes(
     seed_paper_id: int,
     record: S2Record,
     *,
+    citation_chunks: Iterable[Sequence[RelatedPaper]] | None = None,
+    reference_chunks: Iterable[Sequence[RelatedPaper]] | None = None,
     fetched_at: datetime | None = None,
     chunk_size: int = S2_EDGE_UPSERT_CHUNK,
-) -> list[Write]:
-    """Chunked S2 persistence: subject → ≤chunk_size edge Writes → outcome.
+) -> Iterator[Write]:
+    """Stream S2 Writes: subject → edge chunks → outcome (outcome last).
 
-    Outcome is last so a mid-graph failure leaves the seed without a false
-    ``succeeded`` row (pgmq redelivery retries the upserts).
+    Pass ``citation_chunks`` / ``reference_chunks`` from a live paginator (preferred
+    — keeps Attention-scale graphs out of RSS). When omitted, slices
+    ``record.citations`` / ``record.references`` by ``chunk_size`` (unit tests).
     """
     if chunk_size < 1:
         raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
@@ -511,31 +514,48 @@ def s2_writes(
         raise ValueError("S2Record.paper_id is required for s2_writes")
 
     now = fetched_at if fetched_at is not None else datetime.now(UTC)
-    writes: list[Write] = [subject_graph_from(record, fetched_at=now).to_write()]
+    yield subject_graph_from(record, fetched_at=now).to_write()
 
-    citations = list(record.citations or ())
-    for i in range(0, len(citations), chunk_size):
-        chunk = related_graph_from(
-            record.paper_id,
-            citations[i : i + chunk_size],
-            kind="citation",
-        ).to_write()
+    def _chunks(
+        explicit: Iterable[Sequence[RelatedPaper]] | None,
+        related: Sequence[RelatedPaper] | None,
+    ) -> Iterator[Sequence[RelatedPaper]]:
+        if explicit is not None:
+            yield from explicit
+            return
+        items = list(related or ())
+        for i in range(0, len(items), chunk_size):
+            yield items[i : i + chunk_size]
+
+    for related in _chunks(citation_chunks, record.citations):
+        chunk = related_graph_from(record.paper_id, related, kind="citation").to_write()
         if chunk.groups:
-            writes.append(chunk)
+            yield chunk
 
-    references = list(record.references or ())
-    for i in range(0, len(references), chunk_size):
-        chunk = related_graph_from(
-            record.paper_id,
-            references[i : i + chunk_size],
-            kind="reference",
-        ).to_write()
+    for related in _chunks(reference_chunks, record.references):
+        chunk = related_graph_from(record.paper_id, related, kind="reference").to_write()
         if chunk.groups:
-            writes.append(chunk)
+            yield chunk
 
-    outcome = outcome_row_from(seed_paper_id, record, fetched_at=now)
-    writes.append(Write(groups=[[outcome]]))
-    return writes
+    yield Write(groups=[[outcome_row_from(seed_paper_id, record, fetched_at=now)]])
+
+
+def s2_writes(
+    seed_paper_id: int,
+    record: S2Record,
+    *,
+    fetched_at: datetime | None = None,
+    chunk_size: int = S2_EDGE_UPSERT_CHUNK,
+) -> list[Write]:
+    """Materialize :func:`iter_s2_writes` (subject → ≤chunk_size edges → outcome)."""
+    return list(
+        iter_s2_writes(
+            seed_paper_id,
+            record,
+            fetched_at=fetched_at,
+            chunk_size=chunk_size,
+        )
+    )
 
 
 def s2_write(

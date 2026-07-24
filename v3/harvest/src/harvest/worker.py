@@ -32,11 +32,11 @@ from .persistence.models import (
     dblp_write,
     figshare_write,
     internet_archive_write,
+    iter_s2_writes,
     openalex_write,
     opencitations_write,
     openreview_write,
     osf_write,
-    s2_writes,
     unpaywall_write,
     zenodo_write,
 )
@@ -116,9 +116,10 @@ SOURCES: dict[str, Source] = {
             lambda seed: f"ARXIV:{seed.arxiv_id}" if seed.arxiv_id else None,
             lambda seed: f"DOI:{seed.doi}" if seed.doi else None,
         ],
-        build_write=s2_writes,
-        # One id per request: subject metadata + paginated cite/ref endpoints.
-        # s2_writes returns subject + ≤1k-edge chunks + outcome Writes.
+        # build_write unused for s2 — worker streams via iter_s2_writes +
+        # SemanticScholarSource.iter_related_chunks (see main loop).
+        build_write=lambda _pid, _rec: [],
+        # One id per request: subject metadata + streamed cite/ref pages.
         batch_size=1,
     ),
     "unpaywall": Source(
@@ -344,8 +345,24 @@ def main() -> None:
                     _archive(q, queue, item.msg_id)
                     continue
 
-                payload = build_write(paper_id, record)
-                writes = payload if isinstance(payload, list) else [payload]
+                if source_key == "s2":
+                    assert isinstance(paper_source, SemanticScholarSource)
+                    assert record.paper_id is not None
+                    writes = iter_s2_writes(
+                        paper_id,
+                        record,
+                        citation_chunks=paper_source.iter_related_chunks(
+                            "citations",
+                            record.paper_id,
+                        ),
+                        reference_chunks=paper_source.iter_related_chunks(
+                            "references",
+                            record.paper_id,
+                        ),
+                    )
+                else:
+                    payload = build_write(paper_id, record)
+                    writes = payload if isinstance(payload, list) else [payload]
                 for w in writes:
                     store.write(w)
                 _archive(q, queue, item.msg_id)

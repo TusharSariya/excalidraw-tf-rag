@@ -77,7 +77,7 @@ are not interchangeable:
 | Source | `identifier` | Citation graph |
 |---|---|---|
 | `ArxivSource` | arXiv id (`1706.03762`) | none — arXiv has no citation data, so `get_references`/`get_citations` return `[]` by design |
-| `SemanticScholarSource` | arXiv id, mapped to `ARXIV:<id>` | yes — subject metadata + paginated `/citations` and `/references` (`limit=1000`); `s2_writes` upserts ≤1k edges per Write (embedded batch `references` is often empty despite `referenceCount`) |
+| `SemanticScholarSource` | arXiv id, mapped to `ARXIV:<id>` | yes — subject metadata, then stream paginated `/citations` + `/references` (`limit=1000`) into ≤1k-edge Writes (embedded batch `references` is often empty despite `referenceCount`) |
 | `OpenAlexSource` | **DOI or OpenAlex id — never an arXiv id** | yes |
 | `UnpaywallSource` | DOI | none — OA-location metadata only (`best_oa_location`) |
 | `CrossrefSource` | DOI (batched via `/works?filter=doi:…`) | references only (`crossref_reference`) |

@@ -4,6 +4,17 @@ Notable changes to the `harvest` package. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions match `pyproject.toml`
 (the image tag the `build-push` CI guard checks against prod ECR).
 
+## [0.16.0]
+
+### Fixed
+- Stream S2 citation/reference pages into ≤1k-edge Writes **while paginating**
+  instead of materializing the full related list on `S2Record` first. Prod
+  pods (256Mi) were connection-reset / failing after fetching ~10k cites
+  because RSS held the whole graph before upsert.
+- Retry opening `/citations` and `/references` when the SDK raises TypeError
+  on ``data: null`` (rate-limit flake). Mid-stream null pages abort before the
+  outcome row so pgmq redelivers without a false `succeeded`.
+
 ## [0.15.0]
 
 ### Fixed
