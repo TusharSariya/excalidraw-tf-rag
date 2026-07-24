@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from . import contracts
+from .errors import RateLimited
 from .persistence.base import Write
 from .persistence.models import (
     Seed,
@@ -385,12 +386,28 @@ def main() -> None:
                 _archive(q, queue, item.msg_id)
                 drained += 1
                 logger.info("persisted seed %s (id=%s)", paper_id, identifier)
-        except Exception:
+        except RateLimited as e:
+            # Leave this batch unarchived. Exit the drain so we do not walk the
+            # rest of the queue under a ban (each attempt bumps read_ct toward
+            # the poison-pill cap). KEDA respawns; VT spaces the next try.
+            logger.error(
+                "%s — exiting drain (paper_ids=%s left unarchived)",
+                e,
+                sorted(pending),
+            )
+            break
+        except Exception as e:
             # Leave unarchived messages for redelivery. Already-archived items in
             # this batch stay archived (writes are upsert-idempotent on retry).
             logger.exception(
                 "batch failed for paper_ids=%s — leaving unarchived for redelivery",
                 sorted(pending),
             )
+            # HTTP 429 that sources didn't map to RateLimited (e.g. S2 httpx) —
+            # same stampede risk; stop draining.
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            if status == 429:
+                logger.error("HTTP 429 — exiting drain so VT spaces retries")
+                break
 
     logger.info("queue %s empty — drained %d, exiting", queue, drained)

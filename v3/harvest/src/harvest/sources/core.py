@@ -2,6 +2,8 @@ import logging
 
 import requests
 
+from harvest.errors import RateLimited
+
 from .base import PaperSource
 from .models.core import CoreWork
 
@@ -100,8 +102,21 @@ class CoreSource(PaperSource):
         if resp.status_code == 404:
             logger.warning("no result for %s (not found)", doi)
             return None
+        if resp.status_code == 429:
+            # CORE free tier is ~10 req / window. Raising RateLimited makes the
+            # worker *exit* instead of walking the rest of the queue (which would
+            # burn read_ct toward the poison-pill cap under a ban).
+            retry_after = resp.headers.get("Retry-After") or resp.headers.get(
+                "x-ratelimit-retry-after"
+            )
+            logger.error(
+                "fetch failed (HTTP 429) for %s — stopping drain (retry_after=%s)",
+                doi,
+                retry_after,
+            )
+            raise RateLimited("core", retry_after=retry_after)
         if resp.status_code != 200:
-            # 429 / 5xx (and anything else unexpected) -> raise so pgmq redelivers.
+            # 5xx (and anything else unexpected) -> raise so pgmq redelivers.
             logger.error(
                 "fetch failed (HTTP %s) for %s: %s", resp.status_code, doi, resp.text[:200]
             )

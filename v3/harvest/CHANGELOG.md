@@ -4,6 +4,16 @@ Notable changes to the `harvest` package. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions match `pyproject.toml`
 (the image tag the `build-push` CI guard checks against prod ECR).
 
+## [0.19.0]
+
+### Fixed
+- Rate-limit stampede: on HTTP 429 the worker kept reading the next queue
+  message and failing again, burning ``read_ct`` toward the poison-pill cap
+  (CORE free tier is ~10 req/window — stern showed dozens of back-to-back 429s
+  with ``read_ct=5``). ``RateLimited`` now stops the drain so pgmq VT spaces
+  retries; CORE raises it with ``x-ratelimit-retry-after``. OpenAlex no longer
+  retries 429 in-process via pyalex (that hung pods for hours).
+
 ## [0.18.0]
 
 ### Fixed
