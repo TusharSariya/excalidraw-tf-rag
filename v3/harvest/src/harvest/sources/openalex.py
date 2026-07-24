@@ -4,9 +4,11 @@ import pyalex
 from pyalex import Works
 from requests.exceptions import HTTPError
 
+from .base import PaperSource
 from .models.openalex import OpenAlexWork
 
 logger = logging.getLogger("harvest.openalex")
+
 
 # How many citing works to pull. OpenAlex pages at 25 by default; per_page maxes at
 # 200. Mirrors the limit=100 SemanticScholarSource uses for citations.
@@ -23,7 +25,7 @@ def _short_id(openalex_url: str) -> str:
     return openalex_url.rsplit("/", 1)[-1]
 
 
-def _works_key(identifier: str) -> str:
+def _normalize_key(identifier: str) -> str:
     """Normalise a seed identity to a form OpenAlex's ``/works/<key>`` resolves.
 
     ``Works()[key]`` hits ``/works/<key>`` verbatim. OpenAlex resolves an OpenAlex id
@@ -35,20 +37,43 @@ def _works_key(identifier: str) -> str:
     ROR is normalised but **inert**: it identifies an *institution*, so
     ``/works/ror:<id>`` 404s — there is no work with a ROR identity. Seeds carry no ROR
     today; it is normalised here for completeness (one place for a future institutions
-    path to hook), but it will not resolve a paper via ``get_paper``.
+    path to hook), but it will not resolve a paper via ``get_papers``.
     """
     key = identifier.strip()
     if key.startswith("10."):
         return f"https://doi.org/{key}"
     low = key.lower()
-    if low.startswith("ror:"):
-        return key
     if "ror.org/" in low:
         return f"ror:{key.rsplit('/', 1)[-1]}"
     return key
 
 
-class OpenAlexSource:
+def _is_openalex_work_id(key: str) -> bool:
+    short = _short_id(key)
+    return short.upper().startswith("W") and short[1:].isdigit()
+
+
+def requested_id_for(result: dict, requested: set[str]) -> str | None:
+    """Map a Work dict back to one of the ids we asked for."""
+    short = _short_id(result["id"])
+    ids = result.get("ids") or {}
+    doi_url = ids.get("doi")
+    bare_doi = doi_url.removeprefix("https://doi.org/") if doi_url else None
+
+    candidates: set[str] = {short, result["id"]}
+    if doi_url:
+        candidates.add(doi_url)
+    if bare_doi:
+        candidates.add(bare_doi)
+
+    for req in requested:
+        norm = _normalize_key(req)
+        if req in candidates or norm in candidates or _short_id(norm) == short:
+            return req
+    return None
+
+
+class OpenAlexSource(PaperSource):
     """PaperSource implementation backed by OpenAlex, via the pyalex SDK.
 
     **`identifier` is a DOI or an OpenAlex work ID — NOT an arXiv id.** This differs
@@ -82,22 +107,74 @@ class OpenAlexSource:
         pyalex.config.retry_backoff_factor = 0.5
         pyalex.config.retry_http_codes = [429, 500, 502, 503, 504]
 
-    def get_paper(self, identifier: str) -> OpenAlexWork | None:
-        return self._fetch(identifier)
+    def get_papers(self, identifiers: list[str]) -> dict[str, OpenAlexWork | None]:
+        return self._fetch(identifiers)
 
-    def _fetch(self, identifier: str) -> OpenAlexWork | None:
-        logger.info("fetching metadata for %s", identifier)
-        try:
-            result = Works()[_works_key(identifier)]
-        except HTTPError as e:
-            # pyalex surfaces everything as requests' HTTPError, so separate "this
-            # paper isn't in OpenAlex" (terminal: not_found) from "OpenAlex is having
-            # a bad day" (transient: retry). Collapsing them would either poison-pill
-            # good seeds or spin forever on genuinely absent ones.
-            status = e.response.status_code if e.response is not None else None
-            if status == 404:
-                logger.warning("no result for %s (not found)", identifier)
-                return None
-            logger.error("fetch failed (HTTP %s): %s", status, e)
-            raise
-        return OpenAlexWork.from_result(result)
+    def _fetch(self, identifiers: list[str]) -> dict[str, OpenAlexWork | None]:
+        """Batch-fetch; missing ids map to None (terminal, don't retry).
+
+        ``Works()[list]`` only filters by OpenAlex work id, so W… ids go through
+        that path. DOIs and other keys are resolved one-at-a-time via
+        ``Works()[key]`` (which accepts DOI URLs). Transient HTTP errors raise so
+        the worker leaves messages unarchived for redelivery.
+        """
+        out: dict[str, OpenAlexWork | None] = {i: None for i in identifiers}
+        if not identifiers:
+            return out
+
+        logger.info("fetching metadata for %s", identifiers)
+        remaining = set(identifiers)
+
+        oa_shorts: list[str] = []
+        singles: list[str] = []
+        for req in identifiers:
+            norm = _normalize_key(req)
+            if _is_openalex_work_id(norm):
+                oa_shorts.append(_short_id(norm))
+            else:
+                singles.append(req)
+
+        if oa_shorts:
+            try:
+                results = Works()[oa_shorts]
+            except HTTPError as e:
+                status = e.response.status_code if e.response is not None else None
+                if status == 404:
+                    logger.warning("no result for openalex batch %s (not found)", oa_shorts)
+                else:
+                    logger.error("fetch failed (HTTP %s): %s", status, e)
+                    raise
+            else:
+                if results is None:
+                    results = []
+                elif isinstance(results, dict):
+                    results = [results]
+                for result in results:
+                    if not isinstance(result, dict):
+                        continue
+                    key = requested_id_for(result, remaining)
+                    if key is None:
+                        logger.warning(
+                            "openalex work %s matched no outstanding request id",
+                            result.get("id"),
+                        )
+                        continue
+                    out[key] = OpenAlexWork.from_result(result)
+                    remaining.discard(key)
+
+        for req in singles:
+            try:
+                result = Works()[_normalize_key(req)]
+            except HTTPError as e:
+                status = e.response.status_code if e.response is not None else None
+                if status == 404:
+                    logger.warning("no result for %s (not found)", req)
+                    continue
+                logger.error("fetch failed (HTTP %s): %s", status, e)
+                raise
+            if not result or not isinstance(result, dict):
+                continue
+            out[req] = OpenAlexWork.from_result(result)
+            remaining.discard(req)
+
+        return out

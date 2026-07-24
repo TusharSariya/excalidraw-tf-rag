@@ -16,9 +16,15 @@ harvest-seed --corpus X --arxiv_id Y
         (validates + stamps the v1 envelope)   ├─▶ harvest_openalex ─▶ harvest-work --source openalex
                                                └─▶ harvest_s2       ─▶ harvest-work --source s2
 
-each worker: read(vt) ─▶ contracts.parse ─▶ fetch source ─▶ upsert source_X ─▶ archive
+each worker: read_batch(n, vt) ─▶ contracts.parse ─▶ batch-fetch source ─▶ upsert source_X ─▶ archive
              … repeat until the queue is empty, then exit 0  (drain-then-exit)
 ```
+
+Each drain reads a **batch** of up to `batch_size` messages (per source: arxiv
+100, openalex 100, s2 500), waiting up to `WAIT_SECONDS` for a full batch to
+accumulate, then batch-fetches them in one source call. Each seed contributes a
+single fetch id — the first present identifier in the source's `identify` order
+(e.g. arXiv before DOI) — so a batch never exceeds a source's per-request id cap.
 
 - **Producer:** `public.publish_seed(paper_id)` fans a seed out to every active
   queue in `queue_subscriptions`. It stamps + `pg_jsonschema`-validates the

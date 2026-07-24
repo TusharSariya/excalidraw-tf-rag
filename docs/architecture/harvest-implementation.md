@@ -303,6 +303,7 @@ Add the DB DSN (session pooler) and a `source` selector (the per-type worker rea
 ```python
 from urllib.parse import quote
 
+
 class HarvestSettings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="", env_file=".env", cli_parse_args=True, extra="ignore"
@@ -317,8 +318,8 @@ class HarvestSettings(BaseSettings):
     supabase_key: str | None = None
     openalex_api_key: str | None = None
     # DB (session pooler, 5432)
-    harvest_db_dsn: str | None = None           # full DSN incl. password (k8s Secret)
-    supabase_pooler_url: str | None = None       # postgresql://user@host:5432/postgres
+    harvest_db_dsn: str | None = None  # full DSN incl. password (k8s Secret)
+    supabase_pooler_url: str | None = None  # postgresql://user@host:5432/postgres
     supabase_staging_pw: str | None = None
 
     @property
@@ -330,7 +331,9 @@ class HarvestSettings(BaseSettings):
             userinfo, hostpart = rest.split("@", 1)
             user = userinfo.split(":", 1)[0]
             return f"{scheme}://{user}:{quote(self.supabase_staging_pw)}@{hostpart}"
-        raise RuntimeError("No DB DSN: set HARVEST_DB_DSN or SUPABASE_POOLER_URL+SUPABASE_STAGING_PW")
+        raise RuntimeError(
+            "No DB DSN: set HARVEST_DB_DSN or SUPABASE_POOLER_URL+SUPABASE_STAGING_PW"
+        )
 ```
 
 ### `src/harvest/db.py` (new) — psycopg + PGMQ (per-queue)
@@ -339,6 +342,7 @@ class HarvestSettings(BaseSettings):
 
 Session pooler (5432). One queue per source; the type key selects the queue.
 """
+
 import logging
 import time
 from typing import Any
@@ -351,9 +355,9 @@ logger = logging.getLogger("harvest.db")
 
 # type key -> queue name. Keep in sync with queue_subscriptions.
 QUEUE_FOR = {
-    "arxiv":    "harvest_arxiv",
+    "arxiv": "harvest_arxiv",
     "openalex": "harvest_openalex",
-    "s2":       "harvest_s2",
+    "s2": "harvest_s2",
 }
 
 
@@ -363,8 +367,13 @@ def connect(dsn: str) -> psycopg.Connection:
 
 
 # ---- Seeder side: upsert identity + fan out via publish_seed ---------------
-def submit(conn: psycopg.Connection, *, arxiv_id: str | None = None,
-           doi: str | None = None, force: bool = False) -> str | None:
+def submit(
+    conn: psycopg.Connection,
+    *,
+    arxiv_id: str | None = None,
+    doi: str | None = None,
+    force: bool = False,
+) -> str | None:
     """Upsert identity into papers and fan out to every subscribed queue, atomically.
 
     Returns the paper_id if it was published, else None (already known and not forced).
@@ -425,8 +434,7 @@ def get_identity(conn: psycopg.Connection, paper_id: str) -> dict[str, Any] | No
 
 
 # ---- Shared rate bucket ----------------------------------------------------
-def acquire_token(conn: psycopg.Connection, source: str,
-                  *, timeout: float = 60.0) -> bool:
+def acquire_token(conn: psycopg.Connection, source: str, *, timeout: float = 60.0) -> bool:
     """Block (with backoff) until a token is free for `source`, or give up after timeout."""
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
@@ -458,18 +466,38 @@ def upsert_source_arxiv(conn: psycopg.Connection, paper_id: str, p) -> None:
                 published=excluded.published, updated=excluded.updated, comment=excluded.comment,
                 journal_ref=excluded.journal_ref, doi=excluded.doi, fetched_at=now()
             """,
-            {"pid": paper_id, "entry_id": p.entry_id, "title": p.title, "authors": p.authors,
-             "summary": p.summary, "primary_category": p.primary_category,
-             "categories": p.categories, "pdf_url": p.pdf_url, "links": p.links,
-             "published": p.published, "updated": p.updated, "comment": p.comment,
-             "journal_ref": p.journal_ref, "doi": p.doi},
+            {
+                "pid": paper_id,
+                "entry_id": p.entry_id,
+                "title": p.title,
+                "authors": p.authors,
+                "summary": p.summary,
+                "primary_category": p.primary_category,
+                "categories": p.categories,
+                "pdf_url": p.pdf_url,
+                "links": p.links,
+                "published": p.published,
+                "updated": p.updated,
+                "comment": p.comment,
+                "journal_ref": p.journal_ref,
+                "doi": p.doi,
+            },
         )
 
 
-def upsert_source_semantic_scholar(conn, paper_id: str, *, s2_paper_id=None, title=None,
-                                   external_ids=None, open_access_pdf_url=None,
-                                   reference_count=None, citation_count=None,
-                                   fields_of_study=None, raw=None) -> None:
+def upsert_source_semantic_scholar(
+    conn,
+    paper_id: str,
+    *,
+    s2_paper_id=None,
+    title=None,
+    external_ids=None,
+    open_access_pdf_url=None,
+    reference_count=None,
+    citation_count=None,
+    fields_of_study=None,
+    raw=None,
+) -> None:
     with conn.cursor() as cur:
         cur.execute(
             """
@@ -482,11 +510,19 @@ def upsert_source_semantic_scholar(conn, paper_id: str, *, s2_paper_id=None, tit
                 reference_count=excluded.reference_count, citation_count=excluded.citation_count,
                 fields_of_study=excluded.fields_of_study, raw=excluded.raw, fetched_at=now()
             """,
-            {"pid": paper_id, "s2": s2_paper_id, "title": title,
-             "ext": Json(external_ids) if external_ids is not None else None,
-             "pdf": open_access_pdf_url, "rc": reference_count, "cc": citation_count,
-             "fos": fields_of_study, "raw": Json(raw) if raw is not None else None},
+            {
+                "pid": paper_id,
+                "s2": s2_paper_id,
+                "title": title,
+                "ext": Json(external_ids) if external_ids is not None else None,
+                "pdf": open_access_pdf_url,
+                "rc": reference_count,
+                "cc": citation_count,
+                "fos": fields_of_study,
+                "raw": Json(raw) if raw is not None else None,
+            },
         )
+
 
 # (write upsert_source_openalex the same way once OpenAlexSource lands)
 
@@ -515,8 +551,9 @@ import logging, sys
 from .settings import HarvestSettings
 from . import db
 
-logging.basicConfig(level="INFO", stream=sys.stdout,
-                    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.basicConfig(
+    level="INFO", stream=sys.stdout, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
 log = logging.getLogger("harvest.seeder")
 
 
@@ -542,15 +579,16 @@ from .settings import HarvestSettings
 from .sources import ArxivSource, SemanticScholarSource
 from . import db
 
-logging.basicConfig(level="INFO", stream=sys.stdout,
-                    format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+logging.basicConfig(
+    level="INFO", stream=sys.stdout, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
+)
 log = logging.getLogger("harvest.worker")
 
 
 def harvest_arxiv(conn, paper_id, ident, msg_id) -> bool:
     if not db.acquire_token(conn, "arxiv"):
         raise TimeoutError("no arxiv rate token")
-    ap = ArxivSource().get_arxiv_paper(ident["arxiv_id"])   # see arxiv.py change below
+    ap = ArxivSource().get_arxiv_paper(ident["arxiv_id"])  # see arxiv.py change below
     if ap is None:
         db.record_attempt(conn, paper_id, "arxiv", "not_found", queue_msg_id=msg_id)
         return False
@@ -563,13 +601,15 @@ def harvest_s2(conn, paper_id, ident, msg_id) -> bool:
     if not db.acquire_token(conn, "s2"):
         raise TimeoutError("no s2 rate token")
     src = SemanticScholarSource()
-    paper = src.get_paper(ident["arxiv_id"])                # S2 keyed off ARXIV:<id>
+    paper = src.get_paper(ident["arxiv_id"])  # S2 keyed off ARXIV:<id>
     if paper is None:
         db.record_attempt(conn, paper_id, "s2", "not_found", queue_msg_id=msg_id)
         return False
     db.upsert_source_semantic_scholar(
-        conn, paper_id,
-        title=paper.title, open_access_pdf_url=paper.pdf_url,
+        conn,
+        paper_id,
+        title=paper.title,
+        open_access_pdf_url=paper.pdf_url,
         external_ids={"ArXiv": paper.arxiv_id, "DOI": paper.doi},
     )
     db.record_attempt(conn, paper_id, "s2", "ok", queue_msg_id=msg_id)
@@ -593,7 +633,8 @@ def main() -> None:
         while True:
             rec = db.read_one(conn, queue, vt=120)
             if rec is None:
-                log.info("queue %s empty, exiting", queue); return
+                log.info("queue %s empty, exiting", queue)
+                return
             msg, msg_id = rec["message"], rec["msg_id"]
             paper_id = msg["paper_id"]
             try:
@@ -601,10 +642,11 @@ def main() -> None:
                 ok = harvest(conn, paper_id, ident, msg_id)
                 db.set_paper_status(conn, paper_id, "succeeded" if ok else "exhausted")
                 conn.commit()
-                db.ack(conn, queue, msg_id); conn.commit()
+                db.ack(conn, queue, msg_id)
+                conn.commit()
                 log.info("done source=%s msg_id=%s paper_id=%s ok=%s", source, msg_id, paper_id, ok)
             except Exception:
-                conn.rollback()   # leave message unacked -> redelivered after vt
+                conn.rollback()  # leave message unacked -> redelivered after vt
                 log.exception("failed source=%s msg_id=%s; will redeliver", source, msg_id)
 ```
 > `set_paper_status` writes the *catalog* status. With independent per-source queues, a paper is
@@ -616,7 +658,7 @@ def main() -> None:
 1. Return the rich record: add
    ```python
    def get_arxiv_paper(self, identifier: str) -> "ArxivPaper | None":
-       return self._fetch(identifier)   # _fetch already returns ArxivPaper
+       return self._fetch(identifier)  # _fetch already returns ArxivPaper
    ```
    Keep `get_paper()` returning the canonical `Paper` for callers that want it.
 2. In `_fetch`, **remove** the stray debug lines (`logger.info("search: %s"…)`,

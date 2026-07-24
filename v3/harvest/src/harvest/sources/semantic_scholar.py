@@ -1,12 +1,51 @@
 import logging
 
 from semanticscholar import SemanticScholar
-from semanticscholar.SemanticScholarException import ObjectNotFoundException
+from semanticscholar.Paper import Paper
+from semanticscholar.SemanticScholarException import (
+    BadQueryParametersException,
+    ObjectNotFoundException,
+)
 
 from .base import PaperSource
 from .models.s2 import S2Record
 
 logger = logging.getLogger("harvest.semantic_scholar")
+
+# externalIds keys → the namespace prefix the worker puts on seed ids (ARXIV:/DOI:).
+_EXT_TO_NS = {
+    "ArXiv": "ARXIV",
+    "DOI": "DOI",
+    "CorpusId": "CorpusId",
+    "ACL": "ACL",
+    "PubMed": "PMID",
+    "PubMedCentral": "PMCID",
+    "MAG": "MAG",
+}
+
+
+def requested_id_for(paper: Paper, requested: set[str]) -> str | None:
+    """Map a batch Paper back to one of the ids we asked for.
+
+    ``POST /paper/batch`` does not echo the request string — only ``paperId`` and
+    ``externalIds`` (e.g. ``{"ArXiv": "1706.03762"}``). Rebuild candidate forms
+    and pick the first still-outstanding request that matches.
+    """
+    candidates: set[str] = set()
+    if paper.paperId:
+        candidates.add(paper.paperId)
+    for key, value in (paper.externalIds or {}).items():
+        if value is None:
+            continue
+        text = str(value)
+        candidates.add(text)
+        ns = _EXT_TO_NS.get(key, key.upper())
+        candidates.add(f"{ns}:{text}")
+
+    for req in requested:
+        if req in candidates:
+            return req
+    return None
 
 
 class SemanticScholarSource(PaperSource):
@@ -20,19 +59,50 @@ class SemanticScholarSource(PaperSource):
     def __init__(self) -> None:
         self._client = SemanticScholar()
 
-    def get_paper(self, identifier: str) -> S2Record | None:
-        """Fetch one paper, or None if S2 genuinely has no record for it.
+    def get_papers(self, identifiers: list[str]) -> dict[str, S2Record | None]:
+        """Batch-fetch papers; missing ids map to None (terminal, don't retry).
 
-        Only a not-found is swallowed to None (a terminal, don't-retry outcome).
-        Any other ``SemanticScholarException`` (rate limit, network, 5xx) is
-        transient, so it propagates — the worker leaves the message unarchived
-        and pgmq redelivers it, rather than mislabelling the seed not-found.
+        Uses ``POST /graph/v1/paper/batch`` via ``get_papers``. Only a genuine
+        not-found is recorded as None. Rate limits / 5xx propagate so the worker
+        leaves the message unarchived for pgmq redelivery.
         """
-        logger.info("fetching paper for %s", identifier)
-        try:
-            paper = self._client.get_paper(identifier)
-        except ObjectNotFoundException:
-            logger.warning("no result for %s (not found)", identifier)
-            return None
+        out: dict[str, S2Record | None] = {i: None for i in identifiers}
+        if not identifiers:
+            return out
 
-        return S2Record.from_sdk(paper)
+        logger.info("fetching papers for %s", identifiers)
+        remaining = set(identifiers)
+
+        try:
+            papers, missing = self._client.get_papers(
+                paper_ids=list(identifiers),
+                return_not_found=True,
+            )
+        except ObjectNotFoundException:
+            logger.warning("no result for %s (not found)", identifiers)
+            return out
+        except BadQueryParametersException:
+            # Client raises this when *every* id in the batch is invalid/missing
+            # ("No valid paper ids given") — treat as all not-found.
+            logger.warning("no valid papers in batch %s", identifiers)
+            return out
+
+        for pid in missing:
+            out[pid] = None
+            remaining.discard(pid)
+
+        for paper in papers:
+            key = requested_id_for(paper, remaining)
+            if key is None:
+                logger.warning(
+                    "batch paper paperId=%s matched no outstanding request id",
+                    paper.paperId,
+                )
+                continue
+            out[key] = S2Record.from_sdk(paper)
+            remaining.discard(key)
+
+        for pid in remaining:
+            out[pid] = None
+
+        return out
