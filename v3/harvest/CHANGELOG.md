@@ -4,6 +4,18 @@ Notable changes to the `harvest` package. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions match `pyproject.toml`
 (the image tag the `build-push` CI guard checks against prod ECR).
 
+## [0.11.0]
+
+### Fixed
+- `ArxivSource`: configure `arxiv.Client(delay_seconds=3, num_retries=5)` and add
+  an outer 429 backoff (15s / 30s / 60s, up to 4 attempts) after the client's own
+  retries are exhausted. Live `0.10.0` workers were failing entire batches on
+  `HTTP 429` from `export.arxiv.org` with nothing written to `source_arxiv`.
+- `SupabasePersistence.read_batch`: stop waiting after **10s of continuous
+  `visible_length == 0`** (drain-then-exit instead of hammering PostgREST for the
+  full `WAIT_SECONDS`). Poll pacing is **0.1s for the first 1s**, then **1s**
+  thereafter (empty and partial waits).
+
 ## [0.10.0]
 
 ### Fixed

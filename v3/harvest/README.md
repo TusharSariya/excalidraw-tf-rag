@@ -22,9 +22,12 @@ each worker: read_batch(n, vt) ─▶ contracts.parse ─▶ batch-fetch source 
 
 Each drain reads a **batch** of up to `batch_size` messages (per source: arxiv
 100, openalex 100, s2 500), waiting up to `WAIT_SECONDS` for a full batch to
-accumulate, then batch-fetches them in one source call. Each seed contributes a
-single fetch id — the first present identifier in the source's `identify` order
-(e.g. arXiv before DOI) — so a batch never exceeds a source's per-request id cap.
+accumulate, then batch-fetches them in one source call. Visible-length polling
+is **0.1s for the first 1s**, then **1s**; **10s of continuous empty** ends the
+wait early so the Job exits (KEDA re-spawns when the queue fills again). Each
+seed contributes a single fetch id — the first present identifier in the
+source's `identify` order (e.g. arXiv before DOI) — so a batch never exceeds a
+source's per-request id cap.
 
 - **Producer:** `public.publish_seed(paper_id)` fans a seed out to every active
   queue in `queue_subscriptions`. It stamps + `pg_jsonschema`-validates the
@@ -145,16 +148,11 @@ Notes:
 
 ## Status / history
 
-- **Built:** the producer fan-out (`seeds` → `publish_seed` → 3 queues), the
-  versioned + DB-enforced message contract, per-entrypoint settings, the
-  `harvest-work` drain loop with the `read_ct` poison cap, and the per-source
-  **persist handlers** for `s2` (0.7.0, the `s2_*` graph + outcome row),
-  `arxiv` (0.8.0, `source_arxiv`), and `openalex` (0.9.0, `source_openalex`) —
-  fetch via `sources/` and upsert `source_X` with `status`. The `s2`/`arxiv`
-  handlers are proven end-to-end against staging.
-- **Next:** run `openalex` end-to-end. The handler is wired (`SourceOpenAlexRow` +
-  `openalex_write`, resolving `openalex_id` then `doi`), but its enrich migration
-  (`20260720120000`, promoting `is_oa`/`oa_status`/`publication_year`/…) must be
-  applied to staging before the first write. Then KEDA/compose packaging polish.
+- **Built:** … plus batched drain (0.10.0) and empty-queue exit / arXiv 429
+  outer backoff (0.11.0). OpenAlex/S2/arXiv persist handlers are wired; OpenAlex
+  + S2 proven on the cluster with `0.10.0`; arXiv was blocked by API 429 until
+  the 0.11.0 Client pacing fix.
+- **Next:** re-verify arXiv end-to-end on the cluster after `0.11.0` lands in
+  prod ECR; KEDA/compose packaging polish.
 - **Deferred:** shared `rate_budget` token bucket (needed once a source scales past
   one pod), least-privilege DB roles, text extraction.

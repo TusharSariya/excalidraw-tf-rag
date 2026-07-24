@@ -98,6 +98,16 @@ VT_SECONDS = 120
 # How long to wait for a full batch to accumulate before reading whatever is there.
 WAIT_SECONDS = 120.0
 
+# Continuous empty-queue wait: stop polling and read (usually []) so drain-then-exit
+# workers die instead of hammering PostgREST. KEDA re-spawns within ~15s when work
+# reappears.
+EMPTY_EXIT_SECONDS = 10.0
+
+# Visible-length poll pacing: fast for the first second, then 1s.
+POLL_FAST_SECONDS = 0.1
+POLL_FAST_FOR_SECONDS = 1.0
+POLL_SLOW_SECONDS = 1.0
+
 # Redelivery cap: a message that keeps failing (read_ct climbing) is treated as a
 # poison pill past this many attempts — marked error and archived, not retried.
 MAX_READ_CT = 5
@@ -130,6 +140,10 @@ def main() -> None:
             n=source.batch_size,
             vt_seconds=VT_SECONDS,
             wait_seconds=WAIT_SECONDS,
+            empty_exit_seconds=EMPTY_EXIT_SECONDS,
+            poll_fast_seconds=POLL_FAST_SECONDS,
+            poll_fast_for_seconds=POLL_FAST_FOR_SECONDS,
+            poll_slow_seconds=POLL_SLOW_SECONDS,
         )
         if not rows:
             break

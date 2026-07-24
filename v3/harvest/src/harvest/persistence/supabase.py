@@ -58,18 +58,51 @@ class SupabasePersistence:
         n: int,
         vt_seconds: int,
         wait_seconds: float,
+        empty_exit_seconds: float = 10.0,
+        poll_fast_seconds: float = 0.1,
+        poll_fast_for_seconds: float = 1.0,
+        poll_slow_seconds: float = 1.0,
     ) -> list[dict[str, Any]]:
         """Accumulate up to ``n`` visible messages, then pgmq-read them.
 
         Waits up to ``wait_seconds`` for the queue to reach ``n`` visible
         messages (polling ``harvest_queue_visible_length``), then reads through
-        ``pgmq_public.read`` with visibility timeout ``vt_seconds``. Returns raw
-        pgmq rows (``msg_id``, ``message``, ``read_ct``, …) — not ``Seed``s;
-        the worker resolves seeds via ``load_seeds``.
+        ``pgmq_public.read`` with visibility timeout ``vt_seconds``.
+
+        Poll pacing: ``poll_fast_seconds`` for the first ``poll_fast_for_seconds``
+        of the wait, then ``poll_slow_seconds``. Continuous
+        ``visible_length == 0`` for ``empty_exit_seconds`` ends the wait early
+        (drain-then-exit workers should not hammer PostgREST on an empty queue;
+        KEDA will spawn a new Job when work reappears).
+
+        Returns raw pgmq rows (``msg_id``, ``message``, ``read_ct``, …) — not
+        ``Seed``s; the worker resolves seeds via ``load_seeds``.
         """
-        deadline_ns = time.time_ns() + int(wait_seconds * 1e9)
-        while time.time_ns() < deadline_ns and self.queue_visible_length(queue) < n:
-            time.sleep(0.1)
+        wait_start_ns = time.time_ns()
+        deadline_ns = wait_start_ns + int(wait_seconds * 1e9)
+        empty_started_ns: int | None = None
+        empty_limit_ns = int(empty_exit_seconds * 1e9)
+
+        while True:
+            now_ns = time.time_ns()
+            if now_ns >= deadline_ns:
+                break
+
+            length = self.queue_visible_length(queue)
+            if length >= n:
+                break
+
+            if length == 0:
+                if empty_started_ns is None:
+                    empty_started_ns = now_ns
+                elif now_ns - empty_started_ns >= empty_limit_ns:
+                    break
+            else:
+                empty_started_ns = None
+
+            elapsed_s = (now_ns - wait_start_ns) / 1e9
+            sleep_s = poll_fast_seconds if elapsed_s < poll_fast_for_seconds else poll_slow_seconds
+            time.sleep(sleep_s)
 
         q = self.supabase.schema("pgmq_public")
         resp = q.rpc(
