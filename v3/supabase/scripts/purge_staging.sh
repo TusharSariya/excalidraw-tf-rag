@@ -26,6 +26,10 @@ env_file="$here/../../harvest/.env"
 tables=(
   seeds
   source_arxiv source_openalex source_semantic_scholar
+  source_unpaywall source_crossref source_dblp source_openreview
+  source_acl_anthology source_opencitations source_datacite source_core
+  source_internet_archive source_zenodo source_figshare source_osf
+  crossref_reference opencitations_edge
   harvest_dispatch
   s2_paper s2_author s2_paper_author s2_reference s2_citation s2_embedding
 )
