@@ -1,12 +1,19 @@
-"""Mapper tests: S2Record → S2GraphWrite."""
+"""Mapper tests: S2Record → S2GraphWrite / s2_writes chunking."""
 
 from __future__ import annotations
 
 from dataclasses import replace
 
 import pytest
-from harvest.persistence.models.s2 import SPECTER_V1_DIM, from_paper_record
-from harvest.sources.models.s2 import Embedding, S2Record
+from harvest.persistence.models.s2 import (
+    SPECTER_V1_DIM,
+    S2CitationRow,
+    S2PaperRow,
+    SourceSemanticScholarRow,
+    from_paper_record,
+    s2_writes,
+)
+from harvest.sources.models.s2 import Embedding, RelatedPaper, S2Record
 
 
 def test_from_paper_record_builds_graph(s2_paper_forceatlas2: dict) -> None:
@@ -71,3 +78,65 @@ def test_embedding_row_accepts_specter_dim(s2_paper_forceatlas2: dict) -> None:
     assert write.embedding.paper_id == rec.paper_id
     assert write.embedding.model == "specter_v1"
     assert len(write.embedding.embedding) == SPECTER_V1_DIM
+
+
+def _stub(paper_id: str) -> RelatedPaper:
+    return RelatedPaper(paper_id=paper_id, title=paper_id)
+
+
+def test_s2_writes_subject_then_edge_chunks_then_outcome() -> None:
+    cites = [_stub(f"c{i}") for i in range(2500)]
+    refs = [_stub(f"r{i}") for i in range(500)]
+    rec = S2Record(
+        paper_id="subject",
+        title="Subject",
+        citation_count=2500,
+        reference_count=500,
+        citations=cites,
+        references=refs,
+    )
+    writes = s2_writes(42, rec, chunk_size=1000)
+    # subject + 3 citation chunks + 1 reference chunk + outcome
+    assert len(writes) == 1 + 3 + 1 + 1
+
+    subject_tables = {type(g[0]).__table__ for g in writes[0].groups}
+    assert "s2_paper" in subject_tables
+    assert "s2_citation" not in subject_tables
+    assert "s2_reference" not in subject_tables
+
+    cite_edge_counts = []
+    ref_edge_counts = []
+    for w in writes[1:-1]:
+        tables = {type(g[0]).__table__: len(g) for g in w.groups}
+        if "s2_citation" in tables:
+            cite_edge_counts.append(tables["s2_citation"])
+            assert tables["s2_citation"] <= 1000
+            assert all(
+                isinstance(r, S2CitationRow)
+                for g in w.groups
+                if type(g[0]).__table__ == "s2_citation"
+                for r in g
+            )
+        if "s2_reference" in tables:
+            ref_edge_counts.append(tables["s2_reference"])
+            assert tables["s2_reference"] <= 1000
+
+    assert cite_edge_counts == [1000, 1000, 500]
+    assert ref_edge_counts == [500]
+
+    outcome_groups = writes[-1].groups
+    assert len(outcome_groups) == 1
+    assert isinstance(outcome_groups[0][0], SourceSemanticScholarRow)
+    assert outcome_groups[0][0].paper_id == 42
+    assert outcome_groups[0][0].status == "succeeded"
+
+
+def test_s2_writes_empty_related_skips_edge_groups() -> None:
+    rec = S2Record(paper_id="subject", title="Solo", citations=[], references=[])
+    writes = s2_writes(7, rec)
+    assert len(writes) == 2  # subject + outcome only
+    assert isinstance(writes[-1].groups[0][0], SourceSemanticScholarRow)
+    tables = {type(g[0]).__table__ for w in writes for g in w.groups}
+    assert "s2_citation" not in tables
+    assert "s2_reference" not in tables
+    assert any(isinstance(r, S2PaperRow) for g in writes[0].groups for r in g)

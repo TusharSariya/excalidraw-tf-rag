@@ -19,6 +19,10 @@ from pydantic import Field
 #: specter_v1 width; must match extensions.vector(768) on s2_embedding.
 SPECTER_V1_DIM = 768
 
+#: Max related papers (citations or references) per PostgREST upsert Write.
+#: Keeps statement size / worker RSS bounded for highly-cited subjects.
+S2_EDGE_UPSERT_CHUNK = 1000
+
 
 class S2PaperRow(TableRow):
     """Insert/upsert shape for public.s2_paper."""
@@ -302,6 +306,106 @@ def _absorb_authors(
         )
 
 
+def _absorb_related_chunk(
+    *,
+    subject_paper_id: str,
+    related: Sequence[RelatedPaper],
+    kind: str,
+    papers: dict[str, S2PaperRow],
+    authors: dict[str, S2AuthorRow],
+    paper_authors: dict[tuple[str, str], S2PaperAuthorRow],
+    references: dict[tuple[str, str], S2ReferenceRow],
+    citations: dict[tuple[str, str], S2CitationRow],
+) -> None:
+    """Map one chunk of related papers into stub/author/edge dicts."""
+    for item in related:
+        if not item.paper_id or item.paper_id == subject_paper_id:
+            continue
+        stub = paper_row_from(item)
+        if stub is None:
+            continue
+        papers.setdefault(stub.paper_id, stub)
+        _absorb_authors(
+            paper_id=stub.paper_id,
+            authors=item.authors,
+            author_rows=authors,
+            paper_authors=paper_authors,
+        )
+        if kind == "reference":
+            references[(subject_paper_id, stub.paper_id)] = S2ReferenceRow(
+                paper_id=subject_paper_id,
+                referenced_paper_id=stub.paper_id,
+            )
+        else:
+            citations[(subject_paper_id, stub.paper_id)] = S2CitationRow(
+                paper_id=subject_paper_id,
+                citing_paper_id=stub.paper_id,
+            )
+
+
+def subject_graph_from(
+    record: S2Record,
+    *,
+    fetched_at: datetime | None = None,
+) -> S2GraphWrite:
+    """Subject ``s2_paper`` + its authors / authorship + optional embedding."""
+    if not record.paper_id:
+        raise ValueError("S2Record.paper_id is required for S2GraphWrite")
+
+    now = fetched_at if fetched_at is not None else datetime.now(UTC)
+    authors: dict[str, S2AuthorRow] = {}
+    paper_authors: dict[tuple[str, str], S2PaperAuthorRow] = {}
+
+    subject = paper_row_from(record, fetched_at=now, include_tldr=True)
+    assert subject is not None  # paper_id checked above
+    _absorb_authors(
+        paper_id=subject.paper_id,
+        authors=record.authors,
+        author_rows=authors,
+        paper_authors=paper_authors,
+    )
+    return S2GraphWrite(
+        papers=[subject],
+        authors=list(authors.values()),
+        paper_authors=list(paper_authors.values()),
+        references=[],
+        citations=[],
+        embedding=embedding_row_from(subject.paper_id, record.embedding, fetched_at=now),
+    )
+
+
+def related_graph_from(
+    subject_paper_id: str,
+    related: Sequence[RelatedPaper],
+    *,
+    kind: str,
+) -> S2GraphWrite:
+    """Stub papers + authors + citation or reference edges for one related chunk."""
+    papers: dict[str, S2PaperRow] = {}
+    authors: dict[str, S2AuthorRow] = {}
+    paper_authors: dict[tuple[str, str], S2PaperAuthorRow] = {}
+    references: dict[tuple[str, str], S2ReferenceRow] = {}
+    citations: dict[tuple[str, str], S2CitationRow] = {}
+    _absorb_related_chunk(
+        subject_paper_id=subject_paper_id,
+        related=related,
+        kind=kind,
+        papers=papers,
+        authors=authors,
+        paper_authors=paper_authors,
+        references=references,
+        citations=citations,
+    )
+    return S2GraphWrite(
+        papers=list(papers.values()),
+        authors=list(authors.values()),
+        paper_authors=list(paper_authors.values()),
+        references=list(references.values()),
+        citations=list(citations.values()),
+        embedding=None,
+    )
+
+
 def from_paper_record(
     record: S2Record,
     *,
@@ -312,62 +416,44 @@ def from_paper_record(
     Subject paper wins on id collisions with citation/reference stubs.
     Authors and edges are deduped by natural key. Papers without paper_id
     are dropped. Embedding is included only when present and dim == 768.
+
+    For production persistence prefer :func:`s2_writes`, which splits this
+    payload into subject + ≤1k-edge chunks + outcome.
     """
     if not record.paper_id:
         raise ValueError("S2Record.paper_id is required for S2GraphWrite")
 
     now = fetched_at if fetched_at is not None else datetime.now(UTC)
-    papers: dict[str, S2PaperRow] = {}
-    authors: dict[str, S2AuthorRow] = {}
-    paper_authors: dict[tuple[str, str], S2PaperAuthorRow] = {}
+    subject = subject_graph_from(record, fetched_at=now)
+
+    papers: dict[str, S2PaperRow] = {p.paper_id: p for p in subject.papers}
+    authors: dict[str, S2AuthorRow] = {a.author_id: a for a in subject.authors}
+    paper_authors: dict[tuple[str, str], S2PaperAuthorRow] = {
+        (pa.paper_id, pa.author_id): pa for pa in subject.paper_authors
+    }
     references: dict[tuple[str, str], S2ReferenceRow] = {}
     citations: dict[tuple[str, str], S2CitationRow] = {}
 
-    subject = paper_row_from(record, fetched_at=now, include_tldr=True)
-    assert subject is not None  # paper_id checked above
-    papers[subject.paper_id] = subject
-    _absorb_authors(
-        paper_id=subject.paper_id,
-        authors=record.authors,
-        author_rows=authors,
+    _absorb_related_chunk(
+        subject_paper_id=record.paper_id,
+        related=record.references or (),
+        kind="reference",
+        papers=papers,
+        authors=authors,
         paper_authors=paper_authors,
+        references=references,
+        citations=citations,
     )
-
-    for related in record.references or ():
-        if not related.paper_id or related.paper_id == subject.paper_id:
-            continue
-        stub = paper_row_from(related)
-        if stub is None:
-            continue
-        papers.setdefault(stub.paper_id, stub)
-        _absorb_authors(
-            paper_id=stub.paper_id,
-            authors=related.authors,
-            author_rows=authors,
-            paper_authors=paper_authors,
-        )
-        references[(subject.paper_id, stub.paper_id)] = S2ReferenceRow(
-            paper_id=subject.paper_id,
-            referenced_paper_id=stub.paper_id,
-        )
-
-    for related in record.citations or ():
-        if not related.paper_id or related.paper_id == subject.paper_id:
-            continue
-        stub = paper_row_from(related)
-        if stub is None:
-            continue
-        papers.setdefault(stub.paper_id, stub)
-        _absorb_authors(
-            paper_id=stub.paper_id,
-            authors=related.authors,
-            author_rows=authors,
-            paper_authors=paper_authors,
-        )
-        citations[(subject.paper_id, stub.paper_id)] = S2CitationRow(
-            paper_id=subject.paper_id,
-            citing_paper_id=stub.paper_id,
-        )
+    _absorb_related_chunk(
+        subject_paper_id=record.paper_id,
+        related=record.citations or (),
+        kind="citation",
+        papers=papers,
+        authors=authors,
+        paper_authors=paper_authors,
+        references=references,
+        citations=citations,
+    )
 
     return S2GraphWrite(
         papers=list(papers.values()),
@@ -375,7 +461,7 @@ def from_paper_record(
         paper_authors=list(paper_authors.values()),
         references=list(references.values()),
         citations=list(citations.values()),
-        embedding=embedding_row_from(subject.paper_id, record.embedding, fetched_at=now),
+        embedding=subject.embedding,
     )
 
 
@@ -407,17 +493,61 @@ def outcome_row_from(
     )
 
 
+def s2_writes(
+    seed_paper_id: int,
+    record: S2Record,
+    *,
+    fetched_at: datetime | None = None,
+    chunk_size: int = S2_EDGE_UPSERT_CHUNK,
+) -> list[Write]:
+    """Chunked S2 persistence: subject → ≤chunk_size edge Writes → outcome.
+
+    Outcome is last so a mid-graph failure leaves the seed without a false
+    ``succeeded`` row (pgmq redelivery retries the upserts).
+    """
+    if chunk_size < 1:
+        raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
+    if not record.paper_id:
+        raise ValueError("S2Record.paper_id is required for s2_writes")
+
+    now = fetched_at if fetched_at is not None else datetime.now(UTC)
+    writes: list[Write] = [subject_graph_from(record, fetched_at=now).to_write()]
+
+    citations = list(record.citations or ())
+    for i in range(0, len(citations), chunk_size):
+        chunk = related_graph_from(
+            record.paper_id,
+            citations[i : i + chunk_size],
+            kind="citation",
+        ).to_write()
+        if chunk.groups:
+            writes.append(chunk)
+
+    references = list(record.references or ())
+    for i in range(0, len(references), chunk_size):
+        chunk = related_graph_from(
+            record.paper_id,
+            references[i : i + chunk_size],
+            kind="reference",
+        ).to_write()
+        if chunk.groups:
+            writes.append(chunk)
+
+    outcome = outcome_row_from(seed_paper_id, record, fetched_at=now)
+    writes.append(Write(groups=[[outcome]]))
+    return writes
+
+
 def s2_write(
     seed_paper_id: int,
     record: S2Record,
     *,
     fetched_at: datetime | None = None,
 ) -> Write:
-    """Full S2 persistence payload for one fetched paper.
+    """Full S2 persistence payload for one fetched paper (single Write).
 
-    The ``s2_*`` graph rows (FK-ordered) followed by the per-seed
-    ``source_semantic_scholar`` outcome row, as one ``Write``. The outcome row
-    FKs only into ``seeds`` (already present), so it can trail the graph groups.
+    Prefer :func:`s2_writes` for production — this joins subject + all edges +
+    outcome into one Write and can OOM / statement-timeout on large graphs.
     """
     now = fetched_at if fetched_at is not None else datetime.now(UTC)
     graph = from_paper_record(record, fetched_at=now).to_write()

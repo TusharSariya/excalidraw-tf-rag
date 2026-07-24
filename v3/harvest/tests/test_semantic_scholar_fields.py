@@ -1,77 +1,126 @@
-"""S2 fetch uses a rich→thin→meta field ladder at n=1 (not full Paper.FIELDS)."""
+"""S2 subject fetch is metadata-only; cites/refs come from paginated endpoints."""
 
 from unittest.mock import MagicMock
 
 import pytest
+from harvest.sources.models.s2 import RelatedPaper
 from harvest.sources.semantic_scholar import (
-    META_FIELDS,
-    RICH_FIELDS,
-    THIN_FIELDS,
+    RELATED_FIELDS,
+    RELATED_PAGE_LIMIT,
+    SUBJECT_FIELDS,
     SemanticScholarSource,
+    related_paper_from_edge,
 )
 from semanticscholar.SemanticScholarException import BadQueryParametersException
 
 
-def _paper(
+def _subject_paper(
     *,
     paper_id: str = "abc",
     external_ids: dict | None = None,
-    citations: list | None = None,
 ):
     p = MagicMock()
     p.paperId = paper_id
     p.externalIds = external_ids or {"DOI": "10.1145/example"}
-    p.citations = citations
-    p.references = []
-    p.embedding = None
-    p.tldr = None
-    p.title = "Example"
+    p.raw_data = {
+        "paperId": paper_id,
+        "externalIds": p.externalIds,
+        "title": "Example",
+        "citationCount": 2,
+        "referenceCount": 1,
+    }
     return p
 
 
-def test_get_papers_uses_rich_fields_first() -> None:
+def _edge(paper_id: str, *, citing: bool = True):
+    nested_key = "citingPaper" if citing else "citedPaper"
+    item = MagicMock()
+    item.paper = MagicMock()
+    item.paper.raw_data = {
+        "paperId": paper_id,
+        "title": f"Paper {paper_id}",
+        "year": 2020,
+        "authors": [{"authorId": f"a-{paper_id}", "name": "A"}],
+    }
+    item.raw_data = {nested_key: item.paper.raw_data}
+    return item
+
+
+def test_related_paper_from_edge_maps_citing_paper() -> None:
+    related = related_paper_from_edge(_edge("cite-1", citing=True))
+    assert related is not None
+    assert related.paper_id == "cite-1"
+    assert related.title == "Paper cite-1"
+    assert related.authors is not None
+    assert related.authors[0].author_id == "a-cite-1"
+
+
+def test_get_papers_uses_subject_fields_then_paginates() -> None:
     source = SemanticScholarSource()
     source._client = MagicMock()
-    paper = _paper()
+    paper = _subject_paper()
     source._client.get_papers.return_value = ([paper], [])
+    source._client.get_paper_citations.return_value = [_edge("c1"), _edge("c2")]
+    source._client.get_paper_references.return_value = [_edge("r1", citing=False)]
 
-    # from_sdk is heavy; stub it
-    import harvest.sources.semantic_scholar as mod
-
-    mod.S2Record.from_sdk = MagicMock(return_value=MagicMock())  # type: ignore[method-assign]
-
-    source.get_papers(["DOI:10.1145/example"])
+    out = source.get_papers(["DOI:10.1145/example"])
+    rec = out["DOI:10.1145/example"]
+    assert rec is not None
+    assert rec.paper_id == "abc"
+    assert [c.paper_id for c in rec.citations or []] == ["c1", "c2"]
+    assert [r.paper_id for r in rec.references or []] == ["r1"]
 
     kwargs = source._client.get_papers.call_args.kwargs
     assert kwargs["paper_ids"] == ["DOI:10.1145/example"]
-    assert kwargs["fields"] == RICH_FIELDS
-    assert "citations.abstract" in kwargs["fields"]
+    assert kwargs["fields"] == SUBJECT_FIELDS
+    assert not any(f.startswith("citations.") for f in kwargs["fields"])
+    assert not any(f.startswith("references.") for f in kwargs["fields"])
     assert "embedding" in kwargs["fields"]
     assert "tldr" in kwargs["fields"]
 
+    cite_kw = source._client.get_paper_citations.call_args.kwargs
+    assert cite_kw["fields"] == RELATED_FIELDS
+    assert cite_kw["limit"] == RELATED_PAGE_LIMIT
+    # positional paper_id
+    assert source._client.get_paper_citations.call_args.args[0] == "abc"
 
-def test_get_papers_falls_back_thin_then_meta_on_size_error() -> None:
+    ref_kw = source._client.get_paper_references.call_args.kwargs
+    assert ref_kw["fields"] == RELATED_FIELDS
+    assert ref_kw["limit"] == RELATED_PAGE_LIMIT
+
+
+def test_get_papers_paginates_multi_page_iterators() -> None:
     source = SemanticScholarSource()
     source._client = MagicMock()
-    size_err = BadQueryParametersException(
-        "Response would exceed maximum size. Please retry with 1 or fewer ids"
-    )
-    paper = _paper()
-    source._client.get_papers.side_effect = [
-        size_err,  # rich
-        size_err,  # thin
-        ([paper], []),  # meta
-    ]
+    source._client.get_papers.return_value = ([_subject_paper()], [])
 
-    import harvest.sources.semantic_scholar as mod
+    def _pages(ids: list[str], *, citing: bool):
+        return (_edge(i, citing=citing) for i in ids)
 
-    mod.S2Record.from_sdk = MagicMock(return_value=MagicMock())  # type: ignore[method-assign]
+    source._client.get_paper_citations.return_value = _pages(["c1", "c2", "c3"], citing=True)
+    source._client.get_paper_references.return_value = _pages(["r1"], citing=False)
 
-    out = source.get_papers(["DOI:10.1145/example"])
-    assert out["DOI:10.1145/example"] is not None
+    rec = source.get_papers(["DOI:10.1145/example"])["DOI:10.1145/example"]
+    assert rec is not None
+    assert len(rec.citations or []) == 3
+    assert len(rec.references or []) == 1
 
-    field_sets = [c.kwargs["fields"] for c in source._client.get_papers.call_args_list]
-    assert field_sets == [RICH_FIELDS, THIN_FIELDS, META_FIELDS]
+
+def test_get_papers_treats_null_page_as_end() -> None:
+    source = SemanticScholarSource()
+    source._client = MagicMock()
+    source._client.get_papers.return_value = ([_subject_paper()], [])
+
+    def _broken():
+        yield _edge("c1")
+        raise TypeError("'NoneType' object is not iterable")
+
+    source._client.get_paper_citations.return_value = _broken()
+    source._client.get_paper_references.return_value = []
+
+    rec = source.get_papers(["DOI:10.1145/example"])["DOI:10.1145/example"]
+    assert rec is not None
+    assert [c.paper_id for c in rec.citations or []] == ["c1"]
 
 
 def test_get_papers_treats_no_valid_ids_as_not_found() -> None:
@@ -81,13 +130,14 @@ def test_get_papers_treats_no_valid_ids_as_not_found() -> None:
 
     out = source.get_papers(["DOI:10.1145/missing"])
     assert out == {"DOI:10.1145/missing": None}
+    source._client.get_paper_citations.assert_not_called()
 
 
-def test_get_papers_rethrows_non_size_query_error() -> None:
+def test_get_papers_rethrows_non_id_query_error() -> None:
     source = SemanticScholarSource()
     source._client = MagicMock()
     source._client.get_papers.side_effect = BadQueryParametersException(
-        "Unrecognized or unsupported fields: [citations.authors.name]"
+        "Unrecognized or unsupported fields: [bogus]"
     )
 
     with pytest.raises(BadQueryParametersException, match="Unrecognized"):
@@ -98,15 +148,27 @@ def test_get_papers_fetches_serially() -> None:
     source = SemanticScholarSource()
     source._client = MagicMock()
     source._client.get_papers.side_effect = [
-        ([_paper(external_ids={"DOI": "10.1/a"})], []),
-        ([_paper(paper_id="b", external_ids={"DOI": "10.1/b"})], []),
+        ([_subject_paper(external_ids={"DOI": "10.1/a"})], []),
+        ([_subject_paper(paper_id="b", external_ids={"DOI": "10.1/b"})], []),
     ]
-
-    import harvest.sources.semantic_scholar as mod
-
-    mod.S2Record.from_sdk = MagicMock(side_effect=[MagicMock(), MagicMock()])  # type: ignore[method-assign]
+    source._client.get_paper_citations.return_value = []
+    source._client.get_paper_references.return_value = []
 
     source.get_papers(["DOI:10.1/a", "DOI:10.1/b"])
     assert source._client.get_papers.call_count == 2
     assert source._client.get_papers.call_args_list[0].kwargs["paper_ids"] == ["DOI:10.1/a"]
     assert source._client.get_papers.call_args_list[1].kwargs["paper_ids"] == ["DOI:10.1/b"]
+
+
+def test_related_paper_from_edge_filters_unknown_keys() -> None:
+    item = MagicMock()
+    item.paper = MagicMock()
+    item.paper.raw_data = {
+        "paperId": "x",
+        "title": "T",
+        "citations": [],  # not a RelatedPaper key — filtered
+    }
+    item.raw_data = {"citingPaper": item.paper.raw_data}
+    related = related_paper_from_edge(item)
+    assert isinstance(related, RelatedPaper)
+    assert related.paper_id == "x"

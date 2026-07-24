@@ -4,6 +4,20 @@ Notable changes to the `harvest` package. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions match `pyproject.toml`
 (the image tag the `build-push` CI guard checks against prod ECR).
 
+## [0.15.0]
+
+### Fixed
+- Semantic Scholar **references were empty** even when `referenceCount > 0`:
+  embedded `references` on paper/batch payloads often returns `[]` while the
+  count is set (live example: `DOI:10.1111/cgf.12791` → 171 refs, 0 edges).
+  Subject fetch is now **metadata-only** (`SUBJECT_FIELDS`: SEARCH + tldr +
+  embedding); citations and references load via paginated
+  `get_paper_citations` / `get_paper_references` (`limit=1000`).
+- Large cite graphs no longer ship as one PostgREST upsert: `s2_writes` emits
+  subject → ≤1000-edge chunks → `source_semantic_scholar` outcome last; the
+  worker loops `list[Write]`. Cuts statement-timeout / OOM pressure on 256Mi
+  pods (cluster memory bump remains infra-side if needed).
+
 ## [0.14.0]
 
 ### Fixed

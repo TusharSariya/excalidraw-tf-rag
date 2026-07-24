@@ -36,7 +36,7 @@ from .persistence.models import (
     opencitations_write,
     openreview_write,
     osf_write,
-    s2_write,
+    s2_writes,
     unpaywall_write,
     zenodo_write,
 )
@@ -67,14 +67,15 @@ class Source:
     """Everything the worker needs to drain one source's queue.
 
     ``identify`` (pick the fetch id from a seed) and ``build_write`` (turn a
-    fetched record into a Write) are None until a source's record->Write mapper
-    exists — such a source can be seeded but not yet drained.
+    fetched record into a Write, or a list of Writes for chunked sources like
+    S2) are None until a source's record->Write mapper exists — such a source
+    can be seeded but not yet drained.
     """
 
     queue: str
     factory: Callable[[HarvestSettings], PaperSource]
     identify: list[Callable[[Seed], str | None]]
-    build_write: Callable[[int, Any], Write]
+    build_write: Callable[[int, Any], Write | list[Write]]
     batch_size: int = 1
     max_response_size: int = 10485760  # bytes, 10mb
     max_citations: int = 9999
@@ -115,10 +116,9 @@ SOURCES: dict[str, Source] = {
             lambda seed: f"ARXIV:{seed.arxiv_id}" if seed.arxiv_id else None,
             lambda seed: f"DOI:{seed.doi}" if seed.doi else None,
         ],
-        build_write=s2_write,
-        # One id per request: multi-id batches with citations 400 or silently
-        # zero citation lists for highly-cited papers. get_papers also ladders
-        # rich→thin→meta fields per id when S2 says the response is too large.
+        build_write=s2_writes,
+        # One id per request: subject metadata + paginated cite/ref endpoints.
+        # s2_writes returns subject + ≤1k-edge chunks + outcome Writes.
         batch_size=1,
     ),
     "unpaywall": Source(
@@ -344,7 +344,10 @@ def main() -> None:
                     _archive(q, queue, item.msg_id)
                     continue
 
-                store.write(build_write(paper_id, record))
+                payload = build_write(paper_id, record)
+                writes = payload if isinstance(payload, list) else [payload]
+                for w in writes:
+                    store.write(w)
                 _archive(q, queue, item.msg_id)
                 drained += 1
                 logger.info("persisted seed %s (id=%s)", paper_id, identifier)

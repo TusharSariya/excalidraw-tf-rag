@@ -1,4 +1,7 @@
 import logging
+from collections.abc import Iterator
+from dataclasses import replace
+from typing import Any, Literal
 
 from semanticscholar import SemanticScholar
 from semanticscholar.Paper import Paper
@@ -8,7 +11,7 @@ from semanticscholar.SemanticScholarException import (
 )
 
 from .base import PaperSource
-from .models.s2 import S2Record
+from .models.s2 import RELATED_PAPER_KEYS, RelatedPaper, S2Record
 
 logger = logging.getLogger("harvest.semantic_scholar")
 
@@ -23,83 +26,37 @@ _EXT_TO_NS = {
     "MAG": "MAG",
 }
 
-#: RELATED_PAPER-shaped cite/ref subfields (no ``citations.authors.name`` etc. —
-#: batch rejects those). Prefer this when the response fits.
-_RELATED_SUBFIELDS: tuple[str, ...] = (
+#: Subject metadata only (no embedded citation/reference lists). The Graph API
+#: often returns ``referenceCount`` / ``citationCount`` with empty nested arrays
+#: on ``/paper/batch``; cites/refs are loaded via dedicated paginated endpoints.
+SUBJECT_FIELDS: list[str] = [
+    *Paper.SEARCH_FIELDS,
+    "tldr",
+    "embedding",
+]
+
+#: Thin stub fields for ``/citations`` and ``/references`` pages (enough for
+#: ``s2_paper`` stubs + author absorb + edges).
+RELATED_FIELDS: list[str] = [
     "paperId",
     "corpusId",
     "externalIds",
     "title",
-    "abstract",
-    "venue",
     "year",
+    "venue",
     "url",
-    "referenceCount",
     "citationCount",
-    "influentialCitationCount",
-    "isOpenAccess",
-    "openAccessPdf",
-    "publicationDate",
-    "publicationTypes",
-    "publicationVenue",
-    "journal",
-    "fieldsOfStudy",
-    "s2FieldsOfStudy",
-    "citationStyles",
     "authors",
-)
-
-#: Full graph payload for one paper. Works for most DOIs at ``n=1``; mega-cited
-#: papers (e.g. Attention) 400 with "maximum size" — fall back to ``THIN_FIELDS``.
-RICH_FIELDS: list[str] = [
-    *Paper.SEARCH_FIELDS,
-    "tldr",
-    "embedding",
-    *[f"citations.{s}" for s in _RELATED_SUBFIELDS],
-    *[f"references.{s}" for s in _RELATED_SUBFIELDS],
 ]
 
-#: Thin cite/ref stubs — enough for ``s2_citation`` / ``s2_reference`` edges +
-#: author absorb. Survives Attention-scale citation lists at ``n=1``.
-THIN_FIELDS: list[str] = [
-    *Paper.SEARCH_FIELDS,
-    "tldr",
-    "embedding",
-    "citations.paperId",
-    "citations.title",
-    "citations.year",
-    "citations.venue",
-    "citations.externalIds",
-    "citations.corpusId",
-    "citations.authors",
-    "citations.citationCount",
-    "citations.url",
-    "references.paperId",
-    "references.title",
-    "references.year",
-    "references.venue",
-    "references.externalIds",
-    "references.corpusId",
-    "references.authors",
-    "references.citationCount",
-    "references.url",
-]
+#: S2 Graph API max page size for citation/reference listings.
+RELATED_PAGE_LIMIT = 1000
 
-#: Last-resort: subject metadata only (no citation graph). Still gets embedding.
-META_FIELDS: list[str] = [
-    *Paper.SEARCH_FIELDS,
-    "tldr",
-    "embedding",
-]
-
-# Back-compat alias used by tests / docs.
-BATCH_FIELDS = RICH_FIELDS
-
-_FIELD_LADDER: tuple[tuple[str, list[str]], ...] = (
-    ("rich", RICH_FIELDS),
-    ("thin", THIN_FIELDS),
-    ("meta", META_FIELDS),
-)
+# Back-compat aliases (pre-0.15 subject ladder names → subject-only fields).
+META_FIELDS = SUBJECT_FIELDS
+RICH_FIELDS = SUBJECT_FIELDS
+THIN_FIELDS = SUBJECT_FIELDS
+BATCH_FIELDS = SUBJECT_FIELDS
 
 
 def requested_id_for(paper: Paper, requested: set[str]) -> str | None:
@@ -132,8 +89,27 @@ def _is_all_ids_invalid(exc: BadQueryParametersException) -> bool:
     return "no valid paper" in msg or "invalid paper id" in msg
 
 
-def _is_response_too_large(exc: BadQueryParametersException) -> bool:
-    return "maximum size" in str(exc).lower()
+def _paper_dict_from_edge(item: Any) -> dict[str, Any] | None:
+    """Extract the nested paper payload from a Citation/Reference SDK object."""
+    paper = getattr(item, "paper", None)
+    if paper is not None:
+        raw = getattr(paper, "raw_data", None)
+        if isinstance(raw, dict):
+            return raw
+    raw_edge = getattr(item, "raw_data", None)
+    if not isinstance(raw_edge, dict):
+        return None
+    nested = raw_edge.get("citingPaper") or raw_edge.get("citedPaper")
+    return nested if isinstance(nested, dict) else None
+
+
+def related_paper_from_edge(item: Any) -> RelatedPaper | None:
+    """Map an SDK Citation/Reference item to a RelatedPaper stub."""
+    nested = _paper_dict_from_edge(item)
+    if nested is None:
+        return None
+    filtered = {k: v for k, v in nested.items() if k in RELATED_PAPER_KEYS}
+    return RelatedPaper.from_dict(filtered)
 
 
 class SemanticScholarSource(PaperSource):
@@ -148,14 +124,12 @@ class SemanticScholarSource(PaperSource):
         self._client = SemanticScholar()
 
     def get_papers(self, identifiers: list[str]) -> dict[str, S2Record | None]:
-        """Fetch papers one id at a time with a rich→thin→meta field ladder.
+        """Fetch subject metadata, then paginate citations and references.
 
-        Multi-id ``POST /paper/batch`` with citation lists is unreliable: S2
-        returns HTTP 400 once the payload is too large, and even on 200 it often
-        zeros out ``citations`` for all but one paper in the batch. Fetching
-        serially at ``n=1`` preserves full cite/ref graphs. Per id we try
-        :data:`RICH_FIELDS`, then :data:`THIN_FIELDS`, then :data:`META_FIELDS`
-        when the API says the response would exceed maximum size.
+        Subject fetch uses :data:`SUBJECT_FIELDS` only (no embedded cite/ref
+        lists — those arrays are unreliable on batch/paper payloads). Graph edges
+        come from ``get_paper_citations`` / ``get_paper_references`` at
+        ``limit=1000`` until exhausted.
 
         Missing ids map to None (terminal). Rate limits / 5xx propagate so the
         worker leaves messages unarchived for pgmq redelivery.
@@ -170,57 +144,100 @@ class SemanticScholarSource(PaperSource):
 
     def _get_one(self, identifier: str) -> S2Record | None:
         logger.info("fetching paper %s", identifier)
-        last_size_error: BadQueryParametersException | None = None
+        subject = self._fetch_subject(identifier)
+        if subject is None:
+            return None
 
-        for label, fields in _FIELD_LADDER:
-            try:
-                papers, missing = self._client.get_papers(
-                    paper_ids=[identifier],
-                    fields=fields,
-                    return_not_found=True,
-                )
-            except ObjectNotFoundException:
-                logger.warning("no result for %s (not found)", identifier)
-                return None
-            except BadQueryParametersException as exc:
-                if _is_all_ids_invalid(exc):
-                    logger.warning("no valid paper id %s", identifier)
-                    return None
-                if _is_response_too_large(exc):
-                    logger.warning(
-                        "S2 response too large for %s with %s fields; trying next rung",
-                        identifier,
-                        label,
-                    )
-                    last_size_error = exc
-                    continue
-                logger.error("S2 rejected %s (%s fields): %s", identifier, label, exc)
-                raise
+        s2_id = subject.paper_id
+        if not s2_id:
+            logger.warning("subject for %s has no paper_id — treating as not found", identifier)
+            return None
 
-            if identifier in missing or not papers:
-                return None
+        citations = list(self._iter_related("citations", s2_id))
+        references = list(self._iter_related("references", s2_id))
+        record = replace(subject, citations=citations, references=references)
+        logger.info(
+            "fetched %s: cites=%s refs=%s emb=%s",
+            identifier,
+            len(citations),
+            len(references),
+            record.embedding is not None,
+        )
+        return record
 
-            paper = papers[0]
-            key = requested_id_for(paper, {identifier})
-            if key != identifier:
-                logger.warning(
-                    "paper paperId=%s did not map back to requested id %s",
-                    paper.paperId,
-                    identifier,
-                )
-                return None
-
-            record = S2Record.from_sdk(paper)
-            logger.info(
-                "fetched %s via %s fields: cites=%s refs=%s emb=%s",
-                identifier,
-                label,
-                len(record.citations or []),
-                len(record.references or []),
-                record.embedding is not None,
+    def _fetch_subject(self, identifier: str) -> S2Record | None:
+        try:
+            papers, missing = self._client.get_papers(
+                paper_ids=[identifier],
+                fields=SUBJECT_FIELDS,
+                return_not_found=True,
             )
-            return record
+        except ObjectNotFoundException:
+            logger.warning("no result for %s (not found)", identifier)
+            return None
+        except BadQueryParametersException as exc:
+            if _is_all_ids_invalid(exc):
+                logger.warning("no valid paper id %s", identifier)
+                return None
+            logger.error("S2 rejected %s (subject fields): %s", identifier, exc)
+            raise
 
-        # Every rung said "too large" — should be rare (meta is tiny). Propagate.
-        assert last_size_error is not None
-        raise last_size_error
+        if identifier in missing or not papers:
+            return None
+
+        paper = papers[0]
+        key = requested_id_for(paper, {identifier})
+        if key != identifier:
+            logger.warning(
+                "paper paperId=%s did not map back to requested id %s",
+                paper.paperId,
+                identifier,
+            )
+            return None
+
+        return S2Record.from_sdk(paper)
+
+    def _iter_related(
+        self,
+        kind: Literal["citations", "references"],
+        paper_id: str,
+    ) -> Iterator[RelatedPaper]:
+        """Yield RelatedPaper stubs from paginated citation/reference endpoints."""
+        if kind == "citations":
+            fetch = self._client.get_paper_citations
+        else:
+            fetch = self._client.get_paper_references
+
+        logger.info("paginating %s for %s (limit=%s)", kind, paper_id, RELATED_PAGE_LIMIT)
+        try:
+            pages = fetch(
+                paper_id,
+                fields=RELATED_FIELDS,
+                limit=RELATED_PAGE_LIMIT,
+            )
+        except ObjectNotFoundException:
+            logger.warning("%s endpoint 404 for %s — empty %s", kind, paper_id, kind)
+            return
+
+        count = 0
+        try:
+            for item in pages:
+                related = related_paper_from_edge(item)
+                if related is None or not related.paper_id:
+                    continue
+                count += 1
+                yield related
+        except TypeError as exc:
+            # Under rate-limit / flaky responses the SDK can see ``data: null``
+            # and blow up on ``for item in results['data']``. Treat as end of
+            # stream so a partial graph can still persist; redelivery retries.
+            logger.warning(
+                "null/broken %s page for %s after %s items (%s) — stopping pagination",
+                kind,
+                paper_id,
+                count,
+                exc,
+            )
+            return
+
+        logger.info("paginated %s for %s: %s items", kind, paper_id, count)
