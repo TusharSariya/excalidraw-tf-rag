@@ -77,7 +77,7 @@ are not interchangeable:
 | Source | `identifier` | Citation graph |
 |---|---|---|
 | `ArxivSource` | arXiv id (`1706.03762`) | none — arXiv has no citation data, so `get_references`/`get_citations` return `[]` by design |
-| `SemanticScholarSource` | arXiv id, mapped to `ARXIV:<id>` | yes — batch requests `Paper.FIELDS` (SDK batch default is `SEARCH_FIELDS` only) |
+| `SemanticScholarSource` | arXiv id, mapped to `ARXIV:<id>` | yes — one id per request; rich→thin→meta field ladder (not multi-id `Paper.FIELDS`) |
 | `OpenAlexSource` | **DOI or OpenAlex id — never an arXiv id** | yes |
 | `UnpaywallSource` | DOI | none — OA-location metadata only (`best_oa_location`) |
 | `CrossrefSource` | DOI (batched via `/works?filter=doi:…`) | references only (`crossref_reference`) |
