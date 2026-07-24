@@ -4,6 +4,15 @@ Notable changes to the `harvest` package. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions match `pyproject.toml`
 (the image tag the `build-push` CI guard checks against prod ECR).
 
+## [0.12.0]
+
+### Fixed
+- `SemanticScholarSource.get_papers`: pass `fields=Paper.FIELDS` so batch
+  responses include `citations`, `references`, `embedding`, and `tldr`. The SDK
+  defaults batch (`POST /paper/batch`) to `Paper.SEARCH_FIELDS`, which omits
+  those — so `s2_citation` / `s2_reference` / `s2_embedding` stayed empty even
+  when papers/authors wrote successfully.
+
 ## [0.11.0]
 
 ### Fixed
