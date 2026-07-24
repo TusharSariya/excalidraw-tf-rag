@@ -61,6 +61,9 @@ from env / `.env` / CLI flags:
 | `supabase_url` | `SUPABASE_URL` | all |
 | `supabase_service_key` | `SUPABASE_SERVICE_KEY` (service_role) | all |
 | `openalex_api_key` | `OPENALEX_API_KEY` | openalex — **optional**, but 10x the quota (see below) |
+| `unpaywall_email` | `UNPAYWALL_EMAIL` | unpaywall — **required** |
+| `crossref_mailto` | `CROSSREF_MAILTO` | crossref — optional (polite pool) |
+| `core_api_key` | `CORE_API_KEY` | core — **required** |
 | `source` | `--source` | `harvest-work` |
 | `corpus` / `arxiv_id` / `doi` | `--corpus` / `--arxiv_id` / `--doi` | `harvest-seed` |
 
@@ -76,6 +79,23 @@ are not interchangeable:
 | `ArxivSource` | arXiv id (`1706.03762`) | none — arXiv has no citation data, so `get_references`/`get_citations` return `[]` by design |
 | `SemanticScholarSource` | arXiv id, mapped to `ARXIV:<id>` | yes — batch requests `Paper.FIELDS` (SDK batch default is `SEARCH_FIELDS` only) |
 | `OpenAlexSource` | **DOI or OpenAlex id — never an arXiv id** | yes |
+| `UnpaywallSource` | DOI | none — OA-location metadata only (`best_oa_location`) |
+| `CrossrefSource` | DOI (batched via `/works?filter=doi:…`) | references only (`crossref_reference`) |
+| `DblpSource` | `dblp_id` (DBLP record key) | none |
+| `OpenReviewSource` | `openreview_id` (forum id) | none |
+| `AclAnthologySource` | `anthology_id` (e.g. `N19-1423`) | none |
+| `OpenCitationsSource` | DOI (`doi:` prefixed) | yes — `opencitations_edge`, capped 2000/direction |
+| `DataCiteSource` | DOI (`/dois/{doi}`) | none |
+| `CoreSource` | DOI | none — OA full-text URL/id |
+| `InternetArchiveSource` | `ia_identifier` | none — item/PDF metadata only |
+| `ZenodoSource` / `FigshareSource` / `OsfSource` | DOI | none — deposit file + metadata |
+
+The DOI-keyed sources (unpaywall, crossref, opencitations, datacite, core,
+zenodo, figshare, osf) only fan out to a seed that carries a `doi`; `dblp_id` /
+`openreview_id` / `anthology_id` / `ia_identifier` are the specialised seed
+columns the remaining sources key on. Batching: crossref uses the native
+DOI-filter batch endpoint; sources without one loop serially but keep the
+`get_papers(list) -> dict` contract. See `docs/architecture/harvest-dispatch.md`.
 
 `OpenAlexSource` is the odd one out because OpenAlex has no arXiv filter: there is no
 `ids.arxiv`, and arXiv's own DOI (`10.48550/arXiv.<id>`) 404s. Title search is not a

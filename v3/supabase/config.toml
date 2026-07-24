@@ -10,7 +10,13 @@ enabled = true
 port = 54321
 # Schemas to expose in your API. Tables, views and stored procedures in this schema will get API
 # endpoints. `public` and `graphql_public` schemas are included by default.
-schemas = ["public", "graphql_public"]
+# `pgmq_public` is the queue wrapper surface the harvest worker reaches over PostgREST
+# (store.read_batch / archive call pgmq_public.* via .schema("pgmq_public")). On the hosted
+# project the dashboard Queues integration exposes it; a bare local stack must list it here or
+# the worker fails with PGRST106 "Invalid schema: pgmq_public". The wrapper functions + the
+# schema itself are installed locally by supabase/seed.sql (config.toml [db.seed]), which runs
+# on every `supabase db reset` — so the schema exists before PostgREST loads its cache.
+schemas = ["public", "graphql_public", "pgmq_public"]
 # Extra schemas to add to the search_path of every request.
 extra_search_path = ["public", "extensions"]
 # The maximum number of rows returns from a view, table, or stored procedure. Limits payload size

@@ -63,7 +63,15 @@ HARVEST_ENV = HERE.parent / "harvest" / ".env"
 
 # Identities with a UNIQUE (corpus, <id>) constraint — usable for dedup lookup.
 # `title` has no such constraint, so a title-only seed cannot be deduped.
-ID_FIELDS = ("openalex_id", "doi", "arxiv_id")
+ID_FIELDS = (
+    "openalex_id",
+    "doi",
+    "arxiv_id",
+    "dblp_id",
+    "openreview_id",
+    "anthology_id",
+    "ia_identifier",
+)
 ALL_ID_FIELDS = (*ID_FIELDS, "title")
 
 
@@ -75,11 +83,18 @@ class Seed(BaseModel):
     doi: str | None = None
     arxiv_id: str | None = None
     title: str | None = None
+    dblp_id: str | None = None
+    openreview_id: str | None = None
+    anthology_id: str | None = None
+    ia_identifier: str | None = None
 
     @model_validator(mode="after")
     def at_least_one_identity(self) -> Seed:
-        if not any((self.openalex_id, self.doi, self.arxiv_id, self.title)):
-            raise ValueError("requires at least one of openalex_id, doi, arxiv_id, title")
+        if not any(getattr(self, f) for f in ALL_ID_FIELDS):
+            raise ValueError(
+                "requires at least one of openalex_id, doi, arxiv_id, title, "
+                "dblp_id, openreview_id, anthology_id, ia_identifier"
+            )
         return self
 
     def ids(self) -> dict[str, str]:

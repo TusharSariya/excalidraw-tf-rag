@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="US-ASCII"?>
+<dblp>
+<inproceedings key="conf/nips/KrizhevskySH12" mdate="2021-01-21">
+<author>Alex Krizhevsky</author>
+<author>Ilya Sutskever</author>
+<author>Geoffrey E. Hinton</author>
+<title>ImageNet Classification with Deep Convolutional Neural Networks.</title>
+<pages>1106-1114</pages>
+<year>2012</year>
+<booktitle>NIPS</booktitle>
+<ee type="oa">https://proceedings.neurips.cc/paper/2012/hash/c399862d3b9d6b76c8436e924a68c45b-Abstract.html</ee>
+<ee type="oa">http://papers.nips.cc/paper/4824-imagenet-classification-with-deep-convolutional-neural-networks</ee>
+<crossref>conf/nips/2012</crossref>
+<url>db/conf/nips/nips2012.html#KrizhevskySH12</url>
+</inproceedings></dblp>

@@ -21,6 +21,9 @@ class HarvestSettings(BaseSettings):
 
     openalex_api_key: str | None = None  # OpenAlex polite pool (when OpenAlexSource lands)
     semantic_scholar_api_key: str | None = None  # optional — S2 also works unauthenticated
+    unpaywall_email: str | None = None  # required by Unpaywall (mailto in the request)
+    crossref_mailto: str | None = None  # optional — Crossref polite pool
+    core_api_key: str | None = None  # required by the CORE v3 API
 
 
 class SupabaseSettings(BaseSettings):
@@ -43,4 +46,6 @@ class WorkerSettings(HarvestSettings):
     `source` selects both the queue (`harvest_<source>`) and the handler.
     """
 
-    source: str | None = None  # 'arxiv' | 'openalex' | 's2'
+    source: str | None = None  # one of: 'arxiv' | 'openalex' | 's2' | 'unpaywall' |
+    # 'crossref' | 'dblp' | 'openreview' | 'acl_anthology' | 'opencitations' |
+    # 'datacite' | 'core' | 'internet_archive' | 'zenodo' | 'figshare' | 'osf'
