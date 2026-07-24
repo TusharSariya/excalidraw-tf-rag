@@ -180,24 +180,26 @@ The manifest is the **single source of truth** for what was harvested, whether a
 ```python
 ManifestStatus = Literal["ok", "metadata_only", "failed"]
 
+
 class ManifestItem(BaseModel):
-    id: str                    # slug from title/doi/url (max 80 chars)
+    id: str  # slug from title/doi/url (max 80 chars)
     title: str
     authors: list[str]
     year: int | None
-    source: str                # harvest origin tag (see below)
+    source: str  # harvest origin tag (see below)
     url: str
-    localPath: str | None      # relative to PKG_ROOT, e.g. data/raw/pdf/{id}.pdf
+    localPath: str | None  # relative to PKG_ROOT, e.g. data/raw/pdf/{id}.pdf
     contentType: str | None
     status: ManifestStatus
     tags: list[str]
-    sha256: str | None         # PDF content hash when status=ok
+    sha256: str | None  # PDF content hash when status=ok
     doi: str | None
     abstract: str | None
 
+
 class Manifest(BaseModel):
     version: int = 1
-    updatedAt: str             # ISO UTC timestamp
+    updatedAt: str  # ISO UTC timestamp
     items: list[ManifestItem]
 ```
 
@@ -846,9 +848,9 @@ Legacy aliases `CHUNK_CHARS` / `OVERLAP_CHARS` (= `MAX_TOKENS * 4`) remain for t
 class TextChunk:
     doc_id: str
     title: str
-    text: str              # raw chunk body (stored in index)
-    page: int | None       # start page
-    page_end: int | None   # end page (multi-page chunks)
+    text: str  # raw chunk body (stored in index)
+    page: int | None  # start page
+    page_end: int | None  # end page (multi-page chunks)
     chunk_index: int
     source_url: str
     year: int | None

@@ -229,7 +229,8 @@ pooler).
 
 ```python
 QUEUE_FOR = {"arxiv": "harvest_arxiv", "openalex": "harvest_openalex", "s2": "harvest_s2"}
-MAX_RECEIVES = 4   # read_ct cap → terminal error
+MAX_RECEIVES = 4  # read_ct cap → terminal error
+
 
 def submit(conn, *, corpus, arxiv_id=None, doi=None, force=False) -> int | None:
     """Insert a seed (corpus REQUIRED) and fan out. Returns bigint paper_id or None."""
@@ -246,18 +247,21 @@ def submit(conn, *, corpus, arxiv_id=None, doi=None, force=False) -> int | None:
                 return None
             cur.execute(f"select paper_id from seeds where corpus=%s and {col}=%s", (corpus, val))
             row = cur.fetchone()
-        paper_id = row["paper_id"]                     # bigint
+        paper_id = row["paper_id"]  # bigint
         cur.execute("select public.publish_seed(%s)", (paper_id,))
     return paper_id
+
 
 def read_one(conn, queue, vt=120):
     with conn.cursor() as cur:
         cur.execute("select * from pgmq.read(%s, %s, 1)", (queue, vt))
-        return cur.fetchone()                          # msg_id, read_ct, ..., message
+        return cur.fetchone()  # msg_id, read_ct, ..., message
+
 
 def archive(conn, queue, msg_id):
     with conn.cursor() as cur:
         cur.execute("select pgmq.archive(%s, %s)", (queue, msg_id))
+
 
 def acquire_token(conn, source, *, timeout=60.0) -> bool:
     deadline = time.monotonic() + timeout
@@ -271,9 +275,11 @@ def acquire_token(conn, source, *, timeout=60.0) -> bool:
         time.sleep(0.5)
     return False
 
+
 def upsert_source_arxiv(conn, paper_id, ap, status="succeeded", error=None):
     """Idempotent upsert; sets status + fetched_at. See migration for full column list."""
     ...  # insert ... on conflict (paper_id) do update set ..., status=%s, error=%s, fetched_at=now()
+
 
 def mark_source_error(conn, paper_id, source, error):
     """Terminal error: upsert the source_X row to status='error' with the message."""
@@ -289,28 +295,33 @@ def main():
     if source not in db.QUEUE_FOR:
         raise SystemExit(f"--source must be one of {sorted(db.QUEUE_FOR)}")
     queue = db.QUEUE_FOR[source]
-    handler = HARVESTERS[source]          # {"arxiv": harvest_arxiv, "s2": harvest_s2, ...}
+    handler = HARVESTERS[source]  # {"arxiv": harvest_arxiv, "s2": harvest_s2, ...}
 
     with db.connect(s.db_dsn) as conn:
-        while True:                        # drain loop: amortize startup across messages
+        while True:  # drain loop: amortize startup across messages
             rec = db.read_one(conn, queue, vt=120)
             if rec is None:
-                log.info("queue %s empty, exiting", queue); return
+                log.info("queue %s empty, exiting", queue)
+                return
             msg_id, read_ct, paper_id = rec["msg_id"], rec["read_ct"], rec["message"]["paper_id"]
 
             if read_ct > db.MAX_RECEIVES:  # poison → terminal error, stop retrying
                 db.mark_source_error(conn, paper_id, source, "max receives exceeded")
-                db.archive(conn, queue, msg_id); conn.commit()
-                log.warning("poison msg_id=%s paper_id=%s -> source_%s error", msg_id, paper_id, source)
+                db.archive(conn, queue, msg_id)
+                conn.commit()
+                log.warning(
+                    "poison msg_id=%s paper_id=%s -> source_%s error", msg_id, paper_id, source
+                )
                 continue
 
             try:
-                ident = db.get_identity(conn, paper_id)     # arxiv_id/doi from seeds
-                handler(conn, paper_id, ident, msg_id)      # writes source_X (succeeded/not_found)
+                ident = db.get_identity(conn, paper_id)  # arxiv_id/doi from seeds
+                handler(conn, paper_id, ident, msg_id)  # writes source_X (succeeded/not_found)
                 conn.commit()
-                db.archive(conn, queue, msg_id); conn.commit()   # terminal outcomes only
+                db.archive(conn, queue, msg_id)
+                conn.commit()  # terminal outcomes only
             except Exception:
-                conn.rollback()            # transient: leave unacked → VT redelivers
+                conn.rollback()  # transient: leave unacked → VT redelivers
                 log.exception("transient fail msg_id=%s; will redeliver", msg_id)
 ```
 
