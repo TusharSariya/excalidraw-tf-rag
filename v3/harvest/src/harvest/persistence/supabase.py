@@ -117,7 +117,10 @@ class SupabasePersistence:
     def load_seed(self, paper_id: int) -> Seed:
         resp = (
             self.supabase.table("seeds")
-            .select("paper_id, corpus, openalex_id, doi, arxiv_id, title")
+            .select(
+                "paper_id, corpus, openalex_id, doi, arxiv_id, title, "
+                "dblp_id, openreview_id, anthology_id, ia_identifier"
+            )
             .eq("paper_id", paper_id)
             .single()
             .execute()
@@ -131,7 +134,10 @@ class SupabasePersistence:
             return {}
         resp = (
             self.supabase.table("seeds")
-            .select("paper_id, corpus, openalex_id, doi, arxiv_id, title")
+            .select(
+                "paper_id, corpus, openalex_id, doi, arxiv_id, title, "
+                "dblp_id, openreview_id, anthology_id, ia_identifier"
+            )
             .in_("paper_id", paper_ids)
             .execute()
         )

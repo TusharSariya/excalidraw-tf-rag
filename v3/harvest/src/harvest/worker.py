@@ -22,13 +22,42 @@ from typing import Any
 
 from . import contracts
 from .persistence.base import Write
-from .persistence.models import Seed, arxiv_write, openalex_write, s2_write
+from .persistence.models import (
+    Seed,
+    acl_anthology_write,
+    arxiv_write,
+    core_write,
+    crossref_write,
+    datacite_write,
+    dblp_write,
+    figshare_write,
+    internet_archive_write,
+    openalex_write,
+    opencitations_write,
+    openreview_write,
+    osf_write,
+    s2_write,
+    unpaywall_write,
+    zenodo_write,
+)
 from .persistence.supabase import SupabasePersistence
 from .settings import HarvestSettings, SupabaseSettings, WorkerSettings
+from .sources.acl_anthology import AclAnthologySource
 from .sources.arxiv import ArxivSource
 from .sources.base import PaperSource
+from .sources.core import CoreSource
+from .sources.crossref import CrossrefSource
+from .sources.datacite import DataCiteSource
+from .sources.dblp import DblpSource
+from .sources.figshare import FigshareSource
+from .sources.internet_archive import InternetArchiveSource
 from .sources.openalex import OpenAlexSource
+from .sources.opencitations import OpenCitationsSource
+from .sources.openreview import OpenReviewSource
+from .sources.osf import OsfSource
 from .sources.semantic_scholar import SemanticScholarSource
+from .sources.unpaywall import UnpaywallSource
+from .sources.zenodo import ZenodoSource
 
 logger = logging.getLogger("harvest.worker")
 
@@ -88,6 +117,94 @@ SOURCES: dict[str, Source] = {
         ],
         build_write=s2_write,
         batch_size=500,
+    ),
+    "unpaywall": Source(
+        "harvest_unpaywall",
+        lambda s: UnpaywallSource(s.unpaywall_email),
+        identify=[lambda seed: seed.doi],
+        build_write=unpaywall_write,
+        batch_size=50,
+    ),
+    "crossref": Source(
+        "harvest_crossref",
+        lambda s: CrossrefSource(s.crossref_mailto),
+        identify=[lambda seed: seed.doi],
+        build_write=crossref_write,
+        batch_size=20,
+    ),
+    "dblp": Source(
+        "harvest_dblp",
+        lambda _: DblpSource(),
+        identify=[lambda seed: seed.dblp_id],
+        build_write=dblp_write,
+        batch_size=1,
+    ),
+    "openreview": Source(
+        "harvest_openreview",
+        lambda _: OpenReviewSource(),
+        identify=[lambda seed: seed.openreview_id],
+        build_write=openreview_write,
+        batch_size=100,
+    ),
+    "acl_anthology": Source(
+        "harvest_acl_anthology",
+        lambda _: AclAnthologySource(),
+        identify=[lambda seed: seed.anthology_id],
+        build_write=acl_anthology_write,
+        batch_size=500,
+    ),
+    "opencitations": Source(
+        "harvest_opencitations",
+        lambda _: OpenCitationsSource(),
+        identify=[lambda seed: seed.doi],
+        build_write=opencitations_write,
+        # batch_size=1: get_papers fetches serially and a single heavily-cited DOI
+        # can stall past the read timeout (a well-cited paper the API can't serve).
+        # At 1, that slow DOI poisons only its own message — it can't take down a
+        # batch of faster neighbors (which would leave the whole batch unarchived).
+        batch_size=1,
+    ),
+    "datacite": Source(
+        "harvest_datacite",
+        lambda _: DataCiteSource(),
+        identify=[lambda seed: seed.doi],
+        build_write=datacite_write,
+        batch_size=50,
+    ),
+    "core": Source(
+        "harvest_core",
+        lambda s: CoreSource(s.core_api_key),
+        identify=[lambda seed: seed.doi],
+        build_write=core_write,
+        batch_size=1,
+    ),
+    "internet_archive": Source(
+        "harvest_internet_archive",
+        lambda _: InternetArchiveSource(),
+        identify=[lambda seed: seed.ia_identifier],
+        build_write=internet_archive_write,
+        batch_size=25,
+    ),
+    "zenodo": Source(
+        "harvest_zenodo",
+        lambda _: ZenodoSource(),
+        identify=[lambda seed: seed.doi],
+        build_write=zenodo_write,
+        batch_size=50,
+    ),
+    "figshare": Source(
+        "harvest_figshare",
+        lambda _: FigshareSource(),
+        identify=[lambda seed: seed.doi],
+        build_write=figshare_write,
+        batch_size=10,
+    ),
+    "osf": Source(
+        "harvest_osf",
+        lambda _: OsfSource(),
+        identify=[lambda seed: seed.doi],
+        build_write=osf_write,
+        batch_size=25,
     ),
 }
 

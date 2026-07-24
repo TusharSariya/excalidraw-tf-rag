@@ -4,6 +4,48 @@ Notable changes to the `harvest` package. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/); versions match `pyproject.toml`
 (the image tag the `build-push` CI guard checks against prod ECR).
 
+## [0.13.0]
+
+### Added
+- **12 new harvest sources**, each following the existing per-source pattern
+  (typed record + tolerant `from_dict`, `PaperSource.get_papers`, `TableRow` +
+  `<name>_write`, a `source_<name>` migration + `pgmq.create` + a capability-gated
+  `queue_subscriptions` row): `unpaywall`, `crossref`, `dblp`, `openreview`,
+  `acl_anthology`, `opencitations`, `datacite`, `core`, `internet_archive`,
+  `zenodo`, `figshare`, `osf`. Sources with a native multi-id/filter endpoint
+  (crossref `/works?filter=doi:…`, others) batch-fetch chunked to the API's id
+  cap rather than looping singles; the rest keep the `get_papers(list)->dict`
+  contract with a serial loop where no batch endpoint exists.
+- **4 new seed identity columns** on `public.seeds` — `dblp_id`, `openreview_id`,
+  `anthology_id`, `ia_identifier` — wired into every identity-enumeration site
+  (`harvest_filter_is_valid`, `seed_satisfies`, `seeds_identity_monotonic`, the
+  `seeds_identity_changed` trigger, and the Python `load_seed(s)` select lists).
+- **Local live-stack test loop** — `v3/supabase/tests/local_harvest_loop.py` plus
+  the local-only `pgmq_public` shim (`v3/supabase/tests/local_pgmq_public.sql`,
+  never shipped as a migration — prod has it from the dashboard Queues
+  integration) and a hand-authored smoke corpus
+  (`v3/seed/seeds/harvest-smoke/popular.toml`) that populates every identity type.
+
+### Notes
+- `opencitations` caps citation/reference edges at **2000 per direction** (streamed,
+  stops downloading at the cap) and uses a 30s read timeout. OpenCitations has no
+  working server-side pagination and 503s on the largest citation streams (e.g.
+  ResNet), so an unbounded fetch would hang the batch; the cap persists a partial
+  neighborhood as `succeeded`, and a truly unservable DOI fails fast → pgmq
+  redelivery → poison-pill backstop. `opencitations` runs at `batch_size=1` so one
+  slow DOI cannot poison a batch of others.
+
+### Config
+- `HarvestSettings`: `unpaywall_email`, `crossref_mailto`, `core_api_key`.
+  `UNPAYWALL_EMAIL` and `CORE_API_KEY` are required by their sources; the crossref
+  mailto is the optional polite-pool hint.
+
+### Not implemented (deliberately)
+- Anna's Archive, Sci-Hub, Z-Library, and LibGen were **not** built: they
+  distribute copyrighted works without authorization, which an automated
+  corpus-scale harvester cannot use lawfully. Legal OA coverage comes from
+  Unpaywall + CORE + Internet Archive + the Zenodo/Figshare/OSF deposit sources.
+
 ## [0.12.0]
 
 ### Fixed
