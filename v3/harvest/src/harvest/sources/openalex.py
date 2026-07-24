@@ -4,10 +4,25 @@ import pyalex
 from pyalex import Works
 from requests.exceptions import HTTPError
 
+from harvest.errors import RateLimited
+
 from .base import PaperSource
 from .models.openalex import OpenAlexWork
 
 logger = logging.getLogger("harvest.openalex")
+
+
+def _reraise_http(exc: HTTPError, *, what: str) -> None:
+    """Map OpenAlex HTTP failures: 404 stays local; 429 → RateLimited; else re-raise."""
+    status = exc.response.status_code if exc.response is not None else None
+    if status == 429:
+        retry_after = None
+        if exc.response is not None:
+            retry_after = exc.response.headers.get("Retry-After")
+        logger.error("fetch failed (HTTP 429) for %s — stopping drain", what)
+        raise RateLimited("openalex", retry_after=retry_after) from exc
+    logger.error("fetch failed (HTTP %s): %s", status, exc)
+    raise
 
 
 # How many citing works to pull. OpenAlex pages at 25 by default; per_page maxes at
@@ -100,12 +115,12 @@ class OpenAlexSource(PaperSource):
                 "no OpenAlex API key: running on the ~$0.10/day unauthenticated "
                 "allowance. Set OPENALEX_API_KEY for 10x the quota."
             )
-        # Retry the codes worth retrying. pyalex defaults max_retries=0, i.e. a single
-        # 429 propagates as a hard failure — unacceptable for a queue worker, since a
-        # transient rate-limit would look identical to a genuine fetch error.
+        # Retry server errors only. Do NOT retry 429 in-process: pyalex's backoff
+        # can pin a worker for minutes past the VT, and the worker must exit the
+        # drain on RateLimited so pgmq spaces retries (see harvest.errors).
         pyalex.config.max_retries = 3
         pyalex.config.retry_backoff_factor = 0.5
-        pyalex.config.retry_http_codes = [429, 500, 502, 503, 504]
+        pyalex.config.retry_http_codes = [500, 502, 503, 504]
 
     def get_papers(self, identifiers: list[str]) -> dict[str, OpenAlexWork | None]:
         return self._fetch(identifiers)
@@ -142,8 +157,7 @@ class OpenAlexSource(PaperSource):
                 if status == 404:
                     logger.warning("no result for openalex batch %s (not found)", oa_shorts)
                 else:
-                    logger.error("fetch failed (HTTP %s): %s", status, e)
-                    raise
+                    _reraise_http(e, what=f"openalex batch {oa_shorts}")
             else:
                 if results is None:
                     results = []
@@ -170,8 +184,7 @@ class OpenAlexSource(PaperSource):
                 if status == 404:
                     logger.warning("no result for %s (not found)", req)
                     continue
-                logger.error("fetch failed (HTTP %s): %s", status, e)
-                raise
+                _reraise_http(e, what=req)
             if not result or not isinstance(result, dict):
                 continue
             out[req] = OpenAlexWork.from_result(result)
